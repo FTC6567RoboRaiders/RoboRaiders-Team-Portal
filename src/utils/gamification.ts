@@ -82,18 +82,39 @@ export const calculateJournalQualityScore = (entry: JournalEntry): number => {
 
 // Calculate levels based on standard RPG curves
 export const getLevelInfo = (xp: number) => {
-  const thresholds = [0, 150, 400, 800, 1300, 2000, 2900, 4000, 5200, 6500];
+  const thresholds = [
+    0,      // Level 0: 0+
+    100,    // Level 1: 100+
+    250,    // Level 2: 250+
+    450,    // Level 3: 450+
+    700,    // Level 4: 700+
+    1000,   // Level 5: 1000+
+    1400,   // Level 6: 1400+
+    1900,   // Level 7: 1900+
+    2500,   // Level 8: 2500+
+    3200,   // Level 9: 3200+
+    4000,   // Level 10: 4000+
+    5000,   // Level 11: 5000+
+    6200,   // Level 12: 6200+
+    7600,   // Level 13: 7600+
+    9200    // Level 14: 9200+
+  ];
   const levelNames = [
-    'Rookie Safety Trainee', // Level 0
-    'Robotics Apprentice',    // Level 1
-    'Chassis Assembler',     // Level 2
-    'Drivebase Installer',   // Level 3
-    'Autonomous Developer',   // Level 4
-    'Mechanisms Architect',  // Level 5
-    'Lead Systems Coach',    // Level 6
-    'Technical Director',    // Level 7
-    'RoboRaiders Legend',    // Level 8
-    'FTC World Finalist'     // Level 9+
+    'Rookie Safety Trainee', // Level 0 (0 XP)
+    'Robotics Apprentice',    // Level 1 (100 XP)
+    'Chassis Assembler',     // Level 2 (250 XP)
+    'Drivebase Installer',   // Level 3 (450 XP)
+    'Autonomous Developer',   // Level 4 (700 XP)
+    'Wiring Specialist',     // Level 5 (1000 XP)
+    'Sensor Integrator',     // Level 6 (1400 XP)
+    'Mechanisms Architect',  // Level 7 (1900 XP)
+    'Control Loop Maestro',  // Level 8 (2500 XP)
+    'Strategic Tactician',   // Level 9 (3200 XP)
+    'Technical Director',    // Level 10 (4000 XP)
+    'RoboRaiders Legend',    // Level 11 (5000 XP)
+    'FTC World Finalist',    // Level 12 (6200 XP)
+    'Dean\'s List Nominee',  // Level 13 (7600 XP)
+    'FIRST Champion'         // Level 14 (9200 XP)
   ];
 
   let level = 1;
@@ -103,7 +124,7 @@ export const getLevelInfo = (xp: number) => {
   level = level - 1; // back to actual index
 
   const currentThreshold = thresholds[level] || 0;
-  const nextThreshold = thresholds[level + 1] || (currentThreshold + 1000);
+  const nextThreshold = thresholds[level + 1] || (currentThreshold + 1500);
   
   const xpIntoLevel = xp - currentThreshold;
   const xpForNextLevel = nextThreshold - currentThreshold;
@@ -365,7 +386,7 @@ export const computeUserGamification = (
     {
       id: "veteran",
       name: "Diamond Division",
-      description: "Accumulate at least 1,500 total XP points across all engineering and outreach actions.",
+      description: "Accumulate at least 1,500 total XP across all engineering and outreach actions.",
       category: "general",
       icon: "Award",
       reqText: "Total 1500 XP"
@@ -550,8 +571,8 @@ export const computeUserGamification = (
   const subStats = getSubteamStatsAndRank(userSubteam, guildHours, guildJournals, user.role);
 
   const subteamThresholds = userSubteam === 'Mentoring'
-    ? [0, 8, 18, 30, 45, 62, 80, 100, 122, 146, 172, 200, 230, 262, 296, 332, 370, 410, 452, 496, 542, 590, 640, 692, 746]
-    : [0, 10, 25, 45, 70, 100, 135, 175, 220, 270, 330];
+    ? [0, 100, 300, 600, 1000, 1600, 2500, 3800, 5500, 7500, 10000, 11000, 12100, 13300, 14600, 16000, 17500, 19100, 20800, 22600, 24500, 26500, 28600, 30800, 33200]
+    : [0, 100, 300, 600, 1000, 1600, 2500, 3800, 5500, 7500, 10000];
 
   const rIdx = subStats.rankIndex; // 0 to 24 for mentors, 0 to 10 for students
   const currThreshold = subteamThresholds[rIdx] !== undefined ? subteamThresholds[rIdx] : 0;
@@ -561,11 +582,11 @@ export const computeUserGamification = (
 
   const stats: UserStats = {
     xp: totalXp,
-    level: subStats.currentRank.rank,
-    levelName: subStats.currentRank.title,
-    xpIntoLevel: subXpIntoLevel,
-    xpForNextLevel: subXpForNextLevel,
-    percentToNextLevel: subStats.percentToNext,
+    level: levelInfo.level,
+    levelName: levelInfo.levelName,
+    xpIntoLevel: levelInfo.xpIntoLevel,
+    xpForNextLevel: levelInfo.xpForNextLevel,
+    percentToNextLevel: levelInfo.percentToNextLevel,
     badgesUnlocked: finalBadges.filter(b => b.unlocked).length,
     totalHours,
     totalJournals,

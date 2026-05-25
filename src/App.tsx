@@ -74,6 +74,7 @@ import { DEFAULT_KANBAN_TASKS } from './data/kanbanDemo';
 import OutreachHub from './components/OutreachHub';
 import ArenaPortal from './components/ArenaPortal';
 import { DEFAULT_OUTREACH_EVENTS } from './data/outreachDemo';
+import { jsPDF } from 'jspdf';
 
 // Pre-populated demo data for FIRST Tech Challenge teams
 const DEMO_ENTRIES: JournalEntry[] = [];
@@ -1853,6 +1854,28 @@ FTC Team #6567 IT Administration`
       showToast(submissionType === 'Pending Review' ? 'Saved & submitted for mentor review!' : 'Draft engineering entry logged.', 'success');
     }
 
+    if (submissionType === 'Pending Review') {
+      const mentorsAndCaptains = accounts.filter(a => a.role === 'mentor_captain' || a.role === 'mentor' || a.role === 'captain');
+      mentorsAndCaptains.forEach(mc => {
+        sendEmailNotification(
+          mc.schoolEmail,
+          `[FTC #6567] Journal Awaiting Review: ${formAuthor.trim()}`,
+          `Hello ${mc.name},
+
+A new journal entry has been submitted to the FTC #6567 Workspace and is awaiting review:
+
+• Author: ${formAuthor.trim()}
+• Date of Action: ${formDate}
+• Subteam Division: ${formSubteam}
+
+Please log in to the RoboRaiders Team Portal, filter by "Pending Review" on the engineering desk, and inspect the submission to approve or request revision.
+
+Best regards,
+FTC #6567 Robotics Log System`
+        );
+      });
+    }
+
     resetForm();
     setActiveTab('archive');
   };
@@ -1917,6 +1940,34 @@ FTC Team #6567 IT Administration`
     });
 
     saveEntriesToLocalStorage(updated);
+
+    // Dispatch Email updates to the journal author
+    const authorEmail = accounts.find(a => 
+      selectedEntry.author.toLowerCase().includes(a.schoolEmail.toLowerCase()) || 
+      selectedEntry.author.toLowerCase().includes(a.name.toLowerCase()) ||
+      a.name.toLowerCase().includes(selectedEntry.author.toLowerCase())
+    )?.schoolEmail;
+
+    if (authorEmail) {
+      sendEmailNotification(
+        authorEmail,
+        `[FTC #6567] Journal Review Update: ${nextStatus}`,
+        `Hi,
+
+Your engineering journal entry dated ${selectedEntry.date} for subteam "${selectedEntry.subteam}" has been reviewed by a Team Mentor/Captain.
+
+• NEW STATUS: ${nextStatus}
+• REVIEWER: ${currentUser?.name || 'testMentor'}
+• REVIEW NOTES: 
+"${reviewNoteInput.trim()}"
+
+Please log in to the RoboRaiders Team Portal to review comments.
+
+Best regards,
+FTC #6567 Captains & Mentors`
+      );
+    }
+
     setReviewNoteInput('');
     showToast(
       nextStatus === 'Approved' 
@@ -1963,6 +2014,39 @@ FTC Team #6567 IT Administration`
     });
 
     saveEntriesToLocalStorage(updated);
+
+    // Dispatch Email updates to the journal author
+    const authorEmail = accounts.find(a => 
+      selectedEntry.author.toLowerCase().includes(a.schoolEmail.toLowerCase()) || 
+      selectedEntry.author.toLowerCase().includes(a.name.toLowerCase()) ||
+      a.name.toLowerCase().includes(selectedEntry.author.toLowerCase())
+    )?.schoolEmail;
+
+    if (authorEmail) {
+      const notes = nextStatus === 'Approved' 
+        ? (reviewNoteInput.trim() || 'Approved & Locked via status dropdown selection.')
+        : nextStatus === 'Needs Revision'
+          ? (reviewNoteInput.trim() || 'Returned for Revision.')
+          : `Log status updated to ${nextStatus}`;
+      sendEmailNotification(
+        authorEmail,
+        `[FTC #6567] Journal Status Updated to: ${nextStatus}`,
+        `Hi,
+
+Your engineering journal entry dated ${selectedEntry.date} for subteam "${selectedEntry.subteam}" has been updated to "${nextStatus}".
+
+• NEW STATUS: ${nextStatus}
+• REVIEWER: ${currentUser?.name || 'testMentor'}
+• REVIEW NOTES: 
+"${notes}"
+
+Please log in to the RoboRaiders Team Portal to review details.
+
+Best regards,
+FTC #6567 Captains & Mentors`
+      );
+    }
+
     setReviewNoteInput('');
     showToast(
       nextStatus === 'Approved' 
@@ -2830,7 +2914,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
               const { stats, badges, quests } = gameResult;
 
               const activeLeaderboard = accounts
-                .filter(acc => acc.status === 'Approved')
+                .filter(acc => 
+                  acc.status === 'Approved' && 
+                  !acc.name.toLowerCase().includes('test') && 
+                  !acc.name.toLowerCase().includes('admin') && 
+                  !acc.schoolEmail.toLowerCase().includes('test') && 
+                  !acc.schoolEmail.toLowerCase().includes('admin') &&
+                  !acc.schoolEmail.toLowerCase().includes('school.edu')
+                )
                 .map(acc => {
                   const data = computeUserGamification(acc, entries, timeEntries);
                   return {
@@ -2841,6 +2932,109 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   };
                 })
                 .sort((a, b) => b.stats.xp - a.stats.xp);
+
+              const handleExportPDF_lounge = () => {
+                const doc = new jsPDF({
+                  orientation: 'portrait',
+                  unit: 'mm',
+                  format: 'a4'
+                });
+
+                // Dark background/accent colors matching the Roboraiders slate/red theme
+                doc.setFillColor(30, 41, 59); // Slate-800
+                doc.rect(0, 0, 210, 35, 'F');
+
+                // Header Typography
+                doc.setTextColor(255, 255, 255);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(18);
+                doc.text("ROBORAIDERS ARENA CHAMPIONSHIP", 15, 18);
+                
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+                doc.setTextColor(241, 245, 249); // Slate-100
+                doc.text("OFFICIAL TEAM STANDINGS & LEADERBOARD SCOREBOARD", 15, 24);
+                
+                const dateStr = new Date().toLocaleString('en-US', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short'
+                });
+                doc.text(`Generated: ${dateStr}`, 145, 18);
+                
+                // Outer frame & main table header
+                doc.setTextColor(30, 41, 59);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10);
+                
+                // Headers
+                // Rank, Name, Subteam, Badges, XP / Level
+                const startY = 48;
+                doc.setFillColor(241, 245, 249);
+                doc.rect(14, startY - 6, 182, 8, 'F');
+                
+                doc.text("RANK", 16, startY - 1);
+                doc.text("ROBOTICS SPECIALIST", 32, startY - 1);
+                doc.text("SUBTEAM DECLARED", 85, startY - 1);
+                doc.text("BADGES", 135, startY - 1);
+                doc.text("XP / LEVEL", 175, startY - 1);
+
+                // Bottom line for header
+                doc.setDrawColor(203, 213, 225);
+                doc.setLineWidth(0.3);
+                doc.line(14, startY + 2, 196, startY + 2);
+
+                let currentY = startY + 8;
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+
+                activeLeaderboard.forEach((player, index) => {
+                  // Alternate row backgrounds
+                  if (index % 2 === 0) {
+                    doc.setFillColor(248, 250, 252);
+                    doc.rect(14, currentY - 5, 182, 7, 'F');
+                  }
+
+                  doc.setFont('helvetica', 'bold');
+                  doc.text(`#${index + 1}`, 18, currentY);
+                  
+                  doc.setFont('helvetica', 'normal');
+                  // Limit name to avoid overflow
+                  const nameStr = player.account.name.length > 25 
+                    ? player.account.name.substring(0, 22) + "..." 
+                    : player.account.name;
+                  doc.text(nameStr, 32, currentY);
+                  
+                  const subteamStr = player.account.primarySubteam || "N/A";
+                  const subteamDisplay = subteamStr.length > 25 ? subteamStr.substring(0, 22) + "..." : subteamStr;
+                  doc.text(subteamDisplay, 85, currentY);
+                  
+                  const badgeCount = player.badges.filter((b: any) => b.unlocked).length;
+                  doc.text(`${badgeCount} unlocked`, 135, currentY);
+                  
+                  const xpStr = `${player.stats.xp.toLocaleString()} XP`;
+                  doc.text(xpStr, 175, currentY);
+
+                  // separator line
+                  doc.setDrawColor(241, 245, 249);
+                  doc.line(14, currentY + 2, 196, currentY + 2);
+                  
+                  currentY += 8;
+
+                  // Page overflow safety
+                  if (currentY > 280) {
+                    doc.addPage();
+                    currentY = 20;
+                  }
+                });
+
+                // Footer note
+                doc.setFont('helvetica', 'italic');
+                doc.setFontSize(8);
+                doc.setTextColor(148, 163, 184); // Slate-400
+                doc.text("This document is an official export of the Roboraiders Championship Arena Portal. All recorded XP points are subject to review.", 14, 287);
+
+                doc.save(`roboraiders_leaderboard_${new Date().toISOString().split('T')[0]}.pdf`);
+              };
 
               return (
                 <div className="bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-xl p-6 shadow-md flex flex-col gap-5 relative overflow-hidden" id="roboraiders-championship-portal">
@@ -3051,9 +3245,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     {/* Guild Progress bar */}
                                     <div className="mt-2.5">
                                       <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mb-1">
-                                        <span>Progress Points: <strong>{subRankData.points} pts union</strong></span>
+                                        <span>Division XP: <strong>{subRankData.points} XP</strong></span>
                                         {subRankData.nextRank ? (
-                                          <span>Next Link: <strong>{subRankData.nextRank.title}</strong> in {subRankData.totalNeededForNext} pts</span>
+                                          <span>Next Link: <strong>{subRankData.nextRank.title}</strong> in {subRankData.totalNeededForNext} XP</span>
                                         ) : (
                                           <span className="text-amber-500 animate-pulse font-bold">✨ SECRET ZENITH UNLOCKED</span>
                                         )}
@@ -3069,7 +3263,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                         ></div>
                                       </div>
                                       <p className="text-[8.5px] font-mono text-slate-400 mt-1.5">
-                                        💡 Guild points increase as: <strong>+5 pts</strong> per lab hour + <strong>+12 pts</strong> per journal writeup logged in {guildObj.codename}.
+                                        💡 Guild XP increase as: <strong>+5 XP</strong> per lab hour + <strong>+12 XP</strong> per journal writeup logged in {guildObj.codename}.
                                       </p>
                                     </div>
                                   </div>
@@ -3097,7 +3291,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                               </span>
                             </h3>
                             <p className="text-[11px] text-slate-450 dark:text-slate-400 mt-1 leading-normal">
-                              Advance through hierarchical ranks in student or mentor divisions. Earn Guild points via <strong>laboratory hours (+5 pts/hr)</strong> and <strong>high-fidelity journal entries (+12 pts/log)</strong>.
+                              Advance through hierarchical ranks in student or mentor divisions. Earn Guild XP via <strong>laboratory hours (+5 XP/hr)</strong> and <strong>high-fidelity journal entries (+12 XP/log)</strong>.
                             </p>
                           </div>
 
@@ -3163,7 +3357,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                           ) : (
                                             <>
                                               <span className="text-[10px] font-mono text-slate-400 font-extrabold truncate">Rank {subStats.currentRank.rank}: {subStats.currentRank.title}</span>
-                                              <span className="text-[9px] font-mono text-slate-500 mt-0.5">{subStats.points} pts accumulated</span>
+                                              <span className="text-[9px] font-mono text-slate-500 mt-0.5">{subStats.points} XP accumulated</span>
                                             </>
                                           )}
                                         </div>
@@ -3240,13 +3434,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                             // Handle masking for locked secret level
                                             const displayedTitle = (!isUnlocked && isSecretType) ? "??? [Classified Cryptic Tier]" : r.title;
                                             const displayedDesc = (!isUnlocked && isSecretType) 
-                                              ? "This legendary 11th rank holds custom classified properties. Amass 330+ points in this division to unlock the secret title and inspect this description!" 
+                                              ? "This legendary 11th rank holds custom classified properties. Amass 10000+ XP in this division to unlock the secret title and inspect this description!" 
                                               : r.explanation;
 
                                             // Points threshold for this rank
                                             const thresholds = activeGuild.id === 'Mentoring'
-                                              ? [0, 8, 18, 30, 45, 62, 80, 100, 122, 146, 172, 200, 230, 262, 296, 332, 370, 410, 452, 496, 542, 590, 640, 692, 746]
-                                              : [0, 10, 25, 45, 70, 100, 135, 175, 220, 270, 330];
+                                              ? [0, 100, 300, 600, 1000, 1600, 2500, 3800, 5500, 7500, 10000, 11000, 12100, 13300, 14600, 16000, 17500, 19100, 20800, 22600, 24500, 26500, 28600, 30800, 33200]
+                                              : [0, 100, 300, 600, 1000, 1600, 2500, 3800, 5500, 7500, 10000];
                                             const reqPoints = thresholds[i] !== undefined ? thresholds[i] : 0;
 
                                             return (
@@ -3281,7 +3475,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                                         ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-850 text-emerald-750 dark:text-emerald-400' 
                                                         : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-500'
                                                     }`}>
-                                                      Requires {reqPoints} pts
+                                                      Requires {reqPoints} XP
                                                     </span>
                                                   </div>
                                                   
@@ -3471,13 +3665,22 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           exit={{ opacity: 0, y: -10 }}
                           className="flex flex-col gap-4 text-xs font-sans text-slate-850 dark:text-slate-100"
                         >
-                          <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1.5">
-                            <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
-                              Roboraiders Championship scoreboard
-                            </span>
-                            <span className="text-[10px] font-mono text-slate-550">
-                              Active team scoreboard. Click player to inspect trophy badge case.
-                            </span>
+                          <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-100 dark:border-slate-800 pb-2 gap-2">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
+                                Roboraiders Championship scoreboard
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-550 mt-0.5">
+                                Active team scoreboard. Click player to inspect trophy badge case.
+                              </span>
+                            </div>
+                            <button
+                              onClick={handleExportPDF_lounge}
+                              className="bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-700 dark:hover:bg-cyan-600 text-white font-mono text-[9px] uppercase tracking-wider py-1 px-2.5 rounded transition-all shadow-sm flex items-center gap-1.5 font-bold cursor-pointer self-start sm:self-auto"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Export PDF Standings</span>
+                            </button>
                           </div>
 
                           <div className="grid grid-cols-1 gap-5 items-start">
@@ -5161,7 +5364,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           {score < 100 && (
                             <p className="text-[9px] italic opacity-85 border-t border-dashed border-slate-300 dark:border-slate-800 pt-1 mt-0.5 leading-normal">
                               💡 <strong>Tips to improve QI:</strong> {
-                                score < 25 ? "Provide more descriptive details in planned & accomplished fields (85+ words yields points)." :
+                                score < 25 ? "Provide more descriptive details in planned & accomplished fields (85+ words yields XP)." :
                                 (selectedEntry.problemsAndSolutions?.length || 0) === 0 ? "Document at least 1-2 mechanical/programming challenges & solutions to boost score." :
                                 (selectedEntry.images?.length || 0) === 0 ? "Upload pictures, build diagrams, or CAD screenshots as imagery proofs." :
                                 (selectedEntry.planNextTime || '').split(/\s+/).filter(Boolean).length < 20 ? "Extend your 'Plan for next time' description to outline future subtasks." :
