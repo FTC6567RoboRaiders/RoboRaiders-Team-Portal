@@ -130,6 +130,48 @@ const DEMO_ENTRIES: JournalEntry[] = [
     status: 'Pending Review'
   }
 ];
+const DEFAULT_TIME_ENTRIES: TimeEntry[] = [
+  {
+    id: 't-demo-1',
+    userId: 'p-1',
+    userName: 'Sarah Chen (Build Co-Lead)',
+    userEmail: 'schen@school.edu',
+    subteam: 'Design/Build/Fabrication',
+    date: new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0],
+    startTime: '15:30',
+    endTime: '18:30',
+    durationHours: 3.0,
+    taskDescription: 'Milled the low-clearance motor mounting brackets onto standard aluminum structural extrusion plates.',
+    createdAt: Date.now() - 86400000 * 3
+  },
+  {
+    id: 't-demo-2',
+    userId: 'p-2',
+    userName: 'Alex Rivera (Autonomous Specialist)',
+    userEmail: 'arivera@school.edu',
+    subteam: 'Programming',
+    date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
+    startTime: '16:00',
+    endTime: '19:15',
+    durationHours: 3.25,
+    taskDescription: 'Tuned lateral drift offset parameters inside Road Runner odometry threads.',
+    createdAt: Date.now() - 86400000 * 2
+  },
+  {
+    id: 't-demo-3',
+    userId: 'p-1',
+    userName: 'Sarah Chen (Build Co-Lead)',
+    userEmail: 'schen@school.edu',
+    subteam: 'Design/Build/Fabrication',
+    date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+    startTime: '15:15',
+    endTime: '19:45',
+    durationHours: 4.5,
+    taskDescription: 'Completed continuous loop cord rigging and designed the initial 3D-pulley guards.',
+    createdAt: Date.now() - 86400000
+  }
+];
+
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
 const ATTENDANCE_SUBTEAMS: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Mentoring'];
@@ -388,47 +430,7 @@ export default function App() {
       } catch (e) {}
     }
     // Pre-populate with beautiful, realistic team hours logs
-    return [
-      {
-        id: 't-demo-1',
-        userId: 'p-1',
-        userName: 'Sarah Chen (Build Co-Lead)',
-        userEmail: 'schen@school.edu',
-        subteam: 'Design/Build/Fabrication',
-        date: new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0],
-        startTime: '15:30',
-        endTime: '18:30',
-        durationHours: 3.0,
-        taskDescription: 'Milled the low-clearance motor mounting brackets onto standard aluminum structural extrusion plates.',
-        createdAt: Date.now() - 86400000 * 3
-      },
-      {
-        id: 't-demo-2',
-        userId: 'p-2',
-        userName: 'Alex Rivera (Autonomous Specialist)',
-        userEmail: 'arivera@school.edu',
-        subteam: 'Programming',
-        date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
-        startTime: '16:00',
-        endTime: '19:15',
-        durationHours: 3.25,
-        taskDescription: 'Tuned lateral drift offset parameters inside Road Runner odometry threads.',
-        createdAt: Date.now() - 86400000 * 2
-      },
-      {
-        id: 't-demo-3',
-        userId: 'p-1',
-        userName: 'Sarah Chen (Build Co-Lead)',
-        userEmail: 'schen@school.edu',
-        subteam: 'Design/Build/Fabrication',
-        date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-        startTime: '15:15',
-        endTime: '19:45',
-        durationHours: 4.5,
-        taskDescription: 'Completed continuous loop cord rigging and designed the initial 3D-pulley guards.',
-        createdAt: Date.now() - 86400000
-      }
-    ];
+    return DEFAULT_TIME_ENTRIES;
   });
 
   // Current active clock-in session
@@ -683,42 +685,88 @@ export default function App() {
                   list.push(d.data() as UserAccount);
                 });
                 setAccounts(list);
+              }, (error) => {
+                handleFirestoreError(error, OperationType.GET, 'users');
               });
               unsubscribeAll.push(unsubUsers);
 
               const unsubJournals = onSnapshot(collection(db, 'journalEntries'), (snapshot) => {
-                const list: JournalEntry[] = [];
-                snapshot.forEach(d => {
-                  list.push(d.data() as JournalEntry);
-                });
-                setEntries(list.sort((a,b) => b.createdAt - a.createdAt));
+                if (snapshot.empty) {
+                  const local = entriesRef.current.length > 0 ? entriesRef.current : DEMO_ENTRIES;
+                  local.forEach(e => {
+                    setDoc(doc(db, 'journalEntries', e.id), e).catch(err => {
+                      handleFirestoreError(err, OperationType.WRITE, `journalEntries/${e.id}`);
+                    });
+                  });
+                } else {
+                  const list: JournalEntry[] = [];
+                  snapshot.forEach(d => {
+                    list.push(d.data() as JournalEntry);
+                  });
+                  setEntries(list.sort((a,b) => b.createdAt - a.createdAt));
+                }
+              }, (error) => {
+                handleFirestoreError(error, OperationType.GET, 'journalEntries');
               });
               unsubscribeAll.push(unsubJournals);
 
               const unsubTime = onSnapshot(collection(db, 'timeEntries'), (snapshot) => {
-                const list: TimeEntry[] = [];
-                snapshot.forEach(d => {
-                  list.push(d.data() as TimeEntry);
-                });
-                setTimeEntries(list.sort((a,b) => b.createdAt - a.createdAt));
+                if (snapshot.empty) {
+                  const local = timeEntriesRef.current.length > 0 ? timeEntriesRef.current : DEFAULT_TIME_ENTRIES;
+                  local.forEach(t => {
+                    setDoc(doc(db, 'timeEntries', t.id), t).catch(err => {
+                      handleFirestoreError(err, OperationType.WRITE, `timeEntries/${t.id}`);
+                    });
+                  });
+                } else {
+                  const list: TimeEntry[] = [];
+                  snapshot.forEach(d => {
+                    list.push(d.data() as TimeEntry);
+                  });
+                  setTimeEntries(list.sort((a,b) => b.createdAt - a.createdAt));
+                }
+              }, (error) => {
+                handleFirestoreError(error, OperationType.GET, 'timeEntries');
               });
               unsubscribeAll.push(unsubTime);
 
               const unsubKanban = onSnapshot(collection(db, 'kanbanTasks'), (snapshot) => {
-                const list: KanbanTask[] = [];
-                snapshot.forEach(d => {
-                  list.push(d.data() as KanbanTask);
-                });
-                setKanbanTasks(list);
+                if (snapshot.empty) {
+                  const local = kanbanTasksRef.current.length > 0 ? kanbanTasksRef.current : DEFAULT_KANBAN_TASKS;
+                  local.forEach(task => {
+                    setDoc(doc(db, 'kanbanTasks', task.id), task).catch(err => {
+                      handleFirestoreError(err, OperationType.WRITE, `kanbanTasks/${task.id}`);
+                    });
+                  });
+                } else {
+                  const list: KanbanTask[] = [];
+                  snapshot.forEach(d => {
+                    list.push(d.data() as KanbanTask);
+                  });
+                  setKanbanTasks(list);
+                }
+              }, (error) => {
+                handleFirestoreError(error, OperationType.GET, 'kanbanTasks');
               });
               unsubscribeAll.push(unsubKanban);
 
               const unsubOutreach = onSnapshot(collection(db, 'outreachEvents'), (snapshot) => {
-                const list: OutreachEvent[] = [];
-                snapshot.forEach(d => {
-                  list.push(d.data() as OutreachEvent);
-                });
-                setOutreachEvents(list);
+                if (snapshot.empty) {
+                  const local = outreachEventsRef.current.length > 0 ? outreachEventsRef.current : DEFAULT_OUTREACH_EVENTS;
+                  local.forEach(event => {
+                    setDoc(doc(db, 'outreachEvents', event.id), event).catch(err => {
+                      handleFirestoreError(err, OperationType.WRITE, `outreachEvents/${event.id}`);
+                    });
+                  });
+                } else {
+                  const list: OutreachEvent[] = [];
+                  snapshot.forEach(d => {
+                    list.push(d.data() as OutreachEvent);
+                  });
+                  setOutreachEvents(list);
+                }
+              }, (error) => {
+                handleFirestoreError(error, OperationType.GET, 'outreachEvents');
               });
               unsubscribeAll.push(unsubOutreach);
             }
@@ -952,6 +1000,28 @@ export default function App() {
   const [activeGuildTab, setActiveGuildTab] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync references to keep the latest values available in asynchronous closures
+  const entriesRef = useRef<JournalEntry[]>([]);
+  const timeEntriesRef = useRef<TimeEntry[]>([]);
+  const kanbanTasksRef = useRef<KanbanTask[]>([]);
+  const outreachEventsRef = useRef<OutreachEvent[]>([]);
+
+  useEffect(() => {
+    entriesRef.current = entries;
+  }, [entries]);
+
+  useEffect(() => {
+    timeEntriesRef.current = timeEntries;
+  }, [timeEntries]);
+
+  useEffect(() => {
+    kanbanTasksRef.current = kanbanTasks;
+  }, [kanbanTasks]);
+
+  useEffect(() => {
+    outreachEventsRef.current = outreachEvents;
+  }, [outreachEvents]);
 
   // --- INITIALIZATION ---
   useEffect(() => {

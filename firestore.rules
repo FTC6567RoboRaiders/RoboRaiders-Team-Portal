@@ -125,10 +125,10 @@ service cloud.firestore {
     // 2. Journal Entries
     match /journalEntries/{entryId} {
       allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidJournal(request.resource.data) && request.resource.data.author == request.auth.token.email;
+      allow create: if isApprovedUser() && isValidJournal(request.resource.data) && (request.resource.data.author == getUserDoc().name || request.resource.data.author == request.auth.token.email || isMentorOrCaptain());
       allow update: if isApprovedUser() && (
         isMentorOrCaptain() ||
-        (resource.data.author == request.auth.token.email 
+        ((resource.data.author == getUserDoc().name || resource.data.author == request.auth.token.email)
          && isValidJournal(request.resource.data)
          && request.resource.data.author == resource.data.author
          && (request.resource.data.status in ['Draft', 'Pending Review'] || request.resource.data.status == resource.data.status))
