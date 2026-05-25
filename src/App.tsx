@@ -4431,17 +4431,17 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* CORE HIGH DENSITY WORKING GRID */}
       {currentView === 'journal' && (
-        <div className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 no-print" id="journal-desk-view-container">
+        <div className="flex-1 p-6 lg:p-10 max-w-[1700px] mx-auto w-full flex flex-col gap-8 no-print" id="journal-desk-view-container">
           {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono font-black border border-brand/35 px-2 py-0.5 rounded bg-brand/10 uppercase tracking-wide text-brand">
+                <span className="text-[10px] font-mono font-black border border-brand/35 px-2 py-1 rounded bg-brand/10 uppercase tracking-wide text-brand">
                   ENGINEERING JOURNAL
                 </span>
                 <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500">FTC #6567</span>
               </div>
-              <h1 className="text-xl font-extrabold uppercase text-slate-900 dark:text-white mt-1">
+              <h1 className="text-2xl font-extrabold uppercase text-slate-900 dark:text-white mt-1">
                 Engineering Notebook Desk
               </h1>
               <p className="text-xs text-slate-505 dark:text-slate-400">
@@ -4449,10 +4449,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </p>
             </div>
             
-            <div className="flex items-center flex-wrap gap-2">
+            <div className="flex items-center flex-wrap gap-2.5">
               <button
                 onClick={() => setIsExportModalOpen(true)}
-                className="bg-brand hover:bg-brand-hover text-white font-extrabold px-4 py-2 text-xs rounded transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border border-brand/20 outline-none"
+                className="bg-brand hover:bg-brand-hover text-white font-extrabold px-5 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border border-brand/20 outline-none"
                 title="Create and print structured notebook entries as PDF"
               >
                 <Printer className="w-3.5 h-3.5" />
@@ -4460,7 +4460,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </button>
               <button
                 onClick={() => setCurrentView('landing')}
-                className="bg-indigo-600 hover:bg-indigo-500 dark:bg-slate-805 dark:hover:bg-slate-705 text-white font-extrabold px-4 py-2 text-xs rounded transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border-0 outline-none"
+                className="bg-indigo-600 hover:bg-indigo-500 dark:bg-slate-805 dark:hover:bg-slate-705 text-white font-extrabold px-5 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border-0 outline-none"
               >
                 <Grid className="w-3.5 h-3.5" />
                 <span>Back to Hub</span>
@@ -4468,23 +4468,23 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
           </div>
 
-          <main className={`flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 overflow-hidden ${entriesToPrint ? 'print:hidden' : ''}`}>
+          <main className={`flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-hidden ${entriesToPrint ? 'print:hidden' : ''}`}>
         
-        {/* PANEL: DRAFT REGISTRATION FORM (LEFT COLUMN - 5 DEEP SPAN) */}
+        {/* PANEL: DRAFT REGISTRATION FORM (LEFT COLUMN - Spaced out & elegant PC Sidebar) */}
         <section 
-          className={`md:col-span-5 flex flex-col gap-3 overflow-y-auto pr-1 ${
+          className={`lg:col-span-4 flex flex-col gap-4 overflow-y-auto pr-1 ${
             activeTab === 'form' ? 'flex' : 'hidden sm:flex'
           } no-print`}
           id="block-journal-form-panel"
         >
-          <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-800 rounded-lg p-4 shadow-sm flex flex-col gap-3 relative">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-1">
-              <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-5 relative">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1">
+              <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-widest flex items-center gap-2">
                 <Layers className="w-4 h-4 text-brand" />
                 <span>{isEditing ? 'Modify Draft Record' : 'Record New Journal Entry'}</span>
               </h2>
               {isEditing && (
-                <span className="bg-indigo-600 text-white text-[9px] font-bold py-0.5 px-2 rounded uppercase tracking-wider font-mono">
+                <span className="bg-indigo-600 text-white text-[9px] font-bold py-0.5 px-2.5 rounded uppercase tracking-wider font-mono">
                   EDIT MODE
                 </span>
               )}
@@ -4757,15 +4757,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
         </section>
 
-        {/* COMPONENT: ARCHIVE LIST & PREVIEW (RIGHT SCREEN - 7 DEEP SPAN) */}
+        {/* COMPONENT: ARCHIVE LIST & PREVIEW (RIGHT SCREEN - SPACED OUT DESKTOP VIEW) */}
         <section 
-          className={`md:col-span-7 flex flex-col gap-3 overflow-hidden ${
+          className={`lg:col-span-8 flex flex-col gap-5 lg:gap-6 overflow-hidden ${
             activeTab === 'archive' ? 'flex' : 'hidden sm:flex'
           }`}
           id="block-archive-and-preview-panel"
         >
           {/* HIGH DENSITY SEARCH & FILTER BOX */}
-          <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-800 rounded-lg p-3 shadow-sm no-print text-slate-900 dark:text-slate-100">
+          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-4 lg:p-5 shadow-sm no-print text-slate-900 dark:text-slate-100">
             <div className="flex items-center gap-1 px-1 mb-2 border-b border-slate-100 dark:border-slate-800 pb-1 shrink-0">
               <Search className="w-3.5 h-3.5 text-slate-400" />
               <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
@@ -4856,15 +4856,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
 
           {/* LOWER GRID LAYOUT */}
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 overflow-hidden">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 overflow-hidden">
             
-            {/* ARCHIVE COLUMN (LEFT HALF / spanning 5) */}
-            <div className="col-span-1 md:col-span-5 bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-800 rounded-lg p-2 flex flex-col overflow-y-auto no-print text-slate-950 dark:text-slate-50">
-              <div className="flex justify-between items-center bg-slate-100 dark:bg-slate-850 p-1.5 rounded border border-slate-200 dark:border-slate-800 mb-2 shrink-0">
+            {/* ARCHIVE COLUMN (LEFT HALF / spanning 4) */}
+            <div className="col-span-1 md:col-span-4 bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-4 flex flex-col overflow-y-auto no-print text-slate-950 dark:text-slate-50 shadow-sm">
+              <div className="flex justify-between items-center bg-slate-100 dark:bg-slate-850 p-2.5 rounded border border-slate-200 dark:border-slate-800 mb-3 shrink-0">
                 <span className="text-[10px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-widest font-mono">
                   Logs Directory
                 </span>
-                <span className="bg-slate-600 dark:bg-slate-750 text-white text-[9px] font-bold px-1.5 py-0.5 rounded font-mono">
+                <span className="bg-slate-600 dark:bg-slate-755 text-white text-[9px] font-bold px-2 py-0.5 rounded font-mono">
                   {filteredEntries.length} Records
                 </span>
               </div>
@@ -5044,8 +5044,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
               )}
             </div>
 
-            {/* EXPANDED LIVE PREVIEW GRID (RIGHT HALF / spanning 7) */}
-            <div className="col-span-1 md:col-span-7 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-3 flex flex-col overflow-y-auto text-slate-900 dark:text-slate-100">
+            {/* EXPANDED LIVE PREVIEW GRID (RIGHT HALF / spanning 8) */}
+            <div className="col-span-1 md:col-span-8 bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-xl p-6 lg:p-8 flex flex-col overflow-y-auto text-slate-900 dark:text-slate-100 shadow-md">
               {selectedEntry ? (
                 <>
                   {/* UTILITIES PANEL */}
@@ -5174,43 +5174,43 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     })()}
 
                     {/* Content Fields Map */}
-                    <div className="space-y-3.5 text-xs text-slate-800">
+                    <div className="space-y-6 text-sm text-slate-800">
                       
                       {/* What We Planned */}
-                      <div className="bg-white dark:bg-slate-900/60 border border-slate-300 dark:border-slate-800 p-3 rounded">
-                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-105 dark:border-slate-800 pb-0.5">
+                      <div className="bg-white dark:bg-slate-905/60 border border-slate-205 dark:border-slate-830 p-5 lg:p-6 rounded-xl shadow-xs">
+                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 dark:border-slate-800 pb-1.5">
                           What we planned
                         </strong>
-                        <p className="text-slate-900 dark:text-slate-100 leading-normal font-medium text-[11px] whitespace-pre-wrap">
+                        <p className="text-slate-900 dark:text-slate-100 leading-relaxed font-medium text-xs lg:text-sm whitespace-pre-wrap">
                           {selectedEntry.planned}
                         </p>
                       </div>
 
                       {/* What We Accomplished */}
-                      <div className="bg-white dark:bg-slate-900/60 border border-slate-300 dark:border-slate-800 p-3 rounded">
-                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-105 dark:border-slate-800 pb-0.5">
+                      <div className="bg-white dark:bg-slate-905/60 border border-slate-205 dark:border-slate-830 p-5 lg:p-6 rounded-xl shadow-xs">
+                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 dark:border-slate-800 pb-1.5">
                           What we accomplished
                         </strong>
-                        <p className="text-slate-900 dark:text-slate-100 leading-normal text-[11px] whitespace-pre-wrap">
+                        <p className="text-slate-900 dark:text-slate-100 leading-relaxed text-xs lg:text-sm whitespace-pre-wrap">
                           {selectedEntry.accomplished}
                         </p>
                       </div>
 
                       {/* Problems & Solutions (Enumerated list) */}
-                      <div className="bg-white dark:bg-slate-900/60 border border-slate-300 dark:border-slate-800 p-3 rounded">
-                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-1.5 font-bold border-b border-slate-105 dark:border-slate-800 pb-0.5">
+                      <div className="bg-white dark:bg-slate-905/60 border border-slate-205 dark:border-slate-830 p-5 lg:p-6 rounded-xl shadow-xs">
+                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 dark:border-slate-800 pb-1.5">
                           Problems and solutions found
                         </strong>
                         {selectedEntry.problemsAndSolutions.length === 0 ? (
-                          <p className="text-slate-400 dark:text-slate-500 italic text-[11px]">No active blockers recorded.</p>
+                          <p className="text-slate-400 dark:text-slate-500 italic text-xs lg:text-sm">No active blockers recorded.</p>
                         ) : (
-                          <div className="space-y-2.5">
+                          <div className="space-y-3">
                             {selectedEntry.problemsAndSolutions.map((p, idx) => (
-                              <div key={idx} className="flex gap-2.5 items-start pl-0.5">
-                                <span className="bg-slate-900 dark:bg-slate-800 text-white text-[9px] font-bold px-1.5 rounded mt-0.5 shrink-0">
+                              <div key={idx} className="flex gap-3 items-start pl-0.5">
+                                <span className="bg-slate-900 dark:bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded mt-0.5 shrink-0">
                                   {idx + 1}
                                 </span>
-                                <div className="text-slate-900 dark:text-slate-100 leading-normal text-[11px] font-medium whitespace-pre-wrap">
+                                <div className="text-slate-900 dark:text-slate-100 leading-relaxed text-xs lg:text-sm font-medium whitespace-pre-wrap">
                                   {p}
                                 </div>
                               </div>
@@ -5221,11 +5221,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                       {/* Plan for next time */}
                       {selectedEntry.planNextTime && (
-                        <div className="bg-white dark:bg-slate-900/60 border border-slate-300 dark:border-slate-800 p-3 rounded">
-                          <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-105 dark:border-slate-800 pb-0.5">
+                        <div className="bg-white dark:bg-slate-905/60 border border-slate-205 dark:border-slate-830 p-5 lg:p-6 rounded-xl shadow-xs">
+                          <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 dark:border-slate-800 pb-1.5">
                             Plan for next time
                           </strong>
-                          <p className="text-slate-900 dark:text-slate-100 leading-normal text-[11px] whitespace-pre-wrap">
+                          <p className="text-slate-900 dark:text-slate-100 leading-relaxed text-xs lg:text-sm whitespace-pre-wrap">
                             {selectedEntry.planNextTime}
                           </p>
                         </div>
@@ -6886,6 +6886,88 @@ FTC #6567 Captains & Mentors`
       {/* Dynamic Batch Print Container - ONLY printed, completely invisible on screen, styles strictly adjusted for print */}
       {entriesToPrint && entriesToPrint.length > 0 && (
         <div className="hidden print:block bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
+          
+          {/* TITLE PAGE */}
+          <div 
+            className="flex flex-col justify-between p-12 bg-white text-black min-h-screen relative border-4 border-double border-slate-950 mb-12"
+            style={{ pageBreakAfter: 'always', minHeight: '297mm' }}
+          >
+            <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[200mm]">
+              <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
+                <span className="font-extrabold text-2xl tracking-tighter">RR</span>
+              </div>
+              <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-950 mb-2">
+                RoboRaiders Team Portal
+              </h1>
+              <p className="text-sm font-mono uppercase tracking-widest text-slate-600 mb-8">
+                Official Engineering Notebook
+              </p>
+              
+              <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
+              
+              <p className="text-base font-extrabold text-slate-800 uppercase tracking-wide">
+                FIRST Tech Challenge Team #6567
+              </p>
+            </div>
+
+            <div className="mt-auto border-t-2 border-slate-950 pt-6">
+              <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-705">
+                <div>
+                  <p><strong>DOCUMENT TYPE:</strong> Compiled Ledger</p>
+                  <p><strong>EXPORTED ON:</strong> {new Date().toISOString().split('T')[0]}</p>
+                </div>
+                <div className="text-right">
+                  <p><strong>RECORDS CLASSIFIED:</strong> {entriesToPrint.length} Entries</p>
+                  <p><strong>STATUS:</strong> Verified Team Records</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TABLE OF CONTENTS */}
+          <div 
+            className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+            style={{ pageBreakAfter: 'always', minHeight: '297mm' }}
+          >
+            <div className="border-b-4 border-slate-950 pb-4 mb-6">
+              <h2 className="text-2xl font-black uppercase tracking-wider text-slate-950 font-display">
+                Table of Contents
+              </h2>
+              <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                FTC #6567 Compiled Notebook Binder
+              </p>
+            </div>
+
+            <div className="flex-1 mt-4">
+              <table className="w-full text-left text-xs text-slate-800">
+                <thead>
+                  <tr className="border-b-2 border-slate-950 font-mono font-bold text-slate-500 uppercase text-[10px]">
+                    <th className="py-2 pr-4 w-1/6">REF ID</th>
+                    <th className="py-2 pr-4 w-1/6">DATE</th>
+                    <th className="py-2 pr-4 w-1/4">AUTHOR</th>
+                    <th className="py-2 pr-4 w-1/4">SUBTEAM CATEGORY</th>
+                    <th className="py-2 text-right w-1/12">PAGE</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {entriesToPrint.map((entry, idx) => (
+                    <tr key={entry.id} className="align-top">
+                      <td className="py-3 pr-4 font-mono font-bold text-slate-950">{getEntryReferenceCode(entry)}</td>
+                      <td className="py-3 pr-4 font-mono">{entry.date}</td>
+                      <td className="py-3 pr-4 font-semibold text-slate-900">{entry.author}</td>
+                      <td className="py-3 pr-4 text-slate-700 font-mono text-[10px] uppercase">{entry.subteam}</td>
+                      <td className="py-3 text-right font-mono text-slate-500 font-bold">{idx + 3}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-auto border-t border-slate-300 pt-4 text-center text-[10px] font-mono text-slate-400">
+              RoboRaiders Centralized Ledger Proof Network • Generated Securely
+            </div>
+          </div>
+
           {entriesToPrint.map((entry, index) => {
             return (
               <div 
