@@ -76,101 +76,8 @@ import ArenaPortal from './components/ArenaPortal';
 import { DEFAULT_OUTREACH_EVENTS } from './data/outreachDemo';
 
 // Pre-populated demo data for FIRST Tech Challenge teams
-const DEMO_ENTRIES: JournalEntry[] = [
-  {
-    id: 'demo-1',
-    subteam: 'Design/Build/Fabrication',
-    author: 'Sarah Chen (Build Co-Lead)',
-    date: new Date().toISOString().split('T')[0],
-    planned: 'Assemble the new custom cascading drawer slides for the continuous horizontal sample intake mechanism. Mount structural support brackets (aluminum channel A-4) to chassis and route dual tension cords.',
-    accomplished: 'Completed physical mounting of brackets on the main drive-base frame. Mounted and tensioned both continuous-loop cords on the slide pulleys. Verified friction limits manually and found slide action fits within structural thresholds.',
-    problemsAndSolutions: [
-      'The continuous tension cord was slipping off the plastic pulley wheels during active retraction, causing the slide to pinch and jam under high acceleration.',
-      'We designed and 3D-printed custom low-friction pulley guards to prevent cord derailing, and added a medium-gauge steel tensioning spring to absorb initial snap-back force.'
-    ],
-    planNextTime: 'Perform mechanical stress test under motor load (using 1150 RPM NeveRest motors). Hand off mechanism metrics to Programming subteam for hardware mapping and sensor-assisted limits calibration.',
-    images: [
-      {
-        id: 'img-demo-1',
-        name: 'cascading_slides_intake.jpg',
-        size: 98320,
-        // High-contrast, clean inline SVG data URL representing a robotics engineering assembly diagram
-        dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%231e293b"/><text x="20" y="40" fill="%23c00000" font-family="monospace" font-size="20" font-weight="bold">FTC TEAM 6567</text><text x="20" y="70" fill="%2364748b" font-family="monospace" font-size="12">CHASSIS TOP-DOWN ASSEMBLY v4</text><rect x="60" y="100" width="280" height="120" rx="8" fill="none" stroke="%23c00000" stroke-width="4" stroke-dasharray="8 4"/><line x1="60" y1="160" x2="340" y2="160" stroke="%2338bdf8" stroke-width="2"/><line x1="120" y1="100" x2="120" y2="220" stroke="%2338bdf8" stroke-width="2"/><line x1="280" y1="100" x2="280" y2="220" stroke="%2338bdf8" stroke-width="2"/><circle x="120" y="160" r="12" fill="%23f43f5e" stroke="white" stroke-width="2"/><circle x="280" y="160" r="12" fill="%23f43f5e" stroke="white" stroke-width="2"/><text x="140" y="155" fill="white" font-family="sans-serif" font-size="11">Pulley Spool</text><text x="140" y="175" fill="%23a1a1aa" font-family="sans-serif" font-size="10">Guards &amp; Tensioner</text></svg>'
-      }
-    ],
-    createdAt: Date.now() - 86400000,
-    updatedAt: Date.now() - 86400000,
-    status: 'Approved',
-    reviewer: 'Coach John (Lead Mentor)',
-    reviewNotes: 'Outstanding detail in physical troubleshooting. The custom printed pulleys look like an excellent mechanical countermeasure.',
-    reviewedAt: Date.now() - 40000000
-  },
-  {
-    id: 'demo-2',
-    subteam: 'Programming',
-    author: 'Alex Rivera (Autonomous Specialist)',
-    date: new Date().toISOString().split('T')[0],
-    planned: 'Integrate the Road Runner path-planning library and configure three-wheel localization odometry wheels. Draft auto routines to fetch and secure up to three scoring specimens.',
-    accomplished: 'Tuned PID controllers for lateral feedback, forward gains, and rotative scaling. Standardized robot starting orientations based on field absolute AprilTags. Successfully verified a complete 2-specimen scoring trajectory with ±0.35-inch accuracy.',
-    problemsAndSolutions: [
-      'The Mecanum wheels suffered severe rotational slip during path translation over transition joints on the foam tile field pads.',
-      'Calibrated the IMU-driven secondary gyroscopic correction thread in our main loop, dynamic scaling the motor power vectors relative to instantaneous heading error.'
-    ],
-    planNextTime: 'Refine auto claw release timings by correlating color/distance sensor thresholds. Sync with telemetry visualization dashboard to graph drift curves.',
-    images: [
-      {
-        id: 'img-demo-2',
-        name: 'odometry_wheels_plot.jpg',
-        size: 73200,
-        dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%230f172a"/><text x="20" y="40" fill="%2338bdf8" font-family="monospace" font-size="18" font-weight="bold">ODOMETRY LOCALIZATION FLOW</text><text x="20" y="65" fill="%23475569" font-family="monospace" font-size="12">D_PORT_XY: SAMPLES READ SUCCESSFUL</text><path d="M 50 250 Q 150 50, 250 180 T 350 120" fill="none" stroke="%2322c55e" stroke-width="4"/><path d="M 50 250 Q 150 65, 250 190 T 350 125" fill="none" stroke="%23e11d48" stroke-width="2" stroke-dasharray="4 4"/><circle x="50" y="250" r="6" fill="%23f59e0b"/><circle x="350" y="120" r="6" fill="%233b82f6"/><text x="40" y="275" fill="%2394a3b8" font-family="monospace" font-size="10">Target start</text><text x="310" y="105" fill="%233b82f6" font-family="monospace" font-size="10">Final Target Score</text></svg>'
-      }
-    ],
-    createdAt: Date.now() - 43200000,
-    updatedAt: Date.now() - 43200000,
-    status: 'Pending Review'
-  }
-];
-const DEFAULT_TIME_ENTRIES: TimeEntry[] = [
-  {
-    id: 't-demo-1',
-    userId: 'p-1',
-    userName: 'Sarah Chen (Build Co-Lead)',
-    userEmail: 'schen@school.edu',
-    subteam: 'Design/Build/Fabrication',
-    date: new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0],
-    startTime: '15:30',
-    endTime: '18:30',
-    durationHours: 3.0,
-    taskDescription: 'Milled the low-clearance motor mounting brackets onto standard aluminum structural extrusion plates.',
-    createdAt: Date.now() - 86400000 * 3
-  },
-  {
-    id: 't-demo-2',
-    userId: 'p-2',
-    userName: 'Alex Rivera (Autonomous Specialist)',
-    userEmail: 'arivera@school.edu',
-    subteam: 'Programming',
-    date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
-    startTime: '16:00',
-    endTime: '19:15',
-    durationHours: 3.25,
-    taskDescription: 'Tuned lateral drift offset parameters inside Road Runner odometry threads.',
-    createdAt: Date.now() - 86400000 * 2
-  },
-  {
-    id: 't-demo-3',
-    userId: 'p-1',
-    userName: 'Sarah Chen (Build Co-Lead)',
-    userEmail: 'schen@school.edu',
-    subteam: 'Design/Build/Fabrication',
-    date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-    startTime: '15:15',
-    endTime: '19:45',
-    durationHours: 4.5,
-    taskDescription: 'Completed continuous loop cord rigging and designed the initial 3D-pulley guards.',
-    createdAt: Date.now() - 86400000
-  }
-];
+const DEMO_ENTRIES: JournalEntry[] = [];
+const DEFAULT_TIME_ENTRIES: TimeEntry[] = [];
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -246,8 +153,8 @@ export const getEntryReferenceCode = (entry: JournalEntry): string => {
 export const DEFAULT_PROFILES: AuthorProfile[] = [
   {
     id: 'p-1',
-    name: 'Sarah Chen (Build Co-Lead)',
-    schoolEmail: 'schen@school.edu',
+    name: 'testLeader',
+    schoolEmail: 'testleader@school.edu',
     schoolId: '123456',
     primarySubteam: 'Design/Build/Fabrication',
     secondarySubteam: 'Inspire',
@@ -255,8 +162,8 @@ export const DEFAULT_PROFILES: AuthorProfile[] = [
   },
   {
     id: 'p-2',
-    name: 'Alex Rivera (Autonomous Specialist)',
-    schoolEmail: 'arivera@school.edu',
+    name: 'testStudent',
+    schoolEmail: 'teststudent@school.edu',
     schoolId: '654321',
     primarySubteam: 'Programming',
     secondarySubteam: 'Strategy',
@@ -325,7 +232,7 @@ export default function App() {
       },
       {
         id: 'a-admin',
-        name: 'Lead Mentor Dave',
+        name: 'testMentor',
         schoolEmail: 'mentor@school.edu',
         schoolId: 'admin123',
         primarySubteam: 'Mentor',
@@ -336,8 +243,8 @@ export default function App() {
       },
       {
         id: 'a-member1',
-        name: 'Sarah Chen (Build Co-Lead)',
-        schoolEmail: 'schen@school.edu',
+        name: 'testLeader',
+        schoolEmail: 'testleader@school.edu',
         schoolId: '123456',
         primarySubteam: 'Design/Build/Fabrication',
         secondarySubteam: 'Inspire',
@@ -347,8 +254,8 @@ export default function App() {
       },
       {
         id: 'a-member2',
-        name: 'Alex Rivera (Autonomous Specialist)',
-        schoolEmail: 'arivera@school.edu',
+        name: 'testStudent',
+        schoolEmail: 'teststudent@school.edu',
         schoolId: '654321',
         primarySubteam: 'Programming',
         secondarySubteam: 'Strategy',
@@ -637,8 +544,12 @@ export default function App() {
   };
 
   useEffect(() => {
-    const unsubscribeAll: (() => void)[] = [];
+    let unsubscribeAll: (() => void)[] = [];
     const handleAuthEvent = onAuthStateChanged(auth, async (authUser) => {
+      // Clear any previous listeners immediately on any auth state transition to avoid unauthenticated listens
+      unsubscribeAll.forEach(unsub => unsub());
+      unsubscribeAll = [];
+
       if (authUser) {
         try {
           const userDocRef = doc(db, 'users', authUser.uid);
@@ -1480,10 +1391,10 @@ FTC Team #6567 IT Administration`
 
   const loadDemoData = () => {
     saveEntriesToLocalStorage(DEMO_ENTRIES);
-    setSelectedEntry(DEMO_ENTRIES[0]);
+    setSelectedEntry(DEMO_ENTRIES[0] || null);
     saveKanbanTasksToLocalStorage(DEFAULT_KANBAN_TASKS);
     saveOutreachEventsToLocalStorage(DEFAULT_OUTREACH_EVENTS);
-    showToast('Demo engineering entries, Kanban, and Outreach data loaded!', 'info');
+    showToast('Clean portal sandbox database initialized!', 'info');
   };
 
   const clearAllData = () => {
@@ -1995,7 +1906,7 @@ FTC Team #6567 IT Administration`
         const u: JournalEntry = {
           ...entry,
           status: nextStatus,
-          reviewer: 'Coach John (Lead Mentor)',
+          reviewer: currentUser?.name || 'testMentor',
           reviewNotes: reviewNoteInput.trim(),
           reviewedAt: stamp
         };
@@ -2028,13 +1939,13 @@ FTC Team #6567 IT Administration`
         };
 
         if (nextStatus === 'Approved') {
-          u.reviewer = 'Coach John (Lead Mentor)';
+          u.reviewer = currentUser?.name || 'testMentor';
           u.reviewedAt = stamp;
           if (!u.reviewNotes) {
             u.reviewNotes = reviewNoteInput.trim() || 'Approved & Locked via status dropdown selection.';
           }
         } else if (nextStatus === 'Needs Revision') {
-          u.reviewer = 'Coach John (Lead Mentor)';
+          u.reviewer = currentUser?.name || 'testMentor';
           u.reviewedAt = stamp;
           if (!u.reviewNotes) {
             u.reviewNotes = reviewNoteInput.trim() || 'Returned for Revision.';
@@ -2536,73 +2447,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </form>
           )}
 
-          {/* PRE-CREATED CREDENTIALS FOR RAPID PREVIEW TESTING */}
-          <div className="mt-8 pt-5 border-t border-slate-200 dark:border-slate-800 w-full font-sans">
-            <h3 className="text-[10px] font-bold text-center text-slate-400 uppercase tracking-widest mb-3.5 animate-pulse">
-              Pre-authorized Sandbox Directory
-            </h3>
-            <div className="space-y-1.5 text-[10px]">
-              <button
-                onClick={async () => {
-                  setLoginEmail('admin@school.edu');
-                  setLoginSchoolId('admin');
-                  await triggerSandboxLogin('admin@school.edu', 'admin');
-                }}
-                className="w-full bg-emerald-50/75 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-300 p-2 rounded text-left font-semibold flex items-center justify-between transition-all cursor-pointer"
-              >
-                <div>
-                  <span className="font-extrabold text-emerald-950 dark:text-indigo-200">System Admin</span> (Mentor Authority)
-                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">admin@school.edu / admin</div>
-                </div>
-                <span className="bg-emerald-200/50 dark:bg-emerald-900/50 font-mono font-black text-[8px] px-1.5 py-0.5 rounded text-emerald-700 dark:text-emerald-300 uppercase animate-pulse">Admin</span>
-              </button>
 
-              <button
-                onClick={async () => {
-                  setLoginEmail('mentor@school.edu');
-                  setLoginSchoolId('admin123');
-                  await triggerSandboxLogin('mentor@school.edu', 'admin123');
-                }}
-                className="w-full bg-indigo-50/75 hover:bg-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-300 p-2 rounded text-left font-semibold flex items-center justify-between transition-all cursor-pointer"
-              >
-                <div>
-                  <span className="font-extrabold text-indigo-950 dark:text-indigo-200">Lead Mentor Dave</span> (Admin coach/reviews)
-                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">mentor@school.edu / admin123</div>
-                </div>
-                <span className="bg-indigo-200/50 dark:bg-indigo-900/50 font-mono font-black text-[8px] px-1.5 py-0.5 rounded text-indigo-700 dark:text-indigo-300 uppercase">Coach</span>
-              </button>
-
-              <button
-                onClick={async () => {
-                  setLoginEmail('schen@school.edu');
-                  setLoginSchoolId('123456');
-                  await triggerSandboxLogin('schen@school.edu', '123456');
-                }}
-                className="w-full bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded text-slate-700 dark:text-slate-300 text-left font-semibold flex items-center justify-between transition-all cursor-pointer"
-              >
-                <div>
-                  <span className="font-extrabold text-slate-900 dark:text-slate-200">Sarah Chen</span> (Build Co-Lead)
-                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">schen@school.edu / 123456</div>
-                </div>
-                <span className="bg-slate-200 dark:bg-slate-800 font-mono font-black text-[8px] px-1.5 py-0.5 rounded uppercase text-slate-600 dark:text-slate-400">Student</span>
-              </button>
-
-              <button
-                onClick={async () => {
-                  setLoginEmail('arivera@school.edu');
-                  setLoginSchoolId('654321');
-                  await triggerSandboxLogin('arivera@school.edu', '654321');
-                }}
-                className="w-full bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-705 p-2 rounded text-slate-700 dark:text-slate-300 text-left font-semibold flex items-center justify-between transition-all cursor-pointer"
-              >
-                <div>
-                  <span className="font-extrabold text-slate-900 dark:text-slate-200">Alex Rivera</span> (Autonomous Lead)
-                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">arivera@school.edu / 654321</div>
-                </div>
-                <span className="bg-slate-200 dark:bg-slate-800 font-mono font-black text-[8px] px-1.5 py-0.5 rounded uppercase text-slate-600 dark:text-slate-400">Student</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -2684,7 +2529,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
           <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 w-full text-center">
             <p className="text-[9px] text-indigo-700 dark:text-indigo-400 font-mono leading-relaxed bg-indigo-50/40 dark:bg-indigo-950/15 p-2.5 rounded border border-indigo-150 dark:border-indigo-900/50">
-              💡 <strong>Tester Guideline</strong>: To approve this request, click "Log Out / Cancel" and sign in as <strong>System Admin</strong> (admin@school.edu / Password: admin) or <strong>Lead Mentor Dave</strong> (mentor@school.edu / Password: admin123). Go to the "Team Approvals" menu in the header and approve this account.
+              💡 <strong>Tester Guideline</strong>: To approve this request, click "Log Out / Cancel" and sign in as <strong>System Admin</strong> (admin@school.edu / Password: admin) or <strong>testMentor</strong> (mentor@school.edu / Password: admin123). Go to the "Team Approvals" menu in the header and approve this account.
             </p>
           </div>
         </div>
@@ -2707,7 +2552,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           <p className="text-[10px] text-slate-500 font-mono mt-1 text-center font-bold">FTC #6567 — COMPROMISED OR DECLINED CREDENTIALS</p>
 
           <div className="my-5 bg-rose-500/5 border border-rose-300/30 p-4 rounded-lg text-center text-xs text-slate-700 dark:text-slate-350 font-medium">
-            Your Access Request has been turned down by team mentors/captains. If you believe this was an error, please coordinate directly with Coach Dave inside the lab workspace.
+            Your Access Request has been turned down by team mentors/captains. If you believe this was an error, please coordinate directly with testMentor inside the lab workspace.
           </div>
 
           <button
@@ -2760,12 +2605,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           >
             <Download className="w-3.5 h-3.5" /> Export DB
           </button>
-          <button 
-            onClick={loadDemoData}
-            className="bg-slate-800/80 hover:bg-slate-700 text-red-400 font-bold px-3 py-1.5 rounded text-xs uppercase transition-all tracking-wider border border-slate-800 flex items-center gap-1"
-          >
-            <Sparkles className="w-3.5 h-3.5" /> Sync Demos
-          </button>
+
           <button 
             onClick={clearAllData}
             className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 font-bold px-3 py-1.5 rounded text-xs uppercase tracking-wider transition-all border border-rose-900/40 flex items-center gap-1"
@@ -3145,7 +2985,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             </div>
 
                             <p className="text-[10px] font-mono text-slate-400 leading-normal bg-cyan-50/30 dark:bg-cyan-950/10 p-2.5 rounded border border-cyan-100/50 dark:border-cyan-900/20">
-                              ⚡ <strong>Pro Tip:</strong> Need quick XP multipliers? Ask a Lead Mentor or Coach Dave to completely Approve your "Pending Review" journal entries on the main hub. Approved entries score <strong>+120 XP extra each!</strong>
+                              ⚡ <strong>Pro Tip:</strong> Need quick XP multipliers? Ask a Lead Mentor or testMentor to completely Approve your "Pending Review" journal entries on the main hub. Approved entries score <strong>+120 XP extra each!</strong>
                             </p>
 
                             {/* Subteam Guild Alignment Badge */}
@@ -5439,7 +5279,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       <span>FTC CENTRALIZED LEDGER IDENTIFIER AND PROOF — VERIFIED LOCAL SYNC</span>
                       {selectedEntry.status === 'Approved' ? (
                         <span className="shrink-0 text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center gap-1 uppercase tracking-wider">
-                          ✔️ SIGNED OFF BY MENTOR: {selectedEntry.reviewer || 'COACH JOHN'}
+                          ✔️ SIGNED OFF BY MENTOR: {selectedEntry.reviewer || 'TESTMENTOR'}
                         </span>
                       ) : (
                         <span className="shrink-0 border-b border-slate-800 dark:border-slate-500 w-[200px] text-right">SIGNATURE: ___________________</span>
@@ -5724,7 +5564,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Sarah Chen, Mark Watney"
+                      placeholder="e.g. testLeader, Mark Watney"
                       value={newProfileName}
                       onChange={(e) => setNewProfileName(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-medium"
@@ -7180,7 +7020,7 @@ FTC #6567 Captains & Mentors`
                   <span>FTC CENTRALIZED LEDGER IDENTIFIER AND PROOF — VERIFIED LOCAL SYNC</span>
                   {entry.status === 'Approved' ? (
                     <span className="shrink-0 text-emerald-700 font-extrabold flex items-center gap-1 uppercase tracking-wider">
-                      ✔️ SIGNED OFF BY MENTOR: {entry.reviewer || 'COACH JOHN'}
+                      ✔️ SIGNED OFF BY MENTOR: {entry.reviewer || 'TESTMENTOR'}
                     </span>
                   ) : (
                     <span className="shrink-0 border-b border-slate-900 w-[200px] text-right">SIGNATURE: ___________________</span>
