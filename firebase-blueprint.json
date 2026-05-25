@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "User Account",
+      "description": "A student or mentor profile with credentials, team roles, and administrative statuses.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique id for the user profile." },
+        "name": { "type": "string", "description": "Full name of the team member or mentor." },
+        "schoolEmail": { "type": "string", "description": "Unique school email address." },
+        "schoolId": { "type": "string", "description": "Lunch number or private identification serving as access credentials." },
+        "primarySubteam": { "type": "string", "description": "Primary subteam assignment." },
+        "secondarySubteam": { "type": "string", "description": "Secondary subteam assignment." },
+        "role": { "type": "string", "enum": ["member", "mentor_captain", "mentor", "captain"], "description": "Team permission tier." },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"], "description": "Dashboard authorization state." },
+        "createdAt": { "type": "number", "format": "utc-millisec", "description": "Creation timestamp in epoch." },
+        "leadership": { "type": "string", "description": "Optional leadership title such as Captain or Subteam Leader." }
+      },
+      "required": ["id", "name", "schoolEmail", "schoolId", "primarySubteam", "secondarySubteam", "role", "status", "createdAt"]
+    },
+    "JournalEntry": {
+      "title": "Journal Entry",
+      "description": "An engineering journal log documenting planned work, accomplishments, issues, and solutions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subteam": { "type": "string" },
+        "author": { "type": "string" },
+        "date": { "type": "string" },
+        "planned": { "type": "string" },
+        "accomplished": { "type": "string" },
+        "problemsAndSolutions": { "type": "array" },
+        "planNextTime": { "type": "string" },
+        "images": { "type": "array" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "status": { "type": "string", "enum": ["Draft", "Pending Review", "Approved", "Needs Revision"] },
+        "reviewer": { "type": "string" },
+        "reviewNotes": { "type": "string" },
+        "reviewedAt": { "type": "number" }
+      },
+      "required": ["id", "subteam", "author", "date", "planned", "accomplished", "problemsAndSolutions", "planNextTime", "images", "createdAt", "updatedAt", "status"]
+    },
+    "TimeEntry": {
+      "title": "Time Entry",
+      "description": "A timesheet log recording physical attendance and work contribution duration.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "subteam": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "durationHours": { "type": "number" },
+        "taskDescription": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "userName", "userEmail", "subteam", "date", "startTime", "endTime", "durationHours", "taskDescription", "createdAt"]
+    },
+    "KanbanTask": {
+      "title": "Kanban Task",
+      "description": "A task on the engineering kanban board representing design or software development items.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "column": { "type": "string", "enum": ["todo", "inprogress", "review", "done"] },
+        "subteam": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "column", "subteam", "assignedTo", "priority", "createdAt", "updatedAt", "updatedBy"]
+    },
+    "OutreachEvent": {
+      "title": "Outreach Event",
+      "description": "A community event log containing metrics, descriptions, and structural listings.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "impactMetrics": { "type": "string" },
+        "hoursLogged": { "type": "number" },
+        "participants": { "type": "array" },
+        "images": { "type": "array" },
+        "creatorName": { "type": "string" },
+        "creatorEmail": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "title", "date", "location", "description", "impactMetrics", "hoursLogged", "participants", "images", "creatorName", "creatorEmail", "createdAt", "updatedAt", "updatedBy"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserAccount",
+      "description": "User credentials, access requests, and configuration records."
+    },
+    "journalEntries/{entryId}": {
+      "schema": "JournalEntry",
+      "description": "Individual technical engineering notebook journals."
+    },
+    "timeEntries/{entryId}": {
+      "schema": "TimeEntry",
+      "description": "Laboratory check-in timesheet records."
+    },
+    "kanbanTasks/{taskId}": {
+      "schema": "KanbanTask",
+      "description": "Active tasks tracked on the project workflow Kanban board."
+    },
+    "outreachEvents/{eventId}": {
+      "schema": "OutreachEvent",
+      "description": "Outreach community events, participants, and logged impact."
+    }
+  }
+}

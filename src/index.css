@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Custom brand colors matching official FTC Red (#c00000) */
+  --color-brand: #c00000;
+  --color-brand-hover: #a30000;
+  --color-brand-light: #fef2f2;
+  --color-brand-dark: #7f0000;
+
+  /* Add support for all custom shade variations and non-standard suffixes used in markup */
+  --color-slate-105: #f1f5f9;
+  --color-slate-150: #eaf0f6;
+  --color-slate-205: #cbd5e1;
+  --color-slate-250: #cbd5e1;
+  --color-slate-403: #94a3b8;
+  --color-slate-404: #94a3b8;
+  --color-slate-405: #64748b;
+  --color-slate-450: #64748b;
+  --color-slate-455: #475569;
+  --color-slate-505: #475569;
+  --color-slate-550: #334155;
+  --color-slate-650: #475569;
+  --color-slate-750: #334155;
+  --color-slate-755: #1e293b;
+  --color-slate-805: #1e293b;
+  --color-slate-850: #1a2333;
+  --color-slate-855: #1a2333;
+  --color-slate-905: #0f172a;
+  --color-slate-940: #0a0f1d;
+  --color-slate-955: #030712;
+
+  --color-pink-550: #db2777;
+  --color-pink-205: #fbcfe8;
+
+  --color-cyan-105: #cffafe;
+  --color-cyan-550: #0891b2;
+  --color-cyan-650: #0891b2;
+  --color-cyan-750: #0e7490;
+
+  --color-emerald-150: #d1fae5;
+  --color-emerald-250: #a7f3d0;
+  --color-emerald-550: #059669;
+  --color-emerald-555: #059669;
+  --color-emerald-850: #064e3b;
+  --color-emerald-905: #022c22;
+
+  --color-rose-550: #e11d48;
+  --color-rose-605: #e11d48;
+  --color-rose-850: #4c0519;
+  --color-rose-405: #f43f5e;
+}
+
+/* Ensure smooth global theme transitions and make the text bigger globally */
+html {
+  font-size: 112.5%; /* Scale all relative rem units up by 12.5% */
+}
+
+body {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
+  font-size: 14.5px;
+}
+
+/* Target and scale tiny arbitrary pixel font utility wrappers used in the app */
+.text-\[9px\] {
+  font-size: 11.5px !important;
+}
+.text-\[10px\] {
+  font-size: 12.5px !important;
+}
+.text-\[10\.5px\] {
+  font-size: 13px !important;
+}
+.text-\[11px\] {
+  font-size: 13.5px !important;
+}
+.text-xs {
+  font-size: 14px !important;
+}
+.text-sm {
+  font-size: 16px !important;
+}
+
+/* Relax UI components spacing to make them less busy */
+input, select, textarea {
+  padding: 0.5rem 0.75rem !important;
+}
+
+/* Print optimizations for FTC Engineering Notebook alignment */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+

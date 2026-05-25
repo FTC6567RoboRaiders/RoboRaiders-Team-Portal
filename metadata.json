@@ -1,0 +1,8 @@
+{
+  "name": "Remix: BACKUP FTC Team Journal",
+  "description": "An engineering journal input utility for FIRST Tech Challenge teams, designed to log subteam accomplishments, plans, problems, and upload team imagery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reuseable global helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isApprovedUser() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserDoc().status == 'Approved';
+    }
+
+    function isMentorOrCaptain() {
+      return isApprovedUser() && getUserDoc().role in ['mentor_captain', 'mentor', 'captain'];
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity Schema Validators
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'schoolEmail', 'schoolId', 'primarySubteam', 'secondarySubteam', 'role', 'status', 'createdAt'])
+        && data.keys().size() >= 9 && data.keys().size() <= 11
+        && data.id is string && data.id.size() <= 64
+        && data.name is string && data.name.size() <= 128
+        && data.schoolEmail is string && data.schoolEmail.size() <= 128
+        && data.schoolId is string && data.schoolId.size() <= 128
+        && data.primarySubteam is string
+        && data.secondarySubteam is string
+        && data.role is string
+        && data.status is string
+        && data.createdAt is number;
+    }
+
+    function isValidJournal(data) {
+      return data.keys().hasAll(['id', 'subteam', 'author', 'date', 'planned', 'accomplished', 'problemsAndSolutions', 'planNextTime', 'images', 'createdAt', 'updatedAt', 'status'])
+        && data.id is string
+        && data.subteam is string
+        && data.author is string
+        && data.date is string
+        && data.planned is string && data.planned.size() <= 5000
+        && data.accomplished is string && data.accomplished.size() <= 5000
+        && data.planNextTime is string && data.planNextTime.size() <= 5000
+        && data.status in ['Draft', 'Pending Review', 'Approved', 'Needs Revision']
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidTime(data) {
+      return data.keys().hasAll(['id', 'userId', 'userName', 'userEmail', 'subteam', 'date', 'startTime', 'endTime', 'durationHours', 'taskDescription', 'createdAt'])
+        && data.id is string
+        && data.userId is string
+        && data.userName is string
+        && data.userEmail is string
+        && data.subteam is string
+        && data.date is string
+        && data.startTime is string
+        && data.endTime is string
+        && data.durationHours is number
+        && data.taskDescription is string && data.taskDescription.size() <= 5000
+        && data.createdAt is number;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['id', 'title', 'description', 'column', 'subteam', 'assignedTo', 'priority', 'createdAt', 'updatedAt', 'updatedBy'])
+        && data.id is string
+        && data.title is string && data.title.size() <= 500
+        && data.description is string && data.description.size() <= 5000
+        && data.column in ['todo', 'inprogress', 'review', 'done']
+        && data.subteam is string
+        && data.assignedTo is string
+        && data.priority in ['Low', 'Medium', 'High']
+        && data.createdAt is number
+        && data.updatedAt is number
+        && data.updatedBy is string;
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll(['id', 'title', 'date', 'location', 'description', 'impactMetrics', 'hoursLogged', 'participants', 'images', 'creatorName', 'creatorEmail', 'createdAt', 'updatedAt', 'updatedBy'])
+        && data.id is string
+        && data.title is string && data.title.size() <= 500
+        && data.location is string && data.location.size() <= 500
+        && data.description is string && data.description.size() <= 5000
+        && data.impactMetrics is string && data.impactMetrics.size() <= 5000
+        && data.hoursLogged is number
+        && data.participants is list
+        && data.images is list
+        && data.creatorName is string
+        && data.creatorEmail is string
+        && data.createdAt is number
+        && data.updatedAt is number
+        && data.updatedBy is string;
+    }
+
+    // Collection Rules
+    
+    // 1. Users
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data) && request.resource.data.status == 'Pending';
+      allow update: if isSignedIn() && (
+        isMentorOrCaptain() ||
+        (request.auth.uid == userId 
+         && isValidUser(request.resource.data)
+         && request.resource.data.schoolEmail == resource.data.schoolEmail
+         && request.resource.data.role == resource.data.role
+         && request.resource.data.status == resource.data.status)
+      );
+    }
+
+    // 2. Journal Entries
+    match /journalEntries/{entryId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidJournal(request.resource.data) && request.resource.data.author == request.auth.token.email;
+      allow update: if isApprovedUser() && (
+        isMentorOrCaptain() ||
+        (resource.data.author == request.auth.token.email 
+         && isValidJournal(request.resource.data)
+         && request.resource.data.author == resource.data.author
+         && (request.resource.data.status in ['Draft', 'Pending Review'] || request.resource.data.status == resource.data.status))
+      );
+      allow delete: if isMentorOrCaptain();
+    }
+
+    // 3. Time Entries
+    match /timeEntries/{entryId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidTime(request.resource.data) && (request.resource.data.userEmail == request.auth.token.email || isMentorOrCaptain());
+      allow update: if isApprovedUser() && (
+        isMentorOrCaptain() ||
+        (resource.data.userEmail == request.auth.token.email 
+         && isValidTime(request.resource.data)
+         && request.resource.data.userEmail == resource.data.userEmail)
+      );
+      allow delete: if isMentorOrCaptain();
+    }
+
+    // 4. Kanban Tasks
+    match /kanbanTasks/{taskId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidTask(request.resource.data);
+      allow update: if isApprovedUser() && isValidTask(request.resource.data);
+      allow delete: if isApprovedUser();
+    }
+
+    // 5. Outreach Events
+    match /outreachEvents/{eventId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidEvent(request.resource.data);
+      allow update: if isApprovedUser() && isValidEvent(request.resource.data);
+      allow delete: if isMentorOrCaptain();
+    }
+  }
+}
