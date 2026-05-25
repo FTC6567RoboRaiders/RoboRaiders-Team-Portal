@@ -592,7 +592,35 @@ export default function App() {
 
       const userUid = userCredential.user.uid;
       const docRef = doc(db, 'users', userUid);
-      const docSnap = await getDoc(docRef);
+      let docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
+        if (matchedLocalAcc) {
+          const newDoc = {
+            ...matchedLocalAcc,
+            id: userUid
+          };
+          await setDoc(docRef, newDoc);
+          docSnap = await getDoc(docRef);
+        } else {
+          const defaultName = emailToFind.split('@')[0];
+          const isUserAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
+          const newDoc: UserAccount = {
+            id: userUid,
+            name: isUserAdmin ? 'Coach / Mentor' : defaultName,
+            schoolEmail: emailToFind,
+            schoolId: 'N/A',
+            primarySubteam: isUserAdmin ? 'Mentor' : 'Design/Build/Fabrication',
+            secondarySubteam: 'None',
+            role: isUserAdmin ? 'mentor_captain' : 'member',
+            status: isUserAdmin ? 'Approved' : 'Pending',
+            createdAt: Date.now()
+          };
+          await setDoc(docRef, newDoc);
+          docSnap = await getDoc(docRef);
+        }
+      }
+
       if (docSnap.exists()) {
         const found = docSnap.data() as UserAccount;
         setCurrentUser(found);
@@ -612,7 +640,37 @@ export default function App() {
       if (authUser) {
         try {
           const userDocRef = doc(db, 'users', authUser.uid);
-          const userSnap = await getDoc(userDocRef);
+          let userSnap = await getDoc(userDocRef);
+          
+          if (!userSnap.exists()) {
+            const authEmail = authUser.email?.toLowerCase() || '';
+            const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === authEmail);
+            if (matchedLocalAcc) {
+              const newAcc = {
+                ...matchedLocalAcc,
+                id: authUser.uid
+              };
+              await setDoc(userDocRef, newAcc);
+              userSnap = await getDoc(userDocRef);
+            } else {
+              const defaultName = authUser.displayName || authUser.email?.split('@')[0] || 'Team Member';
+              const isUserAdmin = authEmail === 'ftc6567@gmail.com' || authEmail === 'mentor@school.edu' || authEmail === 'admin@school.edu';
+              const newAcc: UserAccount = {
+                id: authUser.uid,
+                name: defaultName,
+                schoolEmail: authUser.email || 'unknown@school.edu',
+                schoolId: 'N/A',
+                primarySubteam: isUserAdmin ? 'Mentor' : 'Design/Build/Fabrication',
+                secondarySubteam: 'None',
+                role: isUserAdmin ? 'mentor_captain' : 'member',
+                status: isUserAdmin ? 'Approved' : 'Pending',
+                createdAt: Date.now()
+              };
+              await setDoc(userDocRef, newAcc);
+              userSnap = await getDoc(userDocRef);
+            }
+          }
+
           if (userSnap.exists()) {
             const userData = userSnap.data() as UserAccount;
             setCurrentUser(userData);
@@ -1041,7 +1099,35 @@ export default function App() {
 
       const userUid = userCredential.user.uid;
       const docRef = doc(db, 'users', userUid);
-      const docSnap = await getDoc(docRef);
+      let docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
+        if (matchedLocalAcc) {
+          const newDoc = {
+            ...matchedLocalAcc,
+            id: userUid
+          };
+          await setDoc(docRef, newDoc);
+          docSnap = await getDoc(docRef);
+        } else {
+          const defaultName = emailToFind.split('@')[0];
+          const isUserAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
+          const newDoc: UserAccount = {
+            id: userUid,
+            name: isUserAdmin ? 'Coach / Mentor' : defaultName,
+            schoolEmail: emailToFind,
+            schoolId: 'N/A',
+            primarySubteam: isUserAdmin ? 'Mentor' : 'Design/Build/Fabrication',
+            secondarySubteam: 'None',
+            role: isUserAdmin ? 'mentor_captain' : 'member',
+            status: isUserAdmin ? 'Approved' : 'Pending',
+            createdAt: Date.now()
+          };
+          await setDoc(docRef, newDoc);
+          docSnap = await getDoc(docRef);
+        }
+      }
+
       if (docSnap.exists()) {
         const found = docSnap.data() as UserAccount;
         setCurrentUser(found);
@@ -3870,8 +3956,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
             </div>
 
-            {/* ONLY MENTORS CAN VIEW ROSTER MANAGEMENT & EMAIL COMMUNICATIONS */}
-            {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain') && (
+            {/* ONLY MENTORS/CAPTAINS CAN VIEW ROSTER MANAGEMENT & EMAIL COMMUNICATIONS */}
+            {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
               <>
                 {/* CARD 3: TEAM DIRECTORY */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-indigo-550/30 group">
@@ -5652,15 +5738,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <select
                       value={newProfileLeadership}
                       onChange={(e) => setNewProfileLeadership(e.target.value as any)}
-                      disabled={!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain')}
-                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain') ? 'cursor-not-allowed opacity-75' : ''}`}
+                      disabled={!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain')}
+                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') ? 'cursor-not-allowed opacity-75' : ''}`}
                     >
                       <option value="None" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">None</option>
                       <option value="Captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Captain</option>
                       <option value="Subteam leader" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Subteam leader</option>
                     </select>
-                    {!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain') && (
-                      <span className="text-[9px] text-slate-400 italic">Only mentors can update the leadership role.</span>
+                    {!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+                      <span className="text-[9px] text-slate-400 italic">Only mentors/captains can update the leadership role.</span>
                     )}
                   </div>
 
@@ -5672,16 +5758,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <select
                       value={newProfileRole}
                       onChange={(e) => setNewProfileRole(e.target.value as any)}
-                      disabled={!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain')}
-                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain') ? 'cursor-not-allowed opacity-75' : ''}`}
+                      disabled={!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain')}
+                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') ? 'cursor-not-allowed opacity-75' : ''}`}
                     >
                       <option value="member" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Student Team Member</option>
                       <option value="captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Subteam Lead / Captain</option>
                       <option value="mentor" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Coach / Mentor</option>
                       <option value="mentor_captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Mentor / Captain</option>
                     </select>
-                    {!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain') && (
-                      <span className="text-[9px] text-slate-400 italic">Only mentors can update the account level.</span>
+                    {!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+                      <span className="text-[9px] text-slate-400 italic">Only mentors/captains can update the account level.</span>
                     )}
                   </div>
 
@@ -5788,7 +5874,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             </div>
                             <div className="mt-2 flex items-center gap-2">
                               <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Leadership:</span>
-                              {currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' ? (
+                              {currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain' ? (
                                 <select
                                   value={acc.leadership || 'None'}
                                   onChange={(e) => {
@@ -5812,7 +5898,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                            {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain') && (
+                            {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
                               <button
                                 onClick={() => handleStartEditProfile(acc.name)}
                                 className="bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-black py-2 px-4 rounded-md text-[11.5px] uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
@@ -5899,7 +5985,7 @@ FTC #6567 Captains & Mentors`
                           </div>
                           <div className="mt-1.5 flex items-center gap-2">
                             <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Leadership:</span>
-                            {currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' ? (
+                            {currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain' ? (
                               <select
                                 value={acc.leadership || 'None'}
                                 onChange={async (e) => {
@@ -5970,10 +6056,10 @@ FTC #6567 Captains & Mentors`
                                 </button>
                               )}
                               
-                              {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain') && (
+                              {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
                                 <button
                                   onClick={() => handleStartEditProfile(acc.name)}
-                                  className="p-1 text-slate-400 hover:text-brand dark:hover:text-brand hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-all cursor-pointer"
+                                  className="p-1 text-slate-400 hover:text-brand dark:hover:text-brand hover:bg-slate-100 dark:hover:bg-slate-805 rounded transition-all cursor-pointer"
                                   title="Edit User Profile"
                                 >
                                   <Edit className="w-3.5 h-3.5" />

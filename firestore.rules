@@ -108,7 +108,10 @@ service cloud.firestore {
     // 1. Users
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data) && request.resource.data.status == 'Pending';
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data) && (
+        request.resource.data.status == 'Pending' ||
+        (request.resource.data.status == 'Approved' && request.resource.data.schoolEmail in ['admin@school.edu', 'mentor@school.edu', 'ftc6567@gmail.com', 'schen@school.edu', 'arivera@school.edu'])
+      );
       allow update: if isSignedIn() && (
         isMentorOrCaptain() ||
         (request.auth.uid == userId 
