@@ -237,7 +237,7 @@ export default function ArenaPortal({
               subteamRanks: 'Guild Ranks',
               badges: 'Achievements',
               quests: 'Active Quests',
-              leaderboard: 'Arena Standings'
+              leaderboard: 'Leaderboard'
             };
             return (
               <button

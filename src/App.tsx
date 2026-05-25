@@ -3103,7 +3103,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           subteamRanks: 'Guild Ranks',
                           badges: 'Achievements',
                           quests: 'Active Quests',
-                          leaderboard: 'Arena Standings'
+                          leaderboard: 'Leaderboard'
                         };
                         return (
                           <button
