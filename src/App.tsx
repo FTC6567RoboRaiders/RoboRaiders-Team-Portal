@@ -4705,11 +4705,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
           </div>
 
-          <main className={`flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-hidden ${entriesToPrint ? 'print:hidden' : ''}`}>
+          <main className={`flex-1 flex flex-col gap-8 ${entriesToPrint ? 'print:hidden' : ''}`}>
         
-        {/* PANEL: DRAFT REGISTRATION FORM (LEFT COLUMN - Spaced out & elegant PC Sidebar) */}
+        {/* PANEL: DRAFT REGISTRATION FORM (TOP ROW) */}
         <section 
-          className={`lg:col-span-4 flex flex-col gap-4 overflow-y-auto pr-1 ${
+          className={`w-full flex flex-col gap-4 ${
             activeTab === 'form' ? 'flex' : 'hidden sm:flex'
           } no-print`}
           id="block-journal-form-panel"
@@ -4727,233 +4727,242 @@ ${entry.planNextTime || '_No carry-over specified._'}
               )}
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3.5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               
-              {/* Row 1: Subteam */}
-              <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                  Subteam Group <span className="text-brand">*</span>
-                </label>
-                <select
-                  value={formSubteam}
-                  onChange={(e) => setFormSubteam(e.target.value as Subteam)}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all"
-                  id="input-subteam"
-                >
-                  {SUBTEAM_LIST.map((sub) => (
-                    <option key={sub} value={sub} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">{sub}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Row 2: Author Name (Read-Only utilizing Logged-in User) */}
-              <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 label-authorized-reporter">
-                  Authorized Reporter
-                </label>
-                <div className="bg-slate-50 dark:bg-slate-850/80 border border-slate-200 dark:border-slate-800 rounded p-2.5 flex items-center justify-between gap-3 text-xs shadow-3xs" id="display-auth-id-card">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-emerald-500/10 dark:bg-emerald-400/10 p-1.5 rounded-full text-emerald-600 dark:text-emerald-400 shrink-0">
-                      <User className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                        <span>{currentUser?.name || formAuthor}</span>
-                      </div>
-                      <div className="text-[9px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">
-                        {currentUser?.role === 'mentor' ? 'Coach / Mentor' : currentUser?.role === 'captain' ? 'Subteam Lead / Captain' : currentUser?.role === 'mentor_captain' ? 'Mentor / Captain' : 'Student Member'} • {currentUser?.primarySubteam === 'None' || currentUser?.primarySubteam === 'Mentor' || currentUser?.primarySubteam === 'Lead/Captain' ? formatSubteamLabel(currentUser?.primarySubteam) : `${currentUser?.primarySubteam} Subteam`}
-                      </div>
-                    </div>
-                  </div>
-                  {currentUser && (
-                    <span className="bg-emerald-100 dark:bg-emerald-950/40 text-emerald-850 dark:text-emerald-350 font-mono text-[9px] font-black px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-900/50 select-none uppercase shadow-3xs shrink-0 self-center">
-                      Authorized
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Row 3: Date */}
-              <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                  Session Date <span className="text-brand">*</span>
-                </label>
-                <div className="relative">
-                  <Calendar className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-400" />
-                  <input
-                    type="date"
-                    value={formDate}
-                    onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded pl-8 pr-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium transition-all"
-                    required
-                    id="input-date"
-                  />
-                </div>
-              </div>
-
-              {/* Row 4: What we planned */}
-              <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
-                <label className="block text-[10px] font-extrabold text-red-700 dark:text-red-400 uppercase tracking-wider mb-1.5">
-                  What we planned <span className="text-brand">*</span>
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Define objectives (e.g., Mount slide brackets, map sensors...)"
-                  value={formPlanned}
-                  onChange={(e) => setFormPlanned(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono"
-                  required
-                  id="input-planned"
-                />
-              </div>
-
-              {/* Row 5: What we accomplished */}
-              <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
-                <label className="block text-[10px] font-extrabold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1.5">
-                  What we accomplished <span className="text-brand">*</span>
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Summarize results, mechanisms built/integrated, or autonomous tests passed..."
-                  value={formAccomplished}
-                  onChange={(e) => setFormAccomplished(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono"
-                  required
-                  id="input-accomplished"
-                />
-              </div>
-
-              {/* Row 6: Problems and Solutions Found (Enumerated Focus) */}
-              <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded flex flex-col">
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-[10px] font-extrabold text-rose-800 dark:text-rose-400 uppercase tracking-wider">
-                    Problems and Solutions Found
+              {/* Row 1: Short fields metadata info */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Field 1: Subteam */}
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Subteam Group <span className="text-brand">*</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleAddProblemField}
-                    className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold px-2 py-0.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition flex items-center gap-1.5"
-                    id="btn-add-blocker"
+                  <select
+                    value={formSubteam}
+                    onChange={(e) => setFormSubteam(e.target.value as Subteam)}
+                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all"
+                    id="input-subteam"
                   >
-                    <PlusCircle className="w-3 h-3" />
-                    <span>Add Item</span>
-                  </button>
+                    {SUBTEAM_LIST.map((sub) => (
+                      <option key={sub} value={sub} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">{sub}</option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                  {formProblemsAndSolutions.map((paragraph, idx) => (
-                    <div key={idx} className="flex gap-2 items-start bg-white dark:bg-slate-800 p-1.5 rounded border border-slate-200 dark:border-slate-700">
-                      <span className="bg-slate-900 dark:bg-slate-950 text-white text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 shrink-0">
-                        {idx + 1}
+                {/* Field 2: Date */}
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Session Date <span className="text-brand">*</span>
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="date"
+                      value={formDate}
+                      onChange={(e) => setFormDate(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded pl-8 pr-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium transition-all"
+                      required
+                      id="input-date"
+                    />
+                  </div>
+                </div>
+
+                {/* Field 3: Author Card */}
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">
+                    Authorized Reporter
+                  </label>
+                  <div className="bg-slate-50 dark:bg-slate-850/80 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1 flex items-center justify-between gap-3 text-xs shadow-3xs" id="display-auth-id-card">
+                    <div className="flex items-center gap-2 py-0.5">
+                      <div className="bg-emerald-500/10 dark:bg-emerald-400/10 p-1 rounded-full text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <User className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <div className="font-extrabold text-slate-800 dark:text-slate-100 leading-tight text-[11px] truncate max-w-[120px]">
+                          {currentUser?.name || formAuthor}
+                        </div>
+                        <div className="text-[8px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider leading-none">
+                          {currentUser?.role === 'mentor' ? 'Coach' : currentUser?.role === 'captain' ? 'Captain' : currentUser?.role === 'mentor_captain' ? 'Mentor / Capt.' : 'Student Member'}
+                        </div>
+                      </div>
+                    </div>
+                    {currentUser && (
+                      <span className="bg-emerald-100/80 dark:bg-emerald-950/40 text-emerald-850 dark:text-emerald-350 font-mono text-[8px] font-black px-1.5 py-0.5 rounded border border-emerald-250 dark:border-emerald-900 select-none uppercase shadow-3xs shrink-0">
+                        Auth
                       </span>
-                      <textarea
-                        rows={2}
-                        placeholder="Failure observed | Countermeasure/engineering correction applied"
-                        value={paragraph}
-                        onChange={(e) => handleUpdateProblemField(idx, e.target.value)}
-                        className="flex-1 bg-slate-50 dark:bg-slate-850 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand leading-normal resize-none"
-                        id={`input-problem-${idx}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveProblemField(idx)}
-                        className="text-slate-400 hover:text-rose-600 p-1 rounded mt-1"
-                        id={`btn-remove-problem-${idx}`}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Row 7: Plan next time */}
-              <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
-                <label className="block text-[10px] font-extrabold text-indigo-800 dark:text-indigo-400 uppercase tracking-wider mb-1">
-                  Plan for next time
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Items to carry over and new objectives..."
-                  value={formPlanNextTime}
-                  onChange={(e) => setFormPlanNextTime(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono"
-                  id="input-next-time"
-                />
-              </div>
-
-              {/* Row 8: Image upload */}
-              <div className="border border-slate-200 dark:border-slate-800 rounded p-2.5 bg-slate-50 dark:bg-slate-850/30">
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
-                  Image Attachments
-                </label>
-
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border border-dashed rounded p-4 text-center cursor-pointer transition-colors ${
-                    isDraggingOver 
-                      ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200' 
-                      : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750'
-                  }`}
-                  id="image-dropzone"
-                >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    multiple
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
+              {/* Row 2: Textareas for Planning and Accomplishing */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* What we planned */}
+                <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
+                  <label className="block text-[10px] font-extrabold text-red-700 dark:text-red-400 uppercase tracking-wider mb-1">
+                    What we planned <span className="text-brand">*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Define objectives (e.g., Mount slide brackets, map sensors...)"
+                    value={formPlanned}
+                    onChange={(e) => setFormPlanned(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono"
+                    required
+                    id="input-planned"
                   />
-                  
-                  {isImageProcessing ? (
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded"></div>
-                      <span className="text-[10px] text-brand font-bold">OPTIMIZING PICTURE DATA...</span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-1">
-                      <FileUp className="w-6 h-6 text-slate-400 group-hover:text-brand" />
-                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Drag image or browse</span>
-                      <span className="text-[9px] text-slate-400 uppercase tracking-tighter">JPEG, PNG optimized automatically</span>
-                    </div>
-                  )}
                 </div>
 
-                {/* Micro Preview of Uploaded images */}
-                {formImages.length > 0 && (
-                  <div className="grid grid-cols-4 gap-1.5 mt-2" id="grid-draft-images">
-                    {formImages.map((img) => (
-                      <div 
-                        key={img.id} 
-                        onClick={() => setExpandedImage({ url: img.dataUrl, name: img.name })}
-                        className="group relative border border-slate-300 dark:border-slate-700 rounded aspect-square overflow-hidden bg-slate-200 dark:bg-slate-800 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-brand"
-                        title="Click to zoom preview"
-                      >
-                        <img 
-                          src={img.dataUrl} 
-                          alt={img.name} 
-                          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 pointer-events-none"
-                          referrerPolicy="no-referrer"
+                {/* What we accomplished */}
+                <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
+                  <label className="block text-[10px] font-extrabold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">
+                    What we accomplished <span className="text-brand">*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Summarize results, mechanisms built/integrated, or autonomous tests passed..."
+                    value={formAccomplished}
+                    onChange={(e) => setFormAccomplished(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono"
+                    required
+                    id="input-accomplished"
+                  />
+                </div>
+              </div>
+
+              {/* Row 3: Problems, Next Plans and Images */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                {/* Problems and Solutions Found (spanning lg:col-span-5) */}
+                <div className="lg:col-span-5 bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded flex flex-col">
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-[10px] font-extrabold text-rose-800 dark:text-rose-400 uppercase tracking-wider">
+                      Problems and Solutions Found
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddProblemField}
+                      className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold px-2 py-0.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+                      id="btn-add-blocker"
+                    >
+                      <PlusCircle className="w-3 h-3" />
+                      <span>Add Item</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                    {formProblemsAndSolutions.map((paragraph, idx) => (
+                      <div key={idx} className="flex gap-2 items-start bg-white dark:bg-slate-800 p-1.5 rounded border border-slate-200 dark:border-slate-700">
+                        <span className="bg-slate-900 dark:bg-slate-950 text-white text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 shrink-0">
+                          {idx + 1}
+                        </span>
+                        <textarea
+                          rows={2}
+                          placeholder="Failure observed | Countermeasure/engineering correction applied"
+                          value={paragraph}
+                          onChange={(e) => handleUpdateProblemField(idx, e.target.value)}
+                          className="flex-1 bg-slate-50 dark:bg-slate-850 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand leading-normal resize-none"
+                          id={`input-problem-${idx}`}
                         />
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveImage(img.id);
-                          }}
-                          className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-0.5 rounded shadow transition-all hover:scale-110 z-10 cursor-pointer"
-                          title="Delete image"
+                          onClick={() => handleRemoveProblemField(idx)}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded mt-1 cursor-pointer"
+                          id={`btn-remove-problem-${idx}`}
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
+
+                {/* Plan next time (spanning lg:col-span-3) */}
+                <div className="lg:col-span-3 bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
+                  <label className="block text-[10px] font-extrabold text-indigo-800 dark:text-indigo-400 uppercase tracking-wider mb-1">
+                    Plan for next time
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder="Items to carry over and new objectives..."
+                    value={formPlanNextTime}
+                    onChange={(e) => setFormPlanNextTime(e.target.value)}
+                    className="w-full h-[calc(100%-20px)] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono font-medium"
+                    id="input-next-time"
+                  />
+                </div>
+
+                {/* Image upload (spanning lg:col-span-4) */}
+                <div className="lg:col-span-4 border border-slate-200 dark:border-slate-800 rounded p-2.5 bg-slate-50 dark:bg-slate-850/30">
+                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
+                    Image Attachments
+                  </label>
+
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border border-dashed rounded p-4 text-center cursor-pointer transition-colors ${
+                      isDraggingOver 
+                        ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200' 
+                        : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750'
+                    }`}
+                    id="image-dropzone"
+                  >
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      multiple
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    
+                    {isImageProcessing ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded"></div>
+                        <span className="text-[10px] text-brand font-bold">OPTIMIZING PICTURE DATA...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <FileUp className="w-6 h-6 text-slate-400 group-hover:text-brand" />
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Drag image or browse</span>
+                        <span className="text-[9px] text-slate-400 uppercase tracking-tighter">JPEG, PNG optimized automatically</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Micro Preview of Uploaded images */}
+                  {formImages.length > 0 && (
+                    <div className="grid grid-cols-4 gap-1.5 mt-2" id="grid-draft-images">
+                      {formImages.map((img) => (
+                        <div 
+                          key={img.id} 
+                          onClick={() => setExpandedImage({ url: img.dataUrl, name: img.name })}
+                          className="group relative border border-slate-300 dark:border-slate-700 rounded aspect-square overflow-hidden bg-slate-200 dark:bg-slate-800 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-brand"
+                          title="Click to zoom preview"
+                        >
+                          <img 
+                            src={img.dataUrl} 
+                            alt={img.name} 
+                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 pointer-events-none"
+                            referrerPolicy="no-referrer"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveImage(img.id);
+                            }}
+                            className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-0.5 rounded shadow transition-all hover:scale-110 z-10 cursor-pointer"
+                            title="Delete image"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Form Controls */}
@@ -4996,7 +5005,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
         {/* COMPONENT: ARCHIVE LIST & PREVIEW (RIGHT SCREEN - SPACED OUT DESKTOP VIEW) */}
         <section 
-          className={`lg:col-span-8 flex flex-col gap-5 lg:gap-6 overflow-hidden ${
+          className={`w-full flex flex-col gap-5 lg:gap-6 overflow-hidden ${
             activeTab === 'archive' ? 'flex' : 'hidden sm:flex'
           }`}
           id="block-archive-and-preview-panel"
