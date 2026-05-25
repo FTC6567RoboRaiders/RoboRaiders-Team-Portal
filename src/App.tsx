@@ -2650,6 +2650,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
     );
   }
 
+  const isUserAdminOrMentor = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu';
+  const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries) : null;
+
   return (
     <div className={`min-h-screen flex flex-col font-sans border-t-8 transition-colors duration-200 border-brand ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="main-root">
       
@@ -2666,6 +2669,33 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
         </div>
 
+        {/* User Quick Stats - Utilizes Topbar for all users */}
+        {currentUser && userGamification && (
+          <div className="flex flex-wrap items-center gap-3 bg-slate-800/50 border border-slate-800 px-3.5 py-1.5 rounded-lg text-slate-300">
+            <div className="flex items-center gap-1.5" title="Your Core Level in RoboRaiders Arena">
+              <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="font-mono text-xs font-black text-amber-400">LVL {userGamification.stats.level}</span>
+              <span className="font-mono text-[10px] text-slate-400">({userGamification.stats.xp} XP)</span>
+            </div>
+            
+            <div className="hidden sm:block h-3.5 w-px bg-slate-700" />
+            
+            <div className="flex items-center gap-1.5 text-xs" title="Total hours contributed in the lab">
+              <Clock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="font-mono text-[11px] font-bold text-slate-200">{userGamification.stats.totalHours.toFixed(1)} hrs</span>
+            </div>
+            
+            <div className="hidden sm:block h-3.5 w-px bg-slate-700" />
+
+            <div className="flex items-center gap-1.5 text-xs" title="Total journal log entries submitted by you">
+              <BookOpen className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="font-mono text-[11px] font-bold text-slate-200">
+                {entries.filter(e => e.userEmail === currentUser.schoolEmail).length} logs
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Global Toolbar */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
           {/* THEME TOGGLE BUTTON */}
@@ -2679,23 +2709,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <span>{isDark ? 'Light Theme' : 'Dark Theme'}</span>
           </button>
 
-          <label className="bg-slate-800 hover:bg-slate-700 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider cursor-pointer border border-slate-700 text-slate-300">
-            <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
-            <span className="flex items-center gap-1"><Upload className="w-3.5 h-3.5" /> Import</span>
-          </label>
-          <button 
-            onClick={handleExportJSON}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider border border-slate-700 flex items-center gap-1"
-          >
-            <Download className="w-3.5 h-3.5" /> Export DB
-          </button>
+          {isUserAdminOrMentor && (
+            <>
+              <label className="bg-slate-800 hover:bg-slate-700 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider cursor-pointer border border-slate-700 text-slate-300">
+                <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
+                <span className="flex items-center gap-1"><Upload className="w-3.5 h-3.5" /> Import</span>
+              </label>
+              <button 
+                onClick={handleExportJSON}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider border border-slate-700 flex items-center gap-1"
+              >
+                <Download className="w-3.5 h-3.5" /> Export DB
+              </button>
 
-          <button 
-            onClick={clearAllData}
-            className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 font-bold px-3 py-1.5 rounded text-xs uppercase tracking-wider transition-all border border-rose-900/40 flex items-center gap-1"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-rose-300" /> Hard Wipe
-          </button>
+              <button 
+                onClick={clearAllData}
+                className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 font-bold px-3 py-1.5 rounded text-xs uppercase tracking-wider transition-all border border-rose-900/40 flex items-center gap-1"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-300" /> Hard Wipe
+              </button>
+            </>
+          )}
         </div>
       </header>
 
