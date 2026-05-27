@@ -26,7 +26,7 @@ import {
   Trophy,
   FileDown
 } from 'lucide-react';
-import { UserAccount, JournalEntry, TimeEntry } from '../types';
+import { UserAccount, JournalEntry, TimeEntry, KanbanTask, OutreachEvent, XPAdjustment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { computeUserGamification } from '../utils/gamification';
 import { jsPDF } from 'jspdf';
@@ -38,6 +38,11 @@ interface ArenaPortalProps {
   entries: JournalEntry[];
   timeEntries: TimeEntry[];
   onInspectPlayer: (account: UserAccount) => void;
+  kanbanTasks?: KanbanTask[];
+  outreachEvents?: OutreachEvent[];
+  xpAdjustments?: XPAdjustment[];
+  onAddXpAdjustment?: (adj: Omit<XPAdjustment, 'id' | 'createdAt' | 'awardedBy' | 'awardedByEmail'>) => void;
+  onDeleteXpAdjustment?: (id: string) => void;
 }
 
 // Local lookup helper to prevent circular dependency imports with App.tsx
@@ -74,12 +79,24 @@ export default function ArenaPortal({
   accounts,
   entries,
   timeEntries,
-  onInspectPlayer
+  onInspectPlayer,
+  kanbanTasks,
+  outreachEvents,
+  xpAdjustments,
+  onAddXpAdjustment,
+  onDeleteXpAdjustment
 }: ArenaPortalProps) {
-  const [gamificationTab, setGamificationTab] = useState<'profile' | 'subteamRanks' | 'badges' | 'quests' | 'leaderboard'>('profile');
+  const [gamificationTab, setGamificationTab] = useState<'profile' | 'subteamRanks' | 'badges' | 'quests' | 'leaderboard' | 'xpControl'>('profile');
   const [activeGuildTab, setActiveGuildTab] = useState<string>('');
 
-  const gameResult = computeUserGamification(currentUser, entries, timeEntries);
+  // Form states for manual XP adjustments (Mentor/Admin control center)
+  const [targetUserId, setTargetUserId] = useState<string>('');
+  const [xpAdjustmentAmount, setXpAdjustmentAmount] = useState<string>('50');
+  const [xpAdjustmentReason, setXpAdjustmentReason] = useState<string>('');
+  const [adjustmentError, setAdjustmentError] = useState<string>('');
+  const [adjustmentSuccess, setAdjustmentSuccess] = useState<string>('');
+
+  const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
   const { stats, badges, quests } = gameResult;
 
   const activeLeaderboard = accounts
@@ -92,7 +109,7 @@ export default function ArenaPortal({
       !acc.schoolEmail.toLowerCase().includes('school.edu')
     )
     .map(acc => {
-      const data = computeUserGamification(acc, entries, timeEntries);
+      const data = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
       return {
         account: acc,
         stats: data.stats,
@@ -229,33 +246,41 @@ export default function ArenaPortal({
         </div>
 
         {/* Improved Arena Tabs Navigation */}
-        <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200/80 dark:border-slate-800/60 font-mono text-[10px] uppercase font-bold shrink-0">
-          {(['profile', 'subteamRanks', 'badges', 'quests', 'leaderboard'] as const).map(tab => {
-            const active = gamificationTab === tab;
-            const labelMap = {
-              profile: 'My Rank',
-              subteamRanks: 'Guild Ranks',
-              badges: 'Achievements',
-              quests: 'Active Quests',
-              leaderboard: 'Leaderboard'
-            };
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => {
-                  setGamificationTab(tab);
-                }}
-                className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
-                  active 
-                    ? 'bg-cyan-600 text-white shadow-sm font-extrabold' 
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                {labelMap[tab]}
-              </button>
-            );
-          })}
+        <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200/80 dark:border-slate-800/60 font-mono text-[10px] uppercase font-bold shrink-0 flex-wrap gap-1">
+          {(() => {
+            const isUserAdminOrMentor = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu';
+            const tabList = isUserAdminOrMentor 
+              ? (['profile', 'subteamRanks', 'badges', 'quests', 'leaderboard', 'xpControl'] as const)
+              : (['profile', 'subteamRanks', 'badges', 'quests', 'leaderboard'] as const);
+            
+            return tabList.map(tab => {
+              const active = gamificationTab === tab;
+              const labelMap: { [key: string]: string } = {
+                profile: 'My Rank',
+                subteamRanks: 'Guild Ranks',
+                badges: 'Achievements',
+                quests: 'Active Quests',
+                leaderboard: 'Leaderboard',
+                xpControl: '🔮 XP Control'
+              };
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => {
+                    setGamificationTab(tab);
+                  }}
+                  className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                    active 
+                      ? 'bg-cyan-600 text-white shadow-sm font-extrabold' 
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {labelMap[tab]}
+                </button>
+              );
+            });
+          })()}
         </div>
       </div>
 
@@ -930,6 +955,261 @@ export default function ArenaPortal({
                       })}
                     </tbody>
                   </table>
+                </div>
+
+              </div>
+            </motion.div>
+          )}
+
+          {/* SCREEN 5: EXTRA XP CONTROL PANEL FOR MENTORS/ADMINS ONLY */}
+          {gamificationTab === 'xpControl' && (
+            <motion.div
+              key="xpControl"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex flex-col gap-6 text-xs font-sans text-slate-800 dark:text-slate-100"
+            >
+              {/* Heading description */}
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                <h3 className="text-sm font-black text-slate-850 dark:text-slate-100 uppercase tracking-widest flex items-center gap-1.5">
+                  <span>Mentorship XP & Accolade Dashboard</span>
+                  <span className="px-1.5 py-0.5 bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 font-mono text-[9px] font-black rounded uppercase">
+                    Admin Mode
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-normal">
+                  Manually reward high-performance milestones or correct logs for robotics specialists. Changes here dynamically update the live championship leaderboard balances.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                
+                {/* Form column */}
+                <div className="xl:col-span-5 bg-slate-50 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60 p-5 rounded-xl flex flex-col gap-4">
+                  <h4 className="text-xs font-mono font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>Issue XP Adjustment</span>
+                  </h4>
+
+                  {adjustmentError && (
+                    <div className="p-2.5 bg-rose-50 dark:bg-rose-950/20 text-rose-800 dark:text-rose-400 border border-rose-100 dark:border-rose-900 rounded font-bold text-[10px]">
+                      ⚠️ {adjustmentError}
+                    </div>
+                  )}
+
+                  {adjustmentSuccess && (
+                     <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900 rounded font-bold text-[10px]">
+                       ✨ {adjustmentSuccess}
+                     </div>
+                  )}
+
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    setAdjustmentError('');
+                    setAdjustmentSuccess('');
+
+                    if (!targetUserId) {
+                      setAdjustmentError('Please select a target user.');
+                      return;
+                    }
+
+                    const targetAcc = accounts.find(a => a.id === targetUserId);
+                    if (!targetAcc) {
+                      setAdjustmentError('Target user profile not found.');
+                      return;
+                    }
+
+                    const amt = parseInt(xpAdjustmentAmount, 10);
+                    if (isNaN(amt) || amt === 0) {
+                      setAdjustmentError('XP adjustment amount must be a non-zero integer.');
+                      return;
+                    }
+
+                    if (!xpAdjustmentReason.trim()) {
+                      setAdjustmentError('Please specify the reason / achievement context for this adjustment.');
+                      return;
+                    }
+
+                    // On submit trigger callback prop
+                    if (onAddXpAdjustment) {
+                      onAddXpAdjustment({
+                        userId: targetUserId,
+                        userName: targetAcc.name,
+                        userEmail: targetAcc.schoolEmail,
+                        amount: amt,
+                        reason: xpAdjustmentReason.trim()
+                      });
+
+                      setAdjustmentSuccess(`Adjustment of ${amt > 0 ? '+' : ''}${amt} XP successfully recorded for ${targetAcc.name}!`);
+                      setXpAdjustmentReason('');
+                    }
+                  }} className="space-y-4">
+                    
+                    {/* Select robotics student */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold">Target Robotics Specialist</label>
+                      <select
+                        value={targetUserId}
+                        onChange={(e) => {
+                          setTargetUserId(e.target.value);
+                          setAdjustmentError('');
+                          setAdjustmentSuccess('');
+                        }}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-2 text-[11px] font-sans text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500"
+                      >
+                        <option value="">-- Choose User Profile --</option>
+                        {accounts
+                          .filter(acc => acc.status === 'Approved')
+                          .sort((a,b) => a.name.localeCompare(b.name))
+                          .map(acc => (
+                            <option key={acc.id} value={acc.id}>
+                              {acc.name} ({acc.primarySubteam || 'No subteam'})
+                            </option>
+                          ))
+                        }
+                      </select>
+                    </div>
+
+                    {/* Pre-set Quick Add/Deduct Buttons */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold">Quick Value Select</label>
+                      <div className="grid grid-cols-5 gap-1">
+                        {['+50', '+100', '+250', '-50', '-100'].map((preset) => {
+                          const val = preset;
+                          const isSelected = xpAdjustmentAmount === val;
+                          const isPositive = val.startsWith('+');
+                          return (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => {
+                                setXpAdjustmentAmount(val);
+                                setAdjustmentError('');
+                                setAdjustmentSuccess('');
+                              }}
+                              className={`py-1 px-0.5 rounded transition-all text-center border font-mono text-[9px] font-black cursor-pointer ${
+                                isSelected 
+                                  ? 'bg-cyan-600 text-white border-cyan-555' 
+                                  : isPositive
+                                    ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/25 dark:text-emerald-400 border-emerald-200/50 hover:bg-emerald-100'
+                                    : 'bg-rose-50 text-rose-800 dark:bg-rose-950/25 dark:text-rose-450 border-rose-200/50 hover:bg-rose-100'
+                              }`}
+                            >
+                              {preset}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Custom Number Input */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold">Custom XP Amount (use negative to remove)</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 150 or -100"
+                        value={xpAdjustmentAmount}
+                        onChange={(e) => {
+                          setXpAdjustmentAmount(e.target.value);
+                          setAdjustmentError('');
+                          setAdjustmentSuccess('');
+                        }}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-2 text-[11px] font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    {/* Context / Reason field */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold">Adjustment Context / Reason</label>
+                      <textarea
+                        rows={3}
+                        placeholder="e.g. Exceptional mechanical drive troubleshooting, or corrected clock-in shift hour logic."
+                        value={xpAdjustmentReason}
+                        onChange={(e) => {
+                          setXpAdjustmentReason(e.target.value);
+                          setAdjustmentError('');
+                          setAdjustmentSuccess('');
+                        }}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-2 text-[11px] font-sans text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500 font-medium leading-relaxed"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-555 text-white font-extrabold text-[10px] uppercase tracking-wider py-2.5 px-4 rounded-lg shadow transition-all cursor-pointer font-mono"
+                    >
+                      Apply XP Balance Adjustment
+                    </button>
+                  </form>
+                </div>
+
+                {/* Log output log list column */}
+                <div className="xl:col-span-7 flex flex-col gap-4 w-full">
+                  <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1">
+                    <h4 className="text-xs font-mono font-black text-slate-850 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                      <Database className="w-4 h-4 text-cyan-600" />
+                      <span>Historical Adjustments Audit Log</span>
+                    </h4>
+                    <span className="text-[9px] font-mono text-slate-450 shrink-0">
+                      {xpAdjustments?.length || 0} Registered Entries
+                    </span>
+                  </div>
+
+                  <div className="max-h-[380px] overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50/20 dark:bg-slate-950/20 shadow-inner">
+                    {(!xpAdjustments || xpAdjustments.length === 0) ? (
+                      <div className="p-12 text-center text-slate-400 dark:text-slate-500 font-mono text-[10px] font-semibold">
+                        🚫 No manual XP adjustments logged in database yet.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-150 dark:divide-slate-800">
+                        {xpAdjustments.map((log) => {
+                          const isPos = log.amount > 0;
+                          return (
+                            <div key={log.id} className="p-3.5 flex flex-col sm:flex-row justify-between items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-905 transition-colors">
+                              <div className="flex-1 min-w-0 pr-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100">{log.userName}</span>
+                                  <span className="text-[10px] font-mono text-slate-400 truncate">({log.userEmail})</span>
+                                </div>
+                                <p className="text-[11.5px] font-medium leading-relaxed text-slate-600 dark:text-slate-350 italic mt-1.5">
+                                  "{log.reason}"
+                                </p>
+                                <div className="mt-2.5 flex flex-wrap gap-x-2.5 gap-y-1 items-center font-mono text-[9px] text-slate-405">
+                                  <span>By Coach: <strong className="text-slate-500">{log.awardedBy}</strong></span>
+                                  <span>•</span>
+                                  <span>{new Date(log.createdAt).toLocaleString()}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto shrink-0 gap-3 border-t sm:border-t-0 border-slate-150 dark:border-slate-800 pt-2.5 sm:pt-0">
+                                <div className="text-right flex flex-col items-end">
+                                  <span className={`font-black font-mono text-xs ${
+                                    isPos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                                  }`}>
+                                    {isPos ? '+' : ''}{log.amount} XP
+                                  </span>
+                                  <span className="text-[8px] font-bold font-mono text-slate-400 select-none uppercase">Audited balance</span>
+                                </div>
+
+                                {onDeleteXpAdjustment && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onDeleteXpAdjustment(log.id);
+                                    }}
+                                    className="p-1 px-2 border border-rose-200/50 hover:border-rose-500/50 text-rose-500 hover:text-white hover:bg-rose-600 rounded text-[9.5px] transition-all font-mono font-bold uppercase tracking-wider cursor-pointer"
+                                  >
+                                    Revoke
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
               </div>

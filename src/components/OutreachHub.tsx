@@ -848,7 +848,7 @@ export default function OutreachHub({
               {/* Photo Upload with client side compression */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-550 uppercase tracking-widest">
-                  Attach outreach action proofs (Max 5MB total sandbox)
+                  ATTACH OUTREACH PHOTOS
                 </label>
                 
                 <div

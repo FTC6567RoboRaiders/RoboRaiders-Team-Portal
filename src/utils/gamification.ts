@@ -1,4 +1,4 @@
-import { JournalEntry, TimeEntry, UserAccount } from '../types';
+import { JournalEntry, TimeEntry, UserAccount, KanbanTask, OutreachEvent, XPAdjustment } from '../types';
 import { getSubteamStatsAndRank } from '../data/subteamRanks';
 
 export interface Badge {
@@ -144,7 +144,10 @@ export const getLevelInfo = (xp: number) => {
 export const computeUserGamification = (
   user: UserAccount,
   entries: JournalEntry[],
-  timeEntries: TimeEntry[]
+  timeEntries: TimeEntry[],
+  kanbanTasks?: KanbanTask[],
+  outreachEvents?: OutreachEvent[],
+  xpAdjustments?: XPAdjustment[]
 ): { stats: UserStats; badges: Badge[]; quests: Quest[] } => {
   const email = user.schoolEmail.toLowerCase();
   
@@ -182,7 +185,29 @@ export const computeUserGamification = (
   const imagesCount = userJournals.reduce((sum, j) => sum + (j.images?.length || 0), 0);
   const imageXp = imagesCount * 15;
 
-  const totalXp = hoursXp + journalCountXp + qualityXpBonus + approvedJournalXp + imageXp + 50; // +50 base for signing up!
+  // 100 XP per completed Kanban Task assigned to the user
+  const completedTasks = (kanbanTasks || []).filter(k => 
+    k.column === 'done' && 
+    k.assignedTo.toLowerCase() === user.name.toLowerCase()
+  );
+  const kanbanXp = completedTasks.length * 100;
+
+  // 150 XP per Outreach Event participated in
+  const participatedOutreach = (outreachEvents || []).filter(ev => 
+    ev.participants?.some(p => 
+      p.toLowerCase() === user.name.toLowerCase() || 
+      p.toLowerCase() === user.schoolEmail.toLowerCase()
+    )
+  );
+  const outreachXp = participatedOutreach.length * 150;
+
+  // Manual adjustments from Mentors/Admins
+  const userAdjustments = (xpAdjustments || []).filter(adj => 
+    adj.userId === user.id || adj.userEmail.toLowerCase() === email
+  );
+  const manualXp = userAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
+
+  const totalXp = Math.max(0, hoursXp + journalCountXp + qualityXpBonus + approvedJournalXp + imageXp + kanbanXp + outreachXp + manualXp + 50); // +50 base for signing up!
 
   const totalHours = userHours.reduce((sum, h) => sum + h.durationHours, 0);
   const totalJournals = userJournals.length;

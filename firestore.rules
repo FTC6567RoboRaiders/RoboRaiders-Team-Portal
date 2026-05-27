@@ -103,6 +103,16 @@ service cloud.firestore {
         && data.updatedBy is string;
     }
 
+    function isValidEmail(data) {
+      return data.keys().hasAll(['id', 'from', 'to', 'subject', 'body', 'timestamp'])
+        && data.id is string
+        && data.from is string
+        && data.to is string
+        && data.subject is string
+        && data.body is string
+        && data.timestamp is number;
+    }
+
     // Collection Rules
     
     // 1. Users
@@ -162,6 +172,14 @@ service cloud.firestore {
       allow read: if isApprovedUser();
       allow create: if isApprovedUser() && isValidEvent(request.resource.data);
       allow update: if isApprovedUser() && isValidEvent(request.resource.data);
+      allow delete: if isMentorOrCaptain();
+    }
+
+    // 6. Dispatched Emails
+    match /dispatchedEmails/{emailId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidEmail(request.resource.data);
+      allow update: if isApprovedUser() && isValidEmail(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
   }

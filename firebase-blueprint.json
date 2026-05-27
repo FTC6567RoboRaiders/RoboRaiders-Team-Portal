@@ -99,6 +99,20 @@
         "updatedBy": { "type": "string" }
       },
       "required": ["id", "title", "date", "location", "description", "impactMetrics", "hoursLogged", "participants", "images", "creatorName", "creatorEmail", "createdAt", "updatedAt", "updatedBy"]
+    },
+    "DispatchedEmail": {
+      "title": "Dispatched Email",
+      "description": "A log of simulated email notifications dispatched to users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "from", "to", "subject", "body", "timestamp"]
     }
   },
   "firestore": {
@@ -121,6 +135,10 @@
     "outreachEvents/{eventId}": {
       "schema": "OutreachEvent",
       "description": "Outreach community events, participants, and logged impact."
+    },
+    "dispatchedEmails/{emailId}": {
+      "schema": "DispatchedEmail",
+      "description": "Simulated system outbox notification dispatch logs."
     }
   }
 }

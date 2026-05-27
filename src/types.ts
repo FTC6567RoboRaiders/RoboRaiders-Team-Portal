@@ -24,6 +24,7 @@ export interface JournalEntry {
   problemsAndSolutions: string[]; // List of problems/solutions paragraphs which will be enumerated
   planNextTime: string;
   images: JournalImage[];
+  attendees?: string[];
   createdAt: number;
   updatedAt: number;
   status: 'Draft' | 'Pending Review' | 'Approved' | 'Needs Revision';
@@ -131,6 +132,18 @@ export interface OutreachEvent {
   createdAt: number;
   updatedAt: number;
   updatedBy: string;
+}
+
+export interface XPAdjustment {
+  id: string;
+  userId: string;       // ID of target user getting/losing XP
+  userName: string;     // Name of target user
+  userEmail: string;    // Email of target user
+  amount: number;       // e.g. +100 or -50
+  reason: string;       // why they are getting/losing it (achievement or reason)
+  awardedBy: string;    // Name of mentor/admin
+  awardedByEmail: string;
+  createdAt: number;    // Date timestamp
 }
 
 

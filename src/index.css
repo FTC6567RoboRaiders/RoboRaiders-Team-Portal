@@ -93,10 +93,28 @@ input, select, textarea {
 }
 
 /* Print optimizations for FTC Engineering Notebook alignment */
+.print-only {
+  display: none !important;
+}
+
 @media print {
-  body {
+  .print-only {
+    display: block !important;
+  }
+  html, body {
     background: white !important;
+    background-color: white !important;
     color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  #main-root {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+    border: none !important;
+    box-shadow: none !important;
+    min-h: auto !important;
   }
   .no-print {
     display: none !important;
@@ -108,6 +126,13 @@ input, select, textarea {
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    background: white !important;
+    color: black !important;
+  }
+  table, tr, td, th {
+    color: black !important;
+    background-color: transparent !important;
+    border-color: #cbd5e1 !important;
   }
 }
 

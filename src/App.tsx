@@ -45,9 +45,10 @@ import {
   ShieldCheck,
   Mail,
   Clock,
-  Trophy
+  Trophy,
+  Scroll
 } from 'lucide-react';
-import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent } from './types';
+import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment } from './types';
 import { compressAndResizeImage } from './utils/image';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { 
@@ -76,9 +77,9 @@ import ArenaPortal from './components/ArenaPortal';
 import { DEFAULT_OUTREACH_EVENTS } from './data/outreachDemo';
 import { jsPDF } from 'jspdf';
 
-// Pre-populated demo data for FIRST Tech Challenge teams
-const DEMO_ENTRIES: JournalEntry[] = [];
-const DEFAULT_TIME_ENTRIES: TimeEntry[] = [];
+import { DEMO_ENTRIES, DEFAULT_TIME_ENTRIES } from './data/journalDemo';
+import StudentHandbook from './components/StudentHandbook';
+import TimePicker from './components/TimePicker';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -284,7 +285,7 @@ export default function App() {
   });
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook'>('landing');
 
   // Outreach events state
   const [outreachEvents, setOutreachEvents] = useState<OutreachEvent[]>(() => {
@@ -374,12 +375,92 @@ export default function App() {
   const [editTimeEnd, setEditTimeEnd] = useState('');
   const [editTimeDesc, setEditTimeDesc] = useState('');
 
+  // XP Adjustments state
+  const [xpAdjustments, setXpAdjustments] = useState<XPAdjustment[]>(() => {
+    const stored = localStorage.getItem('ftc_xp_adjustments');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const xpAdjustmentsRef = useRef<XPAdjustment[]>([]);
+  useEffect(() => {
+    xpAdjustmentsRef.current = xpAdjustments;
+  }, [xpAdjustments]);
+
   // Persistent sync
   useEffect(() => {
     localStorage.setItem('ftc_time_entries', JSON.stringify(timeEntries));
   }, [timeEntries]);
 
+  useEffect(() => {
+    localStorage.setItem('ftc_xp_adjustments', JSON.stringify(xpAdjustments));
+  }, [xpAdjustments]);
+
   // --- FIREBASE SYNC & ON-SNAP LIFECYCLE ---
+  const syncXpAdjustmentsToFirestore = async (newAdjustments: XPAdjustment[]) => {
+    for (const adj of newAdjustments) {
+      const match = xpAdjustmentsRef.current.find(a => a.id === adj.id);
+      if (!match || JSON.stringify(match) !== JSON.stringify(adj)) {
+        try {
+          await setDoc(doc(db, 'xpAdjustments', adj.id), adj);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.UPDATE, `xpAdjustments/${adj.id}`);
+        }
+      }
+    }
+    for (const adj of xpAdjustmentsRef.current) {
+      if (!newAdjustments.some(a => a.id === adj.id)) {
+        try {
+          await deleteDoc(doc(db, 'xpAdjustments', adj.id));
+        } catch (e) {
+          handleFirestoreError(e, OperationType.DELETE, `xpAdjustments/${adj.id}`);
+        }
+      }
+    }
+  };
+
+  const handleAddXpAdjustment = async (adjData: Omit<XPAdjustment, 'id' | 'createdAt' | 'awardedBy' | 'awardedByEmail'>) => {
+    if (!currentUser) return;
+    const newAdj: XPAdjustment = {
+      ...adjData,
+      id: 'xp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      awardedBy: currentUser.name,
+      awardedByEmail: currentUser.schoolEmail,
+      createdAt: Date.now()
+    };
+    const updated = [newAdj, ...xpAdjustments];
+    setXpAdjustments(updated);
+    showToast(`Successfully adjusted XP for ${newAdj.userName} by ${newAdj.amount > 0 ? '+' : ''}${newAdj.amount} XP!`, 'success');
+    
+    try {
+      await setDoc(doc(db, 'xpAdjustments', newAdj.id), newAdj);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `xpAdjustments/${newAdj.id}`);
+    }
+  };
+
+  const handleDeleteXpAdjustment = async (id: string) => {
+    const matched = xpAdjustments.find(a => a.id === id);
+    const updated = xpAdjustments.filter(a => a.id !== id);
+    setXpAdjustments(updated);
+    if (matched) {
+      showToast(`Revoked ${matched.amount > 0 ? '+' : ''}${matched.amount} XP adjustment for ${matched.userName}.`, 'info');
+    }
+    
+    try {
+      await deleteDoc(doc(db, 'xpAdjustments', id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `xpAdjustments/${id}`);
+    }
+  };
+
   const syncKanbanTasksToFirestore = async (newTasks: KanbanTask[]) => {
     for (const task of newTasks) {
       const match = kanbanTasks.find(t => t.id === task.id);
@@ -681,6 +762,28 @@ export default function App() {
                 handleFirestoreError(error, OperationType.GET, 'outreachEvents');
               });
               unsubscribeAll.push(unsubOutreach);
+
+              const unsubEmails = onSnapshot(collection(db, 'dispatchedEmails'), (snapshot) => {
+                const list: DispatchedEmail[] = [];
+                snapshot.forEach(d => {
+                  list.push(d.data() as DispatchedEmail);
+                });
+                setDispatchedEmails(list.sort((a,b) => b.timestamp - a.timestamp));
+              }, (error) => {
+                handleFirestoreError(error, OperationType.GET, 'dispatchedEmails');
+              });
+              unsubscribeAll.push(unsubEmails);
+
+              const unsubXp = onSnapshot(collection(db, 'xpAdjustments'), (snapshot) => {
+                const list: XPAdjustment[] = [];
+                snapshot.forEach(d => {
+                  list.push(d.data() as XPAdjustment);
+                });
+                setXpAdjustments(list.sort((a,b) => b.createdAt - a.createdAt));
+              }, (error) => {
+                handleFirestoreError(error, OperationType.GET, 'xpAdjustments');
+              });
+              unsubscribeAll.push(unsubXp);
             }
           }
         } catch (err) {
@@ -705,7 +808,7 @@ export default function App() {
   // Monitor level and trigger a celebratory pop-up on Rank gains
   useEffect(() => {
     if (currentUser) {
-      const gameResult = computeUserGamification(currentUser, entries, timeEntries);
+      const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
       const currentLevel = gameResult.stats.level;
       
       if (previousLevel !== null) {
@@ -832,6 +935,9 @@ export default function App() {
       timestamp: Date.now()
     };
     setDispatchedEmails(prev => [newEmail, ...prev]);
+    setDoc(doc(db, 'dispatchedEmails', newEmail.id), newEmail).catch(err => {
+      handleFirestoreError(err, OperationType.WRITE, `dispatchedEmails/${newEmail.id}`);
+    });
   };
 
   // Create New Author profile modal state
@@ -850,6 +956,24 @@ export default function App() {
   const [formProblemsAndSolutions, setFormProblemsAndSolutions] = useState<string[]>(['']);
   const [formPlanNextTime, setFormPlanNextTime] = useState('');
   const [formImages, setFormImages] = useState<JournalImage[]>([]);
+  const [formAttendees, setFormAttendees] = useState<string[]>([]);
+  const [customAttendee, setCustomAttendee] = useState('');
+
+  const handleToggleAttendee = (name: string) => {
+    if (formAttendees.includes(name)) {
+      setFormAttendees(formAttendees.filter(a => a !== name));
+    } else {
+      setFormAttendees([...formAttendees, name]);
+    }
+  };
+
+  const handleAddCustomAttendee = () => {
+    const trimmed = customAttendee.trim();
+    if (trimmed && !formAttendees.includes(trimmed)) {
+      setFormAttendees([...formAttendees, trimmed]);
+      setCustomAttendee('');
+    }
+  };
 
   // Dark Mode State
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -2200,7 +2324,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
     if (filters.author.trim() && !entry.author.toLowerCase().includes(filters.author.toLowerCase())) return false;
     if (filters.searchQuery.trim()) {
       const q = filters.searchQuery.toLowerCase();
-      const fields = [entry.author, entry.planned, entry.accomplished, entry.planNextTime, entry.subteam, entry.date, ...entry.problemsAndSolutions].join(' ').toLowerCase();
+      const probs = Array.isArray(entry.problemsAndSolutions) ? entry.problemsAndSolutions : [];
+      const fields = [
+        entry.author || '',
+        entry.planned || '',
+        entry.accomplished || '',
+        entry.planNextTime || '',
+        entry.subteam || '',
+        entry.date || '',
+        ...probs
+      ].join(' ').toLowerCase();
       if (!fields.includes(q)) return false;
     }
     if (filters.startDate && entry.date < filters.startDate) return false;
@@ -2651,7 +2784,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
   }
 
   const isUserAdminOrMentor = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu';
-  const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries) : null;
+  const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
 
   return (
     <div className={`min-h-screen flex flex-col font-sans border-t-8 transition-colors duration-200 border-brand ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="main-root">
@@ -2803,6 +2936,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <button 
               onClick={() => {
                 setFilters({ ...filters, status: 'Pending Review' });
+                setCurrentView('journal');
                 showToast('Filtered entries to show Pending Reviews.', 'info');
               }}
               className="bg-amber-600 hover:bg-amber-500 text-white font-extrabold px-2.5 py-1 rounded text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer"
@@ -2828,6 +2962,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <button 
               onClick={() => {
                 setFilters({ ...filters, status: 'Needs Revision' });
+                setCurrentView('journal');
                 showToast("Filtered entries to show 'Needs Revision'.", 'info');
               }}
               className="bg-rose-600 hover:bg-rose-500 text-white font-extrabold px-2.5 py-1 rounded text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer"
@@ -2876,7 +3011,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
               {/* USER XP & RANK PROGRESSION PLATE */}
               {currentUser && (() => {
-                const gameResult = computeUserGamification(currentUser, entries, timeEntries);
+                const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
                 const { stats } = gameResult;
                 return (
                   <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-950/40 border border-slate-800 p-2.5 rounded-lg max-w-md">
@@ -2944,7 +3079,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           {false && currentUser && (
             (() => {
               // Gamification data
-              const gameResult = computeUserGamification(currentUser, entries, timeEntries);
+              const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
               const { stats, badges, quests } = gameResult;
 
               const activeLeaderboard = accounts
@@ -2957,7 +3092,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   !acc.schoolEmail.toLowerCase().includes('school.edu')
                 )
                 .map(acc => {
-                  const data = computeUserGamification(acc, entries, timeEntries);
+                  const data = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
                   return {
                     account: acc,
                     stats: data.stats,
@@ -3814,7 +3949,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           <AnimatePresence>
             {inspectLeaderboardAccount && (
               (() => {
-                const results = computeUserGamification(inspectLeaderboardAccount, entries, timeEntries);
+                const results = computeUserGamification(inspectLeaderboardAccount, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
                 const { stats, badges } = results;
 
                 return (
@@ -3943,7 +4078,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           {/* Core Hub Grid Operations */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            {/* CARD 1: ENGINEERING JOURNAL DESK */}
+            {/* CARD 1: TEAM JOURNAL */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group">
               <div>
                 <div className="flex items-center gap-3.5 mb-4">
@@ -3952,7 +4087,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   </div>
                   <div>
                     <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
-                      Engineering Journal Desk
+                      Team Journal
                     </h3>
                     <p className="text-[10px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest mt-0.5">
                       Notebook Compiler &amp; CAD Layouts
@@ -3977,7 +4112,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   onClick={() => setCurrentView('journal')}
                   className="bg-brand hover:bg-brand-hover text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
                 >
-                  <span>Open Engineering Desk</span>
+                  <span>Open Team Journal</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -4103,6 +4238,46 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
             </div>
 
+            {/* CARD handbook: STUDENT TEAM HANDBOOK */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group">
+              <div>
+                <div className="flex items-center gap-3.5 mb-4">
+                  <div className="bg-brand/10 text-brand p-3 rounded-lg group-hover:scale-110 transition-transform">
+                    <Scroll className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                      Student Team Handbook
+                    </h3>
+                    <p className="text-[10px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest mt-0.5">
+                      Rules, Safety Protocols &amp; Conduct Code
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                  Access the formal 2026-2027 RoboRaiders handbook. Review laboratory safety guidelines, student attendance minimums, FLL community mentoring hours requirements, and sign the official digital acknowledgement register.
+                </p>
+                
+                {/* Handbook Quick Stats */}
+                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
+                  <span className="text-slate-500">Official Chapters:</span>
+                  <strong className="text-brand bg-brand/10 border border-brand/25 px-1.5 py-0.5 rounded font-bold">
+                    20 Official Chapters
+                  </strong>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setCurrentView('handbook')}
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded dark:bg-slate-800 dark:hover:bg-slate-700"
+                >
+                  <span>Open Handbook</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
             {/* ONLY MENTORS/CAPTAINS CAN VIEW ROSTER MANAGEMENT & EMAIL COMMUNICATIONS */}
             {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
               <>
@@ -4184,10 +4359,24 @@ ${entry.planNextTime || '_No carry-over specified._'}
               entries={entries}
               timeEntries={timeEntries}
               onInspectPlayer={setInspectLeaderboardAccount}
+              kanbanTasks={kanbanTasks}
+              outreachEvents={outreachEvents}
+              xpAdjustments={xpAdjustments}
+              onAddXpAdjustment={handleAddXpAdjustment}
+              onDeleteXpAdjustment={handleDeleteXpAdjustment}
             />
           )}
 
         </div>
+      )}
+
+      {/* STUDENT TEAM HANDBOOK VIEW */}
+      {currentView === 'handbook' && (
+        <StudentHandbook
+          currentUser={currentUser}
+          showToast={showToast}
+          onBack={() => setCurrentView('landing')}
+        />
       )}
 
       {/* OUTREACH EVENTS HUB VIEW */}
@@ -4476,27 +4665,17 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                   <div className="grid grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                        Start Time (HH:MM)
-                      </label>
-                      <input
-                        type="time"
+                      <TimePicker
+                        label="Start Time"
                         value={manualTimeStart}
-                        onChange={(e) => setManualTimeStart(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-855 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-805 dark:text-slate-100 outline-none"
-                        required
+                        onChange={setManualTimeStart}
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                        End Time (HH:MM)
-                      </label>
-                      <input
-                        type="time"
+                      <TimePicker
+                        label="End Time"
                         value={manualTimeEnd}
-                        onChange={(e) => setManualTimeEnd(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-855 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-850 dark:text-slate-100 outline-none"
-                        required
+                        onChange={setManualTimeEnd}
                       />
                     </div>
                   </div>
@@ -4679,7 +4858,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500">FTC #6567</span>
               </div>
               <h1 className="text-2xl font-extrabold uppercase text-slate-900 dark:text-white mt-1">
-                Engineering Notebook Desk
+                Team Journal
               </h1>
               <p className="text-xs text-slate-505 dark:text-slate-400">
                 Official team journal logs, planning milestones, and subteam targets.
@@ -5297,23 +5476,18 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   {/* UTILITIES PANEL */}
                   <div className="no-print flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-3 shrink-0">
                     <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest font-mono">
-                      Engineering Proof Sheet
+                      Journal Entries
                     </span>
 
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => handleCopyMarkdown(selectedEntry)}
-                        className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-[10px] px-2 py-1 rounded flex items-center gap-1 transition-all uppercase"
-                        title="Copy as clean Markdown representation"
-                        id="copy-md-active"
-                      >
-                        <FileCode className="w-3 h-3" />
-                        <span>Copy Markdown</span>
-                      </button>
-
-                      <button
-                        onClick={() => window.print()}
-                        className="bg-brand hover:bg-brand-hover text-white font-bold text-[10px] px-2.5 py-1 rounded flex items-center gap-1 transition-all uppercase"
+                        onClick={() => {
+                          setEntriesToPrint([selectedEntry]);
+                          setTimeout(() => {
+                            window.print();
+                          }, 150);
+                        }}
+                        className="bg-brand hover:bg-brand-hover text-white font-bold text-[10px] px-2.5 py-1 rounded flex items-center gap-1 transition-all uppercase cursor-pointer"
                         title="Print document for binder"
                         id="print-active"
                       >
@@ -6385,27 +6559,17 @@ FTC #6567 Captains & Mentors`
 
                 <div className="grid grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                      Start Time (HH:MM)
-                    </label>
-                    <input
-                      type="time"
+                    <TimePicker
+                      label="Start Time"
                       value={editTimeStart}
-                      onChange={(e) => setEditTimeStart(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-705 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none"
-                      required
+                      onChange={setEditTimeStart}
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                      End Time (HH:MM)
-                    </label>
-                    <input
-                      type="time"
+                    <TimePicker
+                      label="End Time"
                       value={editTimeEnd}
-                      onChange={(e) => setEditTimeEnd(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-705 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none"
-                      required
+                      onChange={setEditTimeEnd}
                     />
                   </div>
                 </div>
@@ -6816,7 +6980,7 @@ FTC #6567 Captains & Mentors`
                           </span>
                         </div>
                         <div className="flex justify-between items-center font-mono">
-                          <span className="text-slate-500 dark:text-slate-450 uppercase font-black tracking-wider text-[9px]">Cumulative Strength:</span>
+                          <span className="text-slate-500 dark:text-slate-450 uppercase font-black tracking-wider text-[9px]">Cumulative Time:</span>
                           <span className="font-bold text-slate-900 dark:text-slate-100">
                             {totalHr.toFixed(2)} Hours
                           </span>
@@ -6947,11 +7111,9 @@ FTC #6567 Captains & Mentors`
                           className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
                         >
                           <option value="All">All Subteams</option>
-                          <option value="Build">Build</option>
-                          <option value="Design">Design</option>
-                          <option value="Control">Control</option>
-                          <option value="Business">Business</option>
-                          <option value="Testing">Testing</option>
+                          {SUBTEAM_LIST.map((sub) => (
+                            <option key={sub} value={sub}>{formatSubteamLabel(sub)}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -7131,14 +7293,14 @@ FTC #6567 Captains & Mentors`
 
       {/* Dynamic Batch Print Container - ONLY printed, completely invisible on screen, styles strictly adjusted for print */}
       {entriesToPrint && entriesToPrint.length > 0 && (
-        <div className="hidden print:block bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
+        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
           
           {/* TITLE PAGE */}
           <div 
-            className="flex flex-col justify-between p-12 bg-white text-black min-h-screen relative border-4 border-double border-slate-950 mb-12"
-            style={{ pageBreakAfter: 'always', minHeight: '297mm' }}
+            className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+            style={{ pageBreakAfter: 'always', minHeight: '240mm' }}
           >
-            <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[200mm]">
+            <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
               <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
                 <span className="font-extrabold text-2xl tracking-tighter">RR</span>
               </div>
@@ -7173,7 +7335,7 @@ FTC #6567 Captains & Mentors`
           {/* TABLE OF CONTENTS */}
           <div 
             className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
-            style={{ pageBreakAfter: 'always', minHeight: '297mm' }}
+            style={{ pageBreakAfter: 'always', minHeight: '240mm' }}
           >
             <div className="border-b-4 border-slate-950 pb-4 mb-6">
               <h2 className="text-2xl font-black uppercase tracking-wider text-slate-950 font-display">
@@ -7210,7 +7372,6 @@ FTC #6567 Captains & Mentors`
             </div>
 
             <div className="mt-auto border-t border-slate-300 pt-4 text-center text-[10px] font-mono text-slate-400">
-              RoboRaiders Centralized Ledger Proof Network • Generated Securely
             </div>
           </div>
 
@@ -7363,7 +7524,7 @@ FTC #6567 Captains & Mentors`
 
       {/* Dynamic Time Sheets Print Container - ONLY printed, completely invisible on screen, styles adjusted for print */}
       {timeEntriesToPrint && timeEntriesToPrint.length > 0 && (
-        <div className="hidden print:block bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
+        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
           
           {/* Cover / Header Plate */}
           <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -7372,24 +7533,18 @@ FTC #6567 Captains & Mentors`
                 <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950 animate-none">
                   ROBORAIDERS TIME LEDGER
                 </span>
-                <h4 className="text-sm font-black text-slate-950 uppercase font-display tracking-widest">
-                  OFFICIAL WORKSHOP REGISTRY
-                </h4>
               </div>
               <h1 className="text-xl font-extrabold uppercase mt-1">
                 {timeExportScope === 'all' && 'Entire Team Cumulative Time Report'}
                 {timeExportScope === 'members' && 'Individual Participant Time Sheets'}
                 {timeExportScope === 'subteam' && `Subteam Time Sheet — ${selectedTimeExportSubteam}`}
               </h1>
-              <p className="text-xs text-slate-600 mt-1">
-                Verified laboratory shifts, developer milestones, and community mentor/student presence records.
-              </p>
             </div>
 
             <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5">
               <div><strong>GENERATED:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>
               <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950">{timeEntriesToPrint.length} Records</span></div>
-              <div><strong>CUMULATIVE STRENGTH:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
+              <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
               <div><strong>TEAM NUMBER:</strong> FTC #6567</div>
             </div>
           </div>
@@ -7453,8 +7608,7 @@ FTC #6567 Captains & Mentors`
                       </tbody>
                     </table>
 
-                    <div className="mt-8 flex justify-between items-center text-[9px] font-mono text-slate-500">
-                      <span>ROBORAIDERS SYSTEM LOG PRINT — VERIFIED</span>
+                    <div className="mt-8 flex justify-end text-[9px] font-mono text-slate-500">
                       <span className="border-b border-slate-955 w-44 text-right">MEMBER SIGNATURE: _________________</span>
                     </div>
                   </div>
@@ -7489,8 +7643,7 @@ FTC #6567 Captains & Mentors`
                 </tbody>
               </table>
 
-              <div className="pt-8 flex justify-between items-center text-[9px] font-mono text-slate-500">
-                <span>ROBORAIDERS CENTRALIZED LOG DOCUMENT — VERIFIED</span>
+              <div className="pt-8 flex justify-end text-[9px] font-mono text-slate-500">
                 <span className="border-b border-slate-950 w-52 text-right">MENTOR/CAPTAIN REVIEWER SIGNATURE: _________________</span>
               </div>
             </div>
