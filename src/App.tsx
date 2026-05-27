@@ -139,18 +139,78 @@ export const getSubteamColorTheme = (subteam: Subteam) => {
   }
 };
 
-export const getEntryReferenceCode = (entry: JournalEntry): string => {
+export const getEntryReferenceCode = (entry: JournalEntry, allEntries: JournalEntry[] = []): string => {
   // If the entry already has a custom id format (e.g., demo-1), use a neat fallback
-  if (entry.id === 'demo-1') return 'FTC-BUIL-001';
-  if (entry.id === 'demo-2') return 'FTC-PROG-002';
+  if (entry.id === 'demo-1') return 'FTC-BUIL-0001';
+  if (entry.id === 'demo-2') return 'FTC-PROG-0002';
   
-  // Extract trailing short alphanumerics from the entry's unique ID to construct a readable reference
-  const cleaned = entry.id.replace('entry-', '').toUpperCase();
-  const splitted = cleaned.split('-');
-  const idPart = splitted[splitted.length - 1] || 'XYZ';
-  const subteamShort = entry.subteam.substring(0, 4).toUpperCase();
-  const shortHash = idPart.length > 5 ? idPart.substring(0, 5) : idPart;
-  return `FTC-${subteamShort}-${shortHash}`;
+  const subteamStr = (entry.subteam || '').toUpperCase();
+  let prefix = 'MISC';
+  if (subteamStr.startsWith('DESIGN') || subteamStr.includes('FABRICATION') || subteamStr.includes('BUILD')) {
+    prefix = 'DESI';
+  } else if (subteamStr.startsWith('PROGRAM')) {
+    prefix = 'PROG';
+  } else if (subteamStr.startsWith('OUTREACH')) {
+    prefix = 'OUTR';
+  } else if (subteamStr.startsWith('BUSINESS') || subteamStr.includes('MEDIA')) {
+    prefix = 'BUSI';
+  } else if (subteamStr.startsWith('INSPIRE')) {
+    prefix = 'INSP';
+  } else if (subteamStr.startsWith('STRATEGY')) {
+    prefix = 'STRA';
+  } else if (subteamStr.startsWith('MENTOR')) {
+    prefix = 'MENT';
+  } else {
+    prefix = subteamStr.substring(0, 4).toUpperCase();
+    if (prefix.length < 4) prefix = prefix.padEnd(4, 'X');
+  }
+
+  // Ensure unique reference index chronologically by filtering and sorting allEntries
+  const filterList = allEntries && allEntries.length > 0 ? allEntries : [entry];
+  const sameSubteamEntries = filterList
+    .filter((e) => {
+      const eSubStr = (e.subteam || '').toUpperCase();
+      let ePrefix = 'MISC';
+      if (eSubStr.startsWith('DESIGN') || eSubStr.includes('FABRICATION') || eSubStr.includes('BUILD')) {
+        ePrefix = 'DESI';
+      } else if (eSubStr.startsWith('PROGRAM')) {
+        ePrefix = 'PROG';
+      } else if (eSubStr.startsWith('OUTREACH')) {
+        ePrefix = 'OUTR';
+      } else if (eSubStr.startsWith('BUSINESS') || eSubStr.includes('MEDIA')) {
+        ePrefix = 'BUSI';
+      } else if (eSubStr.startsWith('INSPIRE')) {
+        ePrefix = 'INSP';
+      } else if (eSubStr.startsWith('STRATEGY')) {
+        ePrefix = 'STRA';
+      } else if (eSubStr.startsWith('MENTOR')) {
+        ePrefix = 'MENT';
+      } else {
+        ePrefix = eSubStr.substring(0, 4).toUpperCase();
+        if (ePrefix.length < 4) ePrefix = ePrefix.padEnd(4, 'X');
+      }
+      return ePrefix === prefix;
+    })
+    .sort((a, b) => {
+      // Sort chronologically by date first, then by createdAt or id
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
+      }
+      const timeA = a.createdAt || 0;
+      const timeB = b.createdAt || 0;
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+      return (a.id || '').localeCompare(b.id || '');
+    });
+
+  const idx = sameSubteamEntries.findIndex((e) => e.id === entry.id);
+  const numVal = idx !== -1 ? idx + 1 : 1;
+  const paddedNum = String(numVal).padStart(4, '0');
+
+  return `FTC-${prefix}-${paddedNum}`;
 };
 
 export const DEFAULT_PROFILES: AuthorProfile[] = [
@@ -5497,7 +5557,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                 ? 'bg-black/50 border-white/10 text-white' 
                                 : 'bg-slate-200/50 border-slate-300 dark:border-slate-800 text-slate-800 dark:text-slate-350'
                             }`} title="Uniquely Assigned Reference Code">
-                              {getEntryReferenceCode(entry)}
+                              {getEntryReferenceCode(entry, entries)}
                             </span>
                             <span className={`text-[8px] font-mono ${isSelected ? 'text-slate-200 font-medium' : 'text-slate-500'}`}>
                               {entry.date}
@@ -5617,7 +5677,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       </div>
 
                       <div className="text-left sm:text-right text-[10px] font-mono text-slate-600 dark:text-slate-400 flex flex-col gap-0.5">
-                        <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-905 dark:text-slate-100 select-all tracking-wider bg-slate-200/50 dark:bg-slate-800 px-1 rounded">{getEntryReferenceCode(selectedEntry)}</span></div>
+                        <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-905 dark:text-slate-100 select-all tracking-wider bg-slate-200/50 dark:bg-slate-800 px-1 rounded">{getEntryReferenceCode(selectedEntry, entries)}</span></div>
                         <div><strong>DATE:</strong> {selectedEntry.date}</div>
                         <div className="flex items-center gap-1 sm:justify-end">
                           <strong>AUTHOR:</strong>{' '}
@@ -7576,7 +7636,7 @@ FTC #6567 Captains & Mentors`
                 <tbody className="divide-y divide-slate-200">
                   {entriesToPrint.map((entry, idx) => (
                     <tr key={entry.id} className="align-top">
-                      <td className="py-3 pr-4 font-mono font-bold text-slate-950">{getEntryReferenceCode(entry)}</td>
+                      <td className="py-3 pr-4 font-mono font-bold text-slate-950">{getEntryReferenceCode(entry, entries)}</td>
                       <td className="py-3 pr-4 font-mono">{entry.date}</td>
                       <td className="py-3 pr-4 font-semibold text-slate-900">{entry.author}</td>
                       <td className="py-3 pr-4 text-slate-700 font-mono text-[10px] uppercase">{entry.subteam}</td>
@@ -7612,7 +7672,7 @@ FTC #6567 Captains & Mentors`
                   </div>
 
                   <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 flex flex-col gap-0.5">
-                    <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-950 select-all tracking-wider bg-slate-100 px-1 rounded">{getEntryReferenceCode(entry)}</span></div>
+                    <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-950 select-all tracking-wider bg-slate-100 px-1 rounded">{getEntryReferenceCode(entry, entries)}</span></div>
                     <div><strong>DATE:</strong> {entry.date}</div>
                     <div className="flex items-center gap-1 sm:justify-end">
                       <strong>AUTHOR:</strong>{' '}
