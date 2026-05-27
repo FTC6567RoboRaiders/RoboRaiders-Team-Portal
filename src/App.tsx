@@ -2534,7 +2534,17 @@ FTC #6567 Captains & Mentors`
       showToast('Database is currently empty.', 'danger');
       return;
     }
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(entries, null, 2));
+    const sortedEntries = [...entries].sort((a, b) => {
+      const teamA = (a.subteam || '').toUpperCase();
+      const teamB = (b.subteam || '').toUpperCase();
+      if (teamA !== teamB) {
+        return teamA.localeCompare(teamB);
+      }
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      return dateA.localeCompare(dateB);
+    });
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(sortedEntries, null, 2));
     const a = document.createElement('a');
     a.setAttribute('href', dataStr);
     a.setAttribute('download', 'FTC_Team_Journal_Database.json');
@@ -2561,7 +2571,19 @@ FTC #6567 Captains & Mentors`
       return;
     }
 
-    setEntriesToPrint(filtered);
+    // Sort entries by subteam then by date
+    const sortedFiltered = [...filtered].sort((a, b) => {
+      const teamA = (a.subteam || '').toUpperCase();
+      const teamB = (b.subteam || '').toUpperCase();
+      if (teamA !== teamB) {
+        return teamA.localeCompare(teamB);
+      }
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      return dateA.localeCompare(dateB);
+    });
+
+    setEntriesToPrint(sortedFiltered);
     setIsExportModalOpen(false);
 
     // Delay printing slightly so the virtual DOM updates the batch element
