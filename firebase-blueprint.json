@@ -113,6 +113,23 @@
         "timestamp": { "type": "number" }
       },
       "required": ["id", "from", "to", "subject", "body", "timestamp"]
+    },
+    "XPAdjustment": {
+      "title": "XP Adjustment",
+      "description": "Manual high-performance rewards or correction logs issued by mentors/captains.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "amount": { "type": "number" },
+        "reason": { "type": "string" },
+        "awardedBy": { "type": "string" },
+        "awardedByEmail": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "userName", "userEmail", "amount", "reason", "awardedBy", "awardedByEmail", "createdAt"]
     }
   },
   "firestore": {
@@ -139,6 +156,10 @@
     "dispatchedEmails/{emailId}": {
       "schema": "DispatchedEmail",
       "description": "Simulated system outbox notification dispatch logs."
+    },
+    "xpAdjustments/{adjId}": {
+      "schema": "XPAdjustment",
+      "description": "Manual XP increments or deductions issued by mentors/captains."
     }
   }
 }

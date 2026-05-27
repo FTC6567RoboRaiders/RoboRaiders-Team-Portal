@@ -113,6 +113,20 @@ service cloud.firestore {
         && data.timestamp is number;
     }
 
+    function isValidXpAdjustment(data) {
+      return data.keys().hasAll(['id', 'userId', 'userName', 'userEmail', 'amount', 'reason', 'awardedBy', 'awardedByEmail', 'createdAt'])
+        && data.keys().size() == 9
+        && data.id is string
+        && data.userId is string
+        && data.userName is string
+        && data.userEmail is string
+        && data.amount is number
+        && data.reason is string && data.reason.size() <= 5000
+        && data.awardedBy is string
+        && data.awardedByEmail is string
+        && data.createdAt is number;
+    }
+
     // Collection Rules
     
     // 1. Users
@@ -180,6 +194,14 @@ service cloud.firestore {
       allow read: if isApprovedUser();
       allow create: if isApprovedUser() && isValidEmail(request.resource.data);
       allow update: if isApprovedUser() && isValidEmail(request.resource.data);
+      allow delete: if isMentorOrCaptain();
+    }
+    
+    // 7. XP Adjustments
+    match /xpAdjustments/{adjId} {
+      allow read: if isApprovedUser();
+      allow create: if isMentorOrCaptain() && isValidXpAdjustment(request.resource.data);
+      allow update: if isMentorOrCaptain() && isValidXpAdjustment(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
   }

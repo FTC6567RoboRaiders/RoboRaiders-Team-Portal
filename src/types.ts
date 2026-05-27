@@ -64,6 +64,7 @@ export interface UserAccount {
   status: 'Pending' | 'Approved' | 'Rejected';
   createdAt: number;
   leadership?: 'None' | 'Captain' | 'Subteam leader';
+  hasCustomPassword?: boolean;
 }
 
 export interface DispatchedEmail {

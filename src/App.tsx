@@ -55,7 +55,8 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   onAuthStateChanged, 
-  signOut
+  signOut,
+  updatePassword
 } from 'firebase/auth';
 import { 
   collection, 
@@ -888,6 +889,12 @@ export default function App() {
     return localStorage.getItem('ftc_active_reset_code') || '';
   });
 
+  // Password Setup Prompt from first-time registration / default ID
+  const [showPasswordSetupPrompt, setShowPasswordSetupPrompt] = useState(false);
+  const [setupCustomPassword, setSetupCustomPassword] = useState('');
+  const [setupConfirmPassword, setSetupConfirmPassword] = useState('');
+  const [isSettingUpPassword, setIsSettingUpPassword] = useState(false);
+
   const [registerName, setRegisterName] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerSchoolId, setRegisterSchoolId] = useState('');
@@ -1168,38 +1175,47 @@ export default function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail.trim() || !loginSchoolId.trim()) {
-      showToast('Please enter both school email and school ID.', 'danger');
+      showToast('Please enter both school email and school ID/password.', 'danger');
       return;
     }
     const emailToFind = loginEmail.trim().toLowerCase();
-    const password = loginSchoolId.trim() + "_ftc_auth";
+    const typedCredential = loginSchoolId.trim();
+    const defaultPassword = typedCredential + "_ftc_auth";
 
     try {
       let userCredential;
+      
+      // 1. Try logging in with the direct custom password first
       try {
-        userCredential = await signInWithEmailAndPassword(auth, emailToFind, password);
-      } catch (authErr: any) {
-        if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') {
-          const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
-          if (matchedLocalAcc && matchedLocalAcc.schoolId === loginSchoolId.trim()) {
-            try {
-              userCredential = await createUserWithEmailAndPassword(auth, emailToFind, password);
-              await setDoc(doc(db, 'users', userCredential.user.uid), {
-                ...matchedLocalAcc,
-                id: userCredential.user.uid
-              });
-            } catch (createErr) {
-              console.error("auto-creation error", createErr);
-              showToast('Credential mismatch or sign-in issue. Please try registering first.', 'danger');
+        userCredential = await signInWithEmailAndPassword(auth, emailToFind, typedCredential);
+      } catch (authErr1: any) {
+        // 2. Try logging in with the default schoolId suffix password
+        try {
+          userCredential = await signInWithEmailAndPassword(auth, emailToFind, defaultPassword);
+        } catch (authErr2: any) {
+          // 3. Fallback: If both fail, check if user has a pre-mapped sandbox profile and needs automatic Firebase Auth creation
+          if (authErr2.code === 'auth/user-not-found' || authErr2.code === 'auth/invalid-credential' || authErr1.code === 'auth/invalid-credential') {
+            const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
+            if (matchedLocalAcc && matchedLocalAcc.schoolId === typedCredential) {
+              try {
+                userCredential = await createUserWithEmailAndPassword(auth, emailToFind, defaultPassword);
+                await setDoc(doc(db, 'users', userCredential.user.uid), {
+                  ...matchedLocalAcc,
+                  id: userCredential.user.uid
+                });
+              } catch (createErr) {
+                console.error("auto-creation error", createErr);
+                showToast('Credential mismatch or sign-in issue. Please try registering first.', 'danger');
+                return;
+              }
+            } else {
+              showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
               return;
             }
           } else {
-            showToast('Incorrect credentials: School ID does not match.', 'danger');
+            showToast(`Authentication Error: ${authErr2.message}`, 'danger');
             return;
           }
-        } else {
-          showToast(`Authentication Error: ${authErr.message}`, 'danger');
-          return;
         }
       }
 
@@ -1429,11 +1445,45 @@ FTC Team #6567 IT Administration`
     const matchedAccount = accounts.find(a => a.schoolEmail.toLowerCase() === resetEmail.trim().toLowerCase());
     if (matchedAccount) {
       try {
+        // Authenticate the user temporarily using their existing credentials,
+        // then update the password using Firebase Auth's updatePassword client SDK.
+        let userCredential;
+        const passwordToTry1 = matchedAccount.hasCustomPassword ? matchedAccount.schoolId : matchedAccount.schoolId + "_ftc_auth";
+        const passwordToTry2 = matchedAccount.schoolId;
+
+        try {
+          userCredential = await signInWithEmailAndPassword(auth, matchedAccount.schoolEmail, passwordToTry1);
+        } catch (authErr1) {
+          try {
+            userCredential = await signInWithEmailAndPassword(auth, matchedAccount.schoolEmail, passwordToTry2);
+          } catch (authErr2) {
+            // If they don't exist yet in Auth, create them directly with the new password
+            try {
+              userCredential = await createUserWithEmailAndPassword(auth, matchedAccount.schoolEmail, resetNewPassword.trim());
+            } catch (createErr: any) {
+              throw new Error(`Authentication synchronization failed: ${createErr.message}`);
+            }
+          }
+        }
+
+        if (userCredential && auth.currentUser) {
+          try {
+            await updatePassword(auth.currentUser, resetNewPassword.trim());
+          } catch (updateErr: any) {
+            console.warn("Auth updatePassword warning:", updateErr);
+          }
+        }
+
         const updatedDoc = {
           ...matchedAccount,
-          schoolId: resetNewPassword.trim()
+          schoolId: resetNewPassword.trim(),
+          hasCustomPassword: true
         };
         await setDoc(doc(db, 'users', matchedAccount.id), updatedDoc);
+        
+        // Always log out immediately after resetting passwords in a guest context
+        await signOut(auth);
+
         showToast('Password reset verified and saved to database successfully!', 'success');
       } catch (err: any) {
         showToast(`Failed to update password: ${err.message}`, 'danger');
@@ -1451,6 +1501,58 @@ FTC Team #6567 IT Administration`
     localStorage.removeItem('ftc_active_reset_email');
 
     setAuthMode('login');
+  };
+
+  // Automated prompt trigger for accounts without custom passwords
+  useEffect(() => {
+    if (currentUser && !currentUser.hasCustomPassword) {
+      const timer = setTimeout(() => {
+        setShowPasswordSetupPrompt(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowPasswordSetupPrompt(false);
+    }
+  }, [currentUser]);
+
+  const handleSetupCustomPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!setupCustomPassword.trim() || !setupConfirmPassword.trim()) {
+      showToast('All fields are required.', 'danger');
+      return;
+    }
+    if (setupCustomPassword.trim() !== setupConfirmPassword.trim()) {
+      showToast('Passwords do not match.', 'danger');
+      return;
+    }
+    if (setupCustomPassword.trim().length < 6) {
+      showToast('Password must be at least 6 characters long to be secure.', 'danger');
+      return;
+    }
+
+    setIsSettingUpPassword(true);
+    try {
+      if (auth.currentUser) {
+        await updatePassword(auth.currentUser, setupCustomPassword.trim());
+      }
+      if (currentUser) {
+        const updatedUser = {
+          ...currentUser,
+          schoolId: setupCustomPassword.trim(),
+          hasCustomPassword: true
+        };
+        await setDoc(doc(db, 'users', currentUser.id), updatedUser);
+        setCurrentUser(updatedUser);
+        localStorage.setItem('ftc_current_user', JSON.stringify(updatedUser));
+      }
+      setShowPasswordSetupPrompt(false);
+      showToast('Secure custom password configured successfully! Use this password for future sign-ins.', 'success');
+    } catch (err: any) {
+      console.error(err);
+      showToast(`Failed to configure custom password: ${err.message}`, 'danger');
+    } finally {
+      setIsSettingUpPassword(false);
+    }
   };
 
   const openSettingsModal = () => {
@@ -6771,6 +6873,120 @@ FTC #6567 Captains & Mentors`
                     className="bg-brand hover:bg-brand-hover text-white font-extrabold text-[11px] py-2 px-4 rounded-md uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                   >
                     <CheckCircle className="w-3.5 h-3.5" /> Save Changes
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* First-Time Password Setup Dialog Modal */}
+      <AnimatePresence>
+        {showPasswordSetupPrompt && currentUser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] flex flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md no-print"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="relative w-full max-w-md bg-white dark:bg-slate-900 border-2 border-brand/50 dark:border-brand/40 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+            >
+              {/* Header */}
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-brand/20 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-brand animate-pulse" />
+                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
+                    🔑 Security Preset Update
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordSetupPrompt(false);
+                    showToast("Password configuration postponed. You can change it anytime in Settings.", "info");
+                  }}
+                  className="p-1 hover:bg-slate-850 text-slate-450 hover:text-white rounded transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Form Body */}
+              <form onSubmit={handleSetupCustomPassword} className="flex flex-col flex-1">
+                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-100">
+                  <div className="bg-brand/10 text-brand dark:bg-brand/25 dark:text-brand-hover p-4 rounded border border-brand/20">
+                    <p className="text-xs font-bold font-sans flex items-center gap-1.5 uppercase tracking-wide mb-1">
+                      👑 Configure Secure Login Password
+                    </p>
+                    <p className="text-[11px] leading-relaxed font-sans">
+                      Your profile has been registered! You are currently using your **School ID (lunch #)** as your password. 
+                      Please establish a secure custom password below to authorize future system logins instead of your ID.
+                    </p>
+                  </div>
+
+                  {/* Password field */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                      <span>New Secure Password</span>
+                      <span className="text-brand">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="At least 6 characters"
+                      value={setupCustomPassword}
+                      onChange={(e) => setSetupCustomPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-950 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-mono animate-none"
+                    />
+                  </div>
+
+                  {/* Confirm Password field */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                      <span>Confirm New Password</span>
+                      <span className="text-brand">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Repeat secure password"
+                      value={setupConfirmPassword}
+                      onChange={(e) => setSetupConfirmPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-950 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-mono animate-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Footer buttons */}
+                <div className="bg-slate-50 dark:bg-slate-950 px-5 py-3.5 border-t border-slate-150 dark:border-slate-850 flex justify-end gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPasswordSetupPrompt(false);
+                      showToast("Password configuration postponed. You can change it anytime in Settings.", "info");
+                    }}
+                    className="px-3.5 py-2 hover:bg-slate-200 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer font-sans"
+                  >
+                    Postpone
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSettingUpPassword}
+                    className="bg-brand hover:bg-brand-hover text-white font-extrabold text-[11px] py-2 px-4 rounded-md uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 font-sans"
+                  >
+                    {isSettingUpPassword ? (
+                      <span>Saving...</span>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5" /> Save Secure Password
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
