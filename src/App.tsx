@@ -966,6 +966,22 @@ export default function App() {
   // Approvals Modal state for Mentor/Captain
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
 
+  // Season Transition and Backups state (Mentor-Only option)
+  const [isBackupTransitionOpen, setIsBackupTransitionOpen] = useState(false);
+  const [transitionState, setTransitionState] = useState({
+    journalEntries: true,
+    timeEntries: true,
+    kanbanTasks: true,
+    outreachEvents: true,
+    xpAdjustments: true,
+    dispatchedEmails: true,
+    clearPendingUsers: true,
+    resetStudents: false,
+  });
+  const [transitionConfirmCode, setTransitionConfirmCode] = useState('');
+  const [isProcessingTransition, setIsProcessingTransition] = useState(false);
+  const [transitionProgress, setTransitionProgress] = useState<{current: number, total: number, collection: string} | null>(null);
+
   // Settings Modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsName, setSettingsName] = useState('');
@@ -1612,6 +1628,173 @@ FTC Team #6567 IT Administration`
       showToast(`Failed to configure custom password: ${err.message}`, 'danger');
     } finally {
       setIsSettingUpPassword(false);
+    }
+  };
+
+  const handleDownloadBackup = () => {
+    const backupData = {
+      backupMetadata: {
+        exportedAt: new Date().toISOString(),
+        exportedBy: currentUser?.schoolEmail || 'System Administrator',
+        team: 'FTC #6567 (RoboRaiders)',
+        season: '2026-2027'
+      },
+      users: accounts,
+      journalEntries: entries,
+      timeEntries: timeEntries,
+      kanbanTasks: kanbanTasks,
+      outreachEvents: outreachEvents,
+      xpAdjustments: xpAdjustments,
+      dispatchedEmails: dispatchedEmails
+    };
+
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const timeStr = `${String(d.getHours()).padStart(2, '0')}-${String(d.getMinutes()).padStart(2, '0')}`;
+    
+    link.href = url;
+    link.download = `RoboRaiders_FTC6567_Database_Backup_${dateStr}_${timeStr}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showToast('Database backup file successfully exported and downloaded!', 'success');
+  };
+
+  const handleRunTransition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (transitionConfirmCode.trim() !== 'RESET_SEASON') {
+      showToast('Validation mismatch. Please type "RESET_SEASON" to verify.', 'danger');
+      return;
+    }
+
+    // Force download a backup first to ensure no data is ever lost!
+    try {
+      handleDownloadBackup();
+      showToast('Auto-backup generated successfully before season transition.', 'success');
+    } catch (err) {
+      console.error('Backup failed:', err);
+      showToast('Backup failed. Clean up aborted for your safety.', 'danger');
+      return;
+    }
+
+    setIsProcessingTransition(true);
+    setTransitionProgress({ current: 0, total: 1, collection: 'Initiating...' });
+
+    try {
+      // Create list of deletions
+      const deletionsQueue: { colName: string, docId: string }[] = [];
+
+      // 1. Journal entries
+      if (transitionState.journalEntries) {
+        entries.forEach(item => {
+          if (item.id !== 'demo-1' && item.id !== 'demo-2') {
+            deletionsQueue.push({ colName: 'journalEntries', docId: item.id });
+          }
+        });
+      }
+
+      // 2. Time entries
+      if (transitionState.timeEntries) {
+        timeEntries.forEach(item => {
+          deletionsQueue.push({ colName: 'timeEntries', docId: item.id });
+        });
+      }
+
+      // 3. Kanban tasks
+      if (transitionState.kanbanTasks) {
+        kanbanTasks.forEach(item => {
+          deletionsQueue.push({ colName: 'kanbanTasks', docId: item.id });
+        });
+      }
+
+      // 4. Outreach events
+      if (transitionState.outreachEvents) {
+        outreachEvents.forEach(item => {
+          deletionsQueue.push({ colName: 'outreachEvents', docId: item.id });
+        });
+      }
+
+      // 5. XP adjustments
+      if (transitionState.xpAdjustments) {
+        xpAdjustments.forEach(item => {
+          deletionsQueue.push({ colName: 'xpAdjustments', docId: item.id });
+        });
+      }
+
+      // 6. Dispatched Emails
+      if (transitionState.dispatchedEmails) {
+        dispatchedEmails.forEach(item => {
+          deletionsQueue.push({ colName: 'dispatchedEmails', docId: item.id });
+        });
+      }
+
+      // 7. Users
+      if (transitionState.clearPendingUsers) {
+        // Find users with status 'Pending'
+        accounts.forEach(user => {
+          const isMe = currentUser?.id === user.id || currentUser?.schoolEmail === user.schoolEmail;
+          const isMentor = user.role === 'mentor' || user.role === 'mentor_captain';
+          if (user.status === 'Pending' && !isMe && !isMentor) {
+            deletionsQueue.push({ colName: 'users', docId: user.id });
+          }
+        });
+      }
+
+      if (transitionState.resetStudents) {
+        // Clear student accounts altogether
+        accounts.forEach(user => {
+          const isMe = currentUser?.id === user.id || currentUser?.schoolEmail === user.schoolEmail;
+          const isMentor = user.role === 'mentor' || user.role === 'mentor_captain';
+          if (!isMe && !isMentor) {
+            deletionsQueue.push({ colName: 'users', docId: user.id });
+          }
+        });
+      }
+
+      const totalItems = deletionsQueue.length;
+      if (totalItems === 0) {
+        showToast('No active database records matched the selected transition filters.', 'info');
+        setIsProcessingTransition(false);
+        setTransitionProgress(null);
+        setIsBackupTransitionOpen(false);
+        setTransitionConfirmCode('');
+        return;
+      }
+
+      // Delete items sequentially or in fast batches, reporting progress to the UI
+      let count = 0;
+      for (const deletion of deletionsQueue) {
+        count++;
+        setTransitionProgress({
+          current: count,
+          total: totalItems,
+          collection: `${deletion.colName} (${deletion.docId})`
+        });
+
+        try {
+          await deleteDoc(doc(db, deletion.colName, deletion.docId));
+        } catch (err: any) {
+          console.error(`Failed to delete doc in ${deletion.colName}:`, err);
+        }
+      }
+
+      showToast(`Clean up complete! Successfully cleared ${count} records. Database transition completed.`, 'success');
+      setIsBackupTransitionOpen(false);
+      setTransitionConfirmCode('');
+    } catch (err: any) {
+      console.error(err);
+      showToast(`Database transition halted: ${err.message}`, 'danger');
+    } finally {
+      setIsProcessingTransition(false);
+      setTransitionProgress(null);
     }
   };
 
@@ -4509,6 +4692,49 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </button>
                   </div>
                 </div>
+
+                {/* CARD 5: DATABASE BACKUP & SEASON TRANSITION */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-red-500/25 group md:col-span-2">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2.5">
+                      <div className="bg-red-500/10 text-red-600 dark:text-red-400 p-2.5 rounded-lg">
+                        <Database className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                          Backup &amp; Season Transition Tools
+                        </h4>
+                        <p className="text-[9px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest leading-none mt-0.5">
+                          SYSTEM ADMINISTRATION PANEL • MENTOR-ONLY ACCESS
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
+                      Take offline backups of all system databases. Compress, archive, or completely clear journals, timesheets, and kanban cards when transitioning to a new robotics competition season.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-xs font-mono">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+                      ⚠️ Data modifications affect live cloud database metrics
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownloadBackup}
+                        className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold px-3 py-1.5 rounded uppercase text-[10px] tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                        id="backup-db-trigger"
+                      >
+                        <span>Download Backup</span>
+                      </button>
+                      <button
+                        onClick={() => setIsBackupTransitionOpen(true)}
+                        className="bg-red-600/10 hover:bg-red-650/20 border border-red-500/30 hover:border-red-500 text-red-600 dark:text-red-400 font-extrabold px-3 py-1.5 rounded uppercase text-[10px] tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                        id="transition-season-trigger"
+                      >
+                        <span>Season Transition</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
           </div>
@@ -7045,6 +7271,276 @@ FTC #6567 Captains & Mentors`
                     ) : (
                       <>
                         <ShieldCheck className="w-3.5 h-3.5" /> Save Secure Password
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mentor-Only Season Transition & Backups Modal */}
+      <AnimatePresence>
+        {isBackupTransitionOpen && currentUser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] flex flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md no-print"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-red-500/40 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+            >
+              {/* Header */}
+              <div className="bg-red-955 text-white px-4 py-3.5 border-b border-red-500/20 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-red-400 animate-pulse" />
+                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
+                    🗃️ Season Transition &amp; Database Purge
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isProcessingTransition) {
+                      setIsBackupTransitionOpen(false);
+                      setTransitionConfirmCode('');
+                    }
+                  }}
+                  className="p-1 hover:bg-red-900/40 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                  disabled={isProcessingTransition}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Form Body */}
+              <form onSubmit={handleRunTransition} className="flex flex-col flex-1 overflow-y-auto max-h-[80vh]">
+                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-100">
+                  
+                  {/* Safety Alert Warning Banner */}
+                  <div className="bg-amber-500/10 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400 p-4 rounded border border-amber-500/20 flex gap-3 text-xs leading-relaxed font-sans">
+                    <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+                    <div>
+                      <p className="font-extrabold uppercase tracking-wide mb-1">
+                        ⚠️ High-Impact Administrative Operation
+                      </p>
+                      <p className="font-sans text-[11px] leading-relaxed">
+                        Transitioning seasons is an irreversible action. By selecting collections below, you will purge active Firestore indices of current entries. 
+                        To ensure safety, <strong>the system will automatically generate &amp; download a full backup JSON file</strong> to your computer before any deletion starts.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Options List */}
+                  <div className="flex flex-col gap-2.5">
+                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                      Select Collections to Clean up:
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                      {/* Journal Entries */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.journalEntries}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, journalEntries: e.target.checked })}
+                          className="mt-0.5 rounded text-red-650 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Journal Entries</span>
+                          <span className="text-[10px] text-slate-400">{entries.length} items logged</span>
+                        </div>
+                      </label>
+
+                      {/* Time Entries */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.timeEntries}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, timeEntries: e.target.checked })}
+                          className="mt-0.5 rounded text-red-650 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Time Clock Entries</span>
+                          <span className="text-[10px] text-slate-400">{timeEntries.length} clock logs</span>
+                        </div>
+                      </label>
+
+                      {/* Kanban Tasks */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.kanbanTasks}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, kanbanTasks: e.target.checked })}
+                          className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Kanban Board Tasks</span>
+                          <span className="text-[10px] text-slate-400">{kanbanTasks.length} tickets</span>
+                        </div>
+                      </label>
+
+                      {/* Outreach Events */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.outreachEvents}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, outreachEvents: e.target.checked })}
+                          className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Outreach Event Logs</span>
+                          <span className="text-[10px] text-slate-400">{outreachEvents.length} events logged</span>
+                        </div>
+                      </label>
+
+                      {/* XP Adjustments */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.xpAdjustments}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, xpAdjustments: e.target.checked })}
+                          className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">XP Adjustments</span>
+                          <span className="text-[10px] text-slate-400">{xpAdjustments.length} adjustment records</span>
+                        </div>
+                      </label>
+
+                      {/* Dispatched Emails */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.dispatchedEmails}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, dispatchedEmails: e.target.checked })}
+                          className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Simulated Outbox Emails</span>
+                          <span className="text-[10px] text-slate-400">{dispatchedEmails.length} logged dispatches</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Separator */}
+                    <div className="border-t border-slate-200 dark:border-slate-800/80 my-2"></div>
+
+                    {/* Dangerous User Roster Reset Checkboxes */}
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-mono font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">
+                        <span>Dangerous Account Roster Actions:</span>
+                      </label>
+
+                      {/* Clear Unapproved Pending Applications */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-rose-50/10 dark:bg-rose-950/10 border border-rose-500/20 rounded cursor-pointer hover:bg-rose-50/20 select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.clearPendingUsers}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, clearPendingUsers: e.target.checked })}
+                          className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Reject Core Pending Enrollees</span>
+                          <span className="text-[10px] text-slate-400">Purges currently unapproved enrollees from queue</span>
+                        </div>
+                      </label>
+
+                      {/* Clear All Roster Accounts Except Me and Mentors */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-red-500/5 dark:bg-red-500/10 border border-red-500/20 rounded cursor-pointer hover:bg-red-500/10 select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.resetStudents}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, resetStudents: e.target.checked })}
+                          className="mt-0.5 rounded text-red-655 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Wipe Non-Mentor Student Roster Accounts</span>
+                          <span className="text-[10px] text-red-405 font-sans">Deletes student profile logins. Approved coach/mentor accounts remain fully intact!</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Confirmation text input box */}
+                  <div className="flex flex-col gap-1.5 mt-2 bg-slate-50 dark:bg-slate-955 p-3.5 rounded border border-slate-200 dark:border-slate-800">
+                    <label className="text-[10px] font-mono font-black text-rose-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <span>Type Validation Code:</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 leading-none">
+                      Verify action by typing <span className="font-mono font-bold select-all bg-red-100 dark:bg-red-955 text-red-650 dark:text-red-400 px-1 py-0.5 rounded">RESET_SEASON</span> below:
+                    </p>
+                    <input
+                      type="text"
+                      required
+                      disabled={isProcessingTransition}
+                      placeholder="RESET_SEASON"
+                      value={transitionConfirmCode}
+                      onChange={(e) => setTransitionConfirmCode(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-850 border border-slate-300 dark:border-slate-800 rounded px-2.5 py-1.5 mt-1 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-red-505 transition-all font-mono"
+                    />
+                  </div>
+
+                  {/* Real-time progression state */}
+                  {transitionProgress && (
+                    <div className="bg-slate-900 text-white p-3 rounded font-mono text-[10px] border border-red-500/30">
+                      <div className="flex justify-between font-bold text-red-400">
+                        <span>Purging Records...</span>
+                        <span>{Math.round((transitionProgress.current / transitionProgress.total) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-850 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                        <div 
+                          className="bg-red-500 h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${(transitionProgress.current / transitionProgress.total) * 100}%` }}
+                        ></div>
+                      </div>
+                      <div className="mt-2 text-slate-450 text-[9px] flex justify-between">
+                        <span className="truncate">Active Document: {transitionProgress.collection}</span>
+                        <span>({transitionProgress.current}/{transitionProgress.total})</span>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Footer buttons */}
+                <div className="bg-slate-50 dark:bg-slate-950 px-5 py-3.5 border-t border-slate-150 dark:border-slate-855 flex justify-end gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsBackupTransitionOpen(false);
+                      setTransitionConfirmCode('');
+                    }}
+                    disabled={isProcessingTransition}
+                    className="px-3.5 py-2 hover:bg-slate-200 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-405 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer font-sans disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isProcessingTransition || transitionConfirmCode.trim() !== 'RESET_SEASON'}
+                    className="bg-red-655 hover:bg-red-600 active:bg-red-750 disabled:bg-rose-500/10 disabled:text-rose-500/40 text-white font-extrabold text-[11px] py-1.5 px-4 rounded-md uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer font-sans disabled:cursor-not-allowed"
+                  >
+                    {isProcessingTransition ? (
+                      <span>Executing Purge...</span>
+                    ) : (
+                      <>
+                        <Database className="w-3.5 h-3.5" /> Execute Season Reset
                       </>
                     )}
                   </button>

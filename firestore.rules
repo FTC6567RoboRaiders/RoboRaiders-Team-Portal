@@ -144,6 +144,7 @@ service cloud.firestore {
          && request.resource.data.role == resource.data.role
          && request.resource.data.status == resource.data.status)
       );
+      allow delete: if isMentorOrCaptain();
     }
 
     // 2. Journal Entries
