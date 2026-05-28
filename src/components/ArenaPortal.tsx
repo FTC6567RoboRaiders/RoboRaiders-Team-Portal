@@ -289,36 +289,62 @@ export default function ArenaPortal({
         <AnimatePresence mode="wait">
           
           {/* SCREEN 1: PROFILE SUMMARY */}
-          {gamificationTab === 'profile' && (
-            <motion.div
-              key="profile"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch"
-            >
-              {/* Radial Progress Plate */}
-              <div className="md:col-span-4 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-955/40 border border-slate-200/60 dark:border-slate-800/50 rounded-xl p-6 text-center relative overflow-hidden group min-h-[300px] md:min-h-full py-8">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-555 to-indigo-600"></div>
-                <span className="text-[10px] font-mono font-extrabold text-slate-400 uppercase tracking-widest">
-                  Rank Class
-                </span>
-                <div className="relative mt-4 flex items-center justify-center">
-                  <Award className="w-24 h-24 text-cyan-650 dark:text-cyan-400 group-hover:scale-110 transition-transform duration-300" />
-                  <div className="absolute inset-0 flex items-center justify-center -translate-y-2.5 font-mono font-black text-2xl sm:text-3xl text-slate-900 dark:text-slate-50">
-                    {stats.level}
+          {gamificationTab === 'profile' && (() => {
+            const isMentor = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+            let userGuildId: string = currentUser.primarySubteam;
+            if (isMentor) {
+              userGuildId = 'Mentoring';
+            } else {
+              if (userGuildId === 'None' || userGuildId === 'Mentor' || (userGuildId as string) === 'Lead/Captain' || (userGuildId as string) === 'Mentoring') {
+                userGuildId = 'Design/Build/Fabrication';
+              }
+            }
+            const guildHours = isMentor ? stats.totalHours : (stats.subteamHours[userGuildId] || 0);
+            const email = currentUser.schoolEmail.toLowerCase();
+            const guildJournals = isMentor 
+              ? entries.filter(e => 
+                  e.author.toLowerCase().includes(email) || 
+                  e.author.toLowerCase().includes(currentUser.name.toLowerCase())
+                ).length 
+              : entries.filter(e => 
+                  (e.author.toLowerCase().includes(email) || 
+                   e.author.toLowerCase().includes(currentUser.name.toLowerCase())) &&
+                  e.subteam === userGuildId
+                ).length;
+
+            const subRankData = getSubteamStatsAndRank(userGuildId, guildHours, guildJournals, currentUser.role);
+            const guildObj = SUBTEAM_GUILDS.find(g => g.id === userGuildId) || SUBTEAM_GUILDS[0];
+
+            return (
+              <motion.div
+                key="profile"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch"
+              >
+                {/* Radial Progress Plate */}
+                <div className="md:col-span-4 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-955/40 border border-slate-200/60 dark:border-slate-800/50 rounded-xl p-6 text-center relative overflow-hidden group min-h-[300px] md:min-h-full py-8">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-555 to-indigo-600"></div>
+                  <span className="text-[10px] font-mono font-extrabold text-slate-400 uppercase tracking-widest">
+                    Rank Class
+                  </span>
+                  <div className="relative mt-4 flex items-center justify-center">
+                    <Award className="w-24 h-24 text-cyan-650 dark:text-cyan-400 group-hover:scale-110 transition-transform duration-300" />
+                    <div className="absolute inset-0 flex items-center justify-center -translate-y-2.5 font-mono font-black text-2xl sm:text-3xl text-slate-900 dark:text-slate-50">
+                      {subRankData.currentRank.rank}
+                    </div>
                   </div>
+                  <h3 className="text-xs font-mono font-black uppercase text-slate-900 dark:text-slate-50 mt-4 tracking-wider">
+                    Level {subRankData.currentRank.rank}
+                  </h3>
+                  <h4 className="text-sm sm:text-[15px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider font-display leading-tight mt-1 animate-pulse px-3">
+                    {subRankData.currentRank.title}
+                  </h4>
+                  <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-2">
+                    {stats.xp} Accumulated XP
+                  </p>
                 </div>
-                <h3 className="text-xs font-mono font-black uppercase text-slate-900 dark:text-slate-50 mt-4 tracking-wider">
-                  Level {stats.level}
-                </h3>
-                <h4 className="text-sm sm:text-[15px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider font-display leading-tight mt-1 animate-pulse px-3">
-                  {stats.levelName}
-                </h4>
-                <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-2">
-                  {stats.xp} Accumulated XP
-                </p>
-              </div>
 
               {/* Linear Progression Slide & Cumulative Indices */}
               <div className="md:col-span-8 flex flex-col gap-4">
@@ -375,96 +401,67 @@ export default function ArenaPortal({
                 </p>
 
                 {/* Subteam Guild Alignment Badge */}
-                {(() => {
-                  const isMentor = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
-                  let userGuildId: string = currentUser.primarySubteam;
-                  if (isMentor) {
-                    userGuildId = 'Mentoring';
-                  } else {
-                    if (userGuildId === 'None' || userGuildId === 'Mentor' || (userGuildId as string) === 'Lead/Captain' || (userGuildId as string) === 'Mentoring') {
-                      userGuildId = 'Design/Build/Fabrication';
-                    }
-                  }
-                  const guildHours = isMentor ? stats.totalHours : (stats.subteamHours[userGuildId] || 0);
-                  const email = currentUser.schoolEmail.toLowerCase();
-                  const guildJournals = isMentor 
-                    ? entries.filter(e => 
-                        e.author.toLowerCase().includes(email) || 
-                        e.author.toLowerCase().includes(currentUser.name.toLowerCase())
-                      ).length 
-                    : entries.filter(e => 
-                        (e.author.toLowerCase().includes(email) || 
-                         e.author.toLowerCase().includes(currentUser.name.toLowerCase())) &&
-                        e.subteam === userGuildId
-                      ).length;
+                <div className="bg-slate-50 dark:bg-slate-955/35 border border-slate-200/60 dark:border-slate-805 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4 relative overflow-hidden group mt-3">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-radial from-cyan-500/5 to-transparent pointer-events-none"></div>
+                  
+                  {/* Icon frame */}
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/85 dark:border-slate-800 shadow-sm shrink-0 flex items-center justify-center">
+                    {getGamifiedIconLocal(guildObj.icon, "w-10 h-10")}
+                  </div>
 
-                  const subRankData = getSubteamStatsAndRank(userGuildId, guildHours, guildJournals, currentUser.role);
-                  const guildObj = SUBTEAM_GUILDS.find(g => g.id === userGuildId) || SUBTEAM_GUILDS[0];
-
-                  return (
-                    <div className="bg-slate-50 dark:bg-slate-955/35 border border-slate-200/60 dark:border-slate-805 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4 relative overflow-hidden group mt-3">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-radial from-cyan-500/5 to-transparent pointer-events-none"></div>
-                      
-                      {/* Icon frame */}
-                      <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/85 dark:border-slate-800 shadow-sm shrink-0 flex items-center justify-center">
-                        {getGamifiedIconLocal(guildObj.icon, "w-10 h-10")}
+                  <div className="flex-1 flex flex-col gap-1.5 text-center sm:text-left w-full">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 w-full">
+                      <div>
+                        <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest leading-none">
+                          My Guild / Division Alignment
+                        </span>
+                        <h3 className="text-sm font-black text-slate-850 dark:text-slate-105 uppercase tracking-wide flex items-center justify-center sm:justify-start gap-1.5 mt-0.5">
+                          <span>{guildObj.name}</span>
+                        </h3>
                       </div>
-
-                      <div className="flex-1 flex flex-col gap-1.5 text-center sm:text-left w-full">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 w-full">
-                          <div>
-                            <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest leading-none">
-                              My Guild / Division Alignment
-                            </span>
-                            <h3 className="text-sm font-black text-slate-850 dark:text-slate-105 uppercase tracking-wide flex items-center justify-center sm:justify-start gap-1.5 mt-0.5">
-                              <span>{guildObj.name}</span>
-                            </h3>
-                          </div>
-                          <span className="px-2 py-0.5 bg-cyan-50 dark:bg-cyan-955/40 border border-cyan-200/55 dark:border-cyan-800 text-[10px] font-mono font-black rounded text-cyan-755 dark:text-cyan-400 self-center uppercase">
-                            Rank {subRankData.currentRank.rank}/{guildObj.ranks.length}
-                          </span>
-                        </div>
-
-                        <div className="mt-1">
-                          <h4 className="text-md font-extrabold text-indigo-650 dark:text-indigo-400 uppercase tracking-wide">
-                            🏆 {subRankData.currentRank.title}
-                          </h4>
-                          <p className="text-[11px] text-slate-505 dark:text-slate-450 italic font-medium leading-relaxed mt-1">
-                            "{subRankData.currentRank.explanation}"
-                          </p>
-                        </div>
-
-                        {/* Guild Progress bar */}
-                        <div className="mt-2.5">
-                          <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mb-1">
-                            <span>Division XP: <strong>{subRankData.points} XP</strong></span>
-                            {subRankData.nextRank ? (
-                              <span>Next Link: <strong>{subRankData.nextRank.title}</strong> in {subRankData.totalNeededForNext} XP</span>
-                            ) : (
-                              <span className="text-amber-500 animate-pulse font-bold">✨ SECRET ZENITH UNLOCKED</span>
-                            )}
-                          </div>
-                          <div className="w-full h-2 bg-slate-205 dark:bg-slate-900 rounded-full overflow-hidden relative">
-                            <div 
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                subRankData.rankIndex >= guildObj.ranks.length - 1 
-                                  ? 'bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500 animate-pulse' 
-                                  : 'bg-indigo-650'
-                              }`}
-                              style={{ width: `${subRankData.percentToNext}%` }}
-                            ></div>
-                          </div>
-                          <p className="text-[8.5px] font-mono text-slate-400 mt-1.5">
-                            💡 Guild XP: <strong>+5 XP</strong> per lab hour · <strong>+12 XP</strong> per journal writeup logged in {guildObj.codename}.
-                          </p>
-                        </div>
-                      </div>
+                      <span className="px-2 py-0.5 bg-cyan-50 dark:bg-cyan-955/40 border border-cyan-200/55 dark:border-cyan-800 text-[10px] font-mono font-black rounded text-cyan-755 dark:text-cyan-400 self-center uppercase">
+                        Rank {subRankData.currentRank.rank}/{guildObj.ranks.length}
+                      </span>
                     </div>
-                  );
-                })()}
+
+                    <div className="mt-1">
+                      <h4 className="text-md font-extrabold text-indigo-650 dark:text-indigo-400 uppercase tracking-wide">
+                        🏆 {subRankData.currentRank.title}
+                      </h4>
+                      <p className="text-[11px] text-slate-505 dark:text-slate-450 italic font-medium leading-relaxed mt-1">
+                        "{subRankData.currentRank.explanation}"
+                      </p>
+                    </div>
+
+                    {/* Guild Progress bar */}
+                    <div className="mt-2.5">
+                      <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mb-1">
+                        <span>Division XP: <strong>{subRankData.points} XP</strong></span>
+                        {subRankData.nextRank ? (
+                          <span>Next Link: <strong>{subRankData.nextRank.title}</strong> in {subRankData.totalNeededForNext} XP</span>
+                        ) : (
+                          <span className="text-amber-500 animate-pulse font-bold">✨ SECRET ZENITH UNLOCKED</span>
+                        )}
+                      </div>
+                      <div className="w-full h-2 bg-slate-205 dark:bg-slate-900 rounded-full overflow-hidden relative">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            subRankData.rankIndex >= guildObj.ranks.length - 1 
+                              ? 'bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500 animate-pulse' 
+                              : 'bg-indigo-650'
+                          }`}
+                          style={{ width: `${subRankData.percentToNext}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-[8.5px] font-mono text-slate-400 mt-1.5">
+                        💡 Guild XP: <strong>+5 XP</strong> per lab hour · <strong>+12 XP</strong> per journal writeup logged in {guildObj.codename}.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
-          )}
+          )})()}
 
           {/* SCREEN 1B: GUILD RANKS */}
           {gamificationTab === 'subteamRanks' && (

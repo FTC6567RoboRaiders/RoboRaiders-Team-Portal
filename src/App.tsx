@@ -4918,6 +4918,30 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 const results = computeUserGamification(inspectLeaderboardAccount, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
                 const { stats, badges } = results;
 
+                const isTargetMentor = inspectLeaderboardAccount.role === 'mentor_captain' || inspectLeaderboardAccount.role === 'mentor';
+                let targetGuildId: string = inspectLeaderboardAccount.primarySubteam;
+                if (isTargetMentor) {
+                  targetGuildId = 'Mentoring';
+                } else {
+                  if (targetGuildId === 'None' || targetGuildId === 'Mentor' || (targetGuildId as string) === 'Lead/Captain' || (targetGuildId as string) === 'Mentoring') {
+                    targetGuildId = 'Design/Build/Fabrication';
+                  }
+                }
+                const targetGuildHours = isTargetMentor ? stats.totalHours : (stats.subteamHours[targetGuildId] || 0);
+                const targetEmail = inspectLeaderboardAccount.schoolEmail.toLowerCase();
+                const targetGuildJournals = isTargetMentor 
+                  ? entries.filter(e => 
+                      e.author.toLowerCase().includes(targetEmail) || 
+                      e.author.toLowerCase().includes(inspectLeaderboardAccount.name.toLowerCase())
+                    ).length 
+                  : entries.filter(e => 
+                      (e.author.toLowerCase().includes(targetEmail) || 
+                       e.author.toLowerCase().includes(inspectLeaderboardAccount.name.toLowerCase())) &&
+                      e.subteam === targetGuildId
+                    ).length;
+
+                const targetSubRank = getSubteamStatsAndRank(targetGuildId, targetGuildHours, targetGuildJournals, inspectLeaderboardAccount.role);
+
                 return (
                   <motion.div
                     initial={{ opacity: 0 }}
@@ -4969,7 +4993,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                 {inspectLeaderboardAccount.primarySubteam}
                               </span>
                               <span className="bg-cyan-105 dark:bg-cyan-950 px-2 py-0.5 rounded text-cyan-800 dark:text-cyan-300 border border-cyan-200/55 dark:border-cyan-850">
-                                Level {stats.level} : {stats.levelName.substring(0, 15)}
+                                Rank {targetSubRank.currentRank.rank} : {targetSubRank.currentRank.title}
                               </span>
                             </div>
                           </div>
