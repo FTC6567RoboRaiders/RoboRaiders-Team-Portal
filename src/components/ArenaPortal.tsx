@@ -621,12 +621,13 @@ export default function ArenaPortal({
                             <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
                               {activeGuild.ranks.map((r, i) => {
                                 const isUnlocked = subStats.rankIndex >= i;
-                                const isSecretType = activeGuild.id !== 'Mentoring' && r.rank === 11;
+                                const isMentorUser = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+                                const isLockedAndSecret = !isUnlocked && !isMentorUser;
                                 
                                 // Handle masking for locked secret level
-                                const displayedTitle = (!isUnlocked && isSecretType) ? "??? [Classified Cryptic Tier]" : r.title;
-                                const displayedDesc = (!isUnlocked && isSecretType) 
-                                  ? "This legendary 11th rank holds custom classified properties. Amass 10000+ XP in this division to unlock the secret title and inspect this description!" 
+                                const displayedTitle = isLockedAndSecret ? `🔒 Rank Level ${r.rank} Locked` : r.title;
+                                const displayedDesc = isLockedAndSecret 
+                                  ? "This rank and its rewards are hidden. Log build hours, complete outreach, and submit team journal entries to gain promotion and reveal this career milestone!" 
                                   : r.explanation;
 
                                 // Points threshold for this rank
@@ -641,7 +642,7 @@ export default function ArenaPortal({
                                     className={`p-3 rounded-lg border transition-all flex items-start gap-4 hover:bg-white dark:hover:bg-slate-905/40 ${
                                       isUnlocked 
                                         ? 'bg-emerald-500/[0.02] border-emerald-500/25 dark:border-emerald-900/40 shadow-sm' 
-                                        : isSecretType 
+                                        : isLockedAndSecret 
                                           ? 'bg-amber-500/[0.01] border-dashed border-amber-300/30'
                                           : 'bg-transparent border-slate-200/50 dark:border-slate-800/40 opacity-75'
                                     }`}
@@ -650,7 +651,7 @@ export default function ArenaPortal({
                                     <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-mono font-black text-xs shrink-0 ${
                                       isUnlocked 
                                         ? 'bg-emerald-100 border-emerald-300 text-emerald-855 dark:bg-emerald-950 dark:border-emerald-905 dark:text-emerald-400' 
-                                        : isSecretType
+                                        : isLockedAndSecret
                                           ? 'bg-amber-100/40 border-amber-300 text-amber-700 dark:bg-amber-955/40 dark:border-amber-900 dark:text-amber-400'
                                           : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400'
                                     }`}>

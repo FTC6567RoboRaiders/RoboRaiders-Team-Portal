@@ -127,6 +127,23 @@ service cloud.firestore {
         && data.createdAt is number;
     }
 
+    function isValidLedgerTransaction(data) {
+      return data.keys().hasAll(['id', 'amount', 'type', 'category', 'account', 'fundingSource', 'paidBy', 'description', 'date', 'createdBy', 'createdByEmail', 'createdAt'])
+        && data.keys().size() == 12
+        && data.id is string
+        && data.amount is number
+        && data.type in ['income', 'expense']
+        && data.category in ['Parts & Hardware', 'Tools & Equipment', 'Travel & Lodging', 'Team Registration', 'Outreach & Marketing', 'Food & Catering', 'Other']
+        && data.account in ['Self-Raised Funds', 'School Allocated Budget']
+        && data.fundingSource in ['School Direct Payment', "Steve's Credit Card", 'Out-of-Pocket Reimbursement', 'Sponsor/Donation Check', 'Other']
+        && data.paidBy is string && data.paidBy.size() <= 200
+        && data.description is string && data.description.size() <= 2000
+        && data.date is string
+        && data.createdBy is string
+        && data.createdByEmail is string
+        && data.createdAt is number;
+    }
+
     // Collection Rules
     
     // 1. Users
@@ -203,6 +220,14 @@ service cloud.firestore {
       allow read: if isApprovedUser();
       allow create: if isMentorOrCaptain() && isValidXpAdjustment(request.resource.data);
       allow update: if isMentorOrCaptain() && isValidXpAdjustment(request.resource.data);
+      allow delete: if isMentorOrCaptain();
+    }
+
+    // 8. Ledger Transactions
+    match /ledgerTransactions/{transactionId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidLedgerTransaction(request.resource.data) && (request.resource.data.createdByEmail == request.auth.token.email || isMentorOrCaptain());
+      allow update: if isApprovedUser() && isValidLedgerTransaction(request.resource.data) && (resource.data.createdByEmail == request.auth.token.email || isMentorOrCaptain());
       allow delete: if isMentorOrCaptain();
     }
   }

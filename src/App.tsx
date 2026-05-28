@@ -46,9 +46,10 @@ import {
   Mail,
   Clock,
   Trophy,
-  Scroll
+  Scroll,
+  DollarSign
 } from 'lucide-react';
-import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment } from './types';
+import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction } from './types';
 import { compressAndResizeImage } from './utils/image';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { 
@@ -81,6 +82,7 @@ import { jsPDF } from 'jspdf';
 import { DEMO_ENTRIES, DEFAULT_TIME_ENTRIES } from './data/journalDemo';
 import StudentHandbook from './components/StudentHandbook';
 import TimePicker from './components/TimePicker';
+import GeneralLedger from './components/GeneralLedger';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -295,10 +297,84 @@ export const getGamifiedIcon = (iconName: string, sizeClass = "w-4 h-4") => {
   }
 };
 
+const DEFAULT_LEDGER_TRANSACTIONS: LedgerTransaction[] = [
+  {
+    id: "tx_1",
+    amount: 1500,
+    type: "income",
+    category: "Other",
+    account: "Self-Raised Funds",
+    fundingSource: "Sponsor/Donation Check",
+    paidBy: "Local Rotary Club Sponsor",
+    description: "Annual corporate STEM sponsorship grant check",
+    date: "2026-05-01",
+    createdBy: "Mentor Sarah",
+    createdByEmail: "mentor@school.edu",
+    createdAt: 1777610000000
+  },
+  {
+    id: "tx_2",
+    amount: 300,
+    type: "expense",
+    category: "Team Registration",
+    account: "School Allocated Budget",
+    fundingSource: "School Direct Payment",
+    paidBy: "School Administration",
+    description: "FIRST Tech Challenge team seasonal registration renewal",
+    date: "2026-05-05",
+    createdBy: "Mentor Sarah",
+    createdByEmail: "mentor@school.edu",
+    createdAt: 1777620000000
+  },
+  {
+    id: "tx_3",
+    amount: 450,
+    type: "expense",
+    category: "Parts & Hardware",
+    account: "School Allocated Budget",
+    fundingSource: "School Direct Payment",
+    paidBy: "School Administration",
+    description: "GoBILDA Strafer high-velocity chassis build kit",
+    date: "2026-05-10",
+    createdBy: "Captain Justin",
+    createdByEmail: "ftc6567@gmail.com",
+    createdAt: 1777630000000
+  },
+  {
+    id: "tx_4",
+    amount: 120,
+    type: "expense",
+    category: "Tools & Equipment",
+    account: "Self-Raised Funds",
+    fundingSource: "Steve's Credit Card",
+    paidBy: "Steve (Mentor)",
+    description: "Metric Allen wrench sets and high-leverage wire crimpers",
+    date: "2026-05-15",
+    createdBy: "Steve Cooper",
+    createdByEmail: "schen@school.edu",
+    createdAt: 1777640000000
+  },
+  {
+    id: "tx_5",
+    amount: 85,
+    type: "expense",
+    category: "Food & Catering",
+    account: "Self-Raised Funds",
+    fundingSource: "Out-of-Pocket Reimbursement",
+    paidBy: "Maria (Parent Vol)",
+    description: "Pizza and refreshments for robotics lab build sprint Saturday",
+    date: "2026-05-20",
+    createdBy: "Captain Justin",
+    createdByEmail: "ftc6567@gmail.com",
+    createdAt: 1777650000000
+  }
+];
+
 export default function App() {
   // --- STATE ---
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [formSubteam, setFormSubteam] = useState<Subteam>('Design/Build/Fabrication');
+  const [ledgerTransactions, setLedgerTransactions] = useState<LedgerTransaction[]>([]);
   
   // Real User Accounts state
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
@@ -379,7 +455,7 @@ export default function App() {
   });
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance'>('landing');
 
   // Outreach events state
   const [outreachEvents, setOutreachEvents] = useState<OutreachEvent[]>(() => {
@@ -552,6 +628,41 @@ export default function App() {
       await deleteDoc(doc(db, 'xpAdjustments', id));
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `xpAdjustments/${id}`);
+    }
+  };
+
+  const handleAddLedgerTransaction = async (txData: Omit<LedgerTransaction, 'id' | 'createdBy' | 'createdByEmail' | 'createdAt'>): Promise<boolean> => {
+    if (!currentUser) return false;
+    const newTx: LedgerTransaction = {
+      ...txData,
+      id: 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      createdBy: currentUser.name,
+      createdByEmail: currentUser.schoolEmail,
+      createdAt: Date.now()
+    };
+    
+    const updated = [newTx, ...ledgerTransactions];
+    setLedgerTransactions(updated);
+    
+    try {
+      await setDoc(doc(db, 'ledgerTransactions', newTx.id), newTx);
+      return true;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `ledgerTransactions/${newTx.id}`);
+      return false;
+    }
+  };
+
+  const handleDeleteLedgerTransaction = async (id: string): Promise<boolean> => {
+    const updated = ledgerTransactions.filter(tx => tx.id !== id);
+    setLedgerTransactions(updated);
+    
+    try {
+      await deleteDoc(doc(db, 'ledgerTransactions', id));
+      return true;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `ledgerTransactions/${id}`);
+      return false;
     }
   };
 
@@ -869,6 +980,26 @@ export default function App() {
                 handleFirestoreError(error, OperationType.GET, 'xpAdjustments');
               });
               unsubscribeAll.push(unsubXp);
+
+              const unsubLedger = onSnapshot(collection(db, 'ledgerTransactions'), (snapshot) => {
+                if (snapshot.empty) {
+                  const local = ledgerTransactionsRef.current.length > 0 ? ledgerTransactionsRef.current : DEFAULT_LEDGER_TRANSACTIONS;
+                  local.forEach(tx => {
+                    setDoc(doc(db, 'ledgerTransactions', tx.id), tx).catch(err => {
+                      handleFirestoreError(err, OperationType.WRITE, `ledgerTransactions/${tx.id}`);
+                    });
+                  });
+                } else {
+                  const list: LedgerTransaction[] = [];
+                  snapshot.forEach(d => {
+                    list.push(d.data() as LedgerTransaction);
+                  });
+                  setLedgerTransactions(list.sort((a,b) => b.createdAt - a.createdAt));
+                }
+              }, (error) => {
+                handleFirestoreError(error, OperationType.GET, 'ledgerTransactions');
+              });
+              unsubscribeAll.push(unsubLedger);
             }
           }
         } catch (err) {
@@ -999,6 +1130,7 @@ export default function App() {
     outreachEvents: true,
     xpAdjustments: true,
     dispatchedEmails: true,
+    ledgerTransactions: true,
     clearPendingUsers: true,
     resetStudents: false,
   });
@@ -1164,6 +1296,7 @@ export default function App() {
   const timeEntriesRef = useRef<TimeEntry[]>([]);
   const kanbanTasksRef = useRef<KanbanTask[]>([]);
   const outreachEventsRef = useRef<OutreachEvent[]>([]);
+  const ledgerTransactionsRef = useRef<LedgerTransaction[]>([]);
 
   useEffect(() => {
     entriesRef.current = entries;
@@ -1180,6 +1313,10 @@ export default function App() {
   useEffect(() => {
     outreachEventsRef.current = outreachEvents;
   }, [outreachEvents]);
+
+  useEffect(() => {
+    ledgerTransactionsRef.current = ledgerTransactions;
+  }, [ledgerTransactions]);
 
   // Compute discovered ranks per guild based on approved users to gamify the ladder discoveries
   const guildDiscoveries = React.useMemo(() => {
@@ -1755,7 +1892,8 @@ FTC Team #6567 IT Administration`
       kanbanTasks: kanbanTasks,
       outreachEvents: outreachEvents,
       xpAdjustments: xpAdjustments,
-      dispatchedEmails: dispatchedEmails
+      dispatchedEmails: dispatchedEmails,
+      ledgerTransactions: ledgerTransactions
     };
 
     const jsonStr = JSON.stringify(backupData, null, 2);
@@ -1843,6 +1981,13 @@ FTC Team #6567 IT Administration`
       if (transitionState.dispatchedEmails) {
         dispatchedEmails.forEach(item => {
           deletionsQueue.push({ colName: 'dispatchedEmails', docId: item.id });
+        });
+      }
+
+      // 6b. Ledger transactions
+      if (transitionState.ledgerTransactions) {
+        ledgerTransactions.forEach(item => {
+          deletionsQueue.push({ colName: 'ledgerTransactions', docId: item.id });
         });
       }
 
@@ -2871,10 +3016,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
     return true;
   });
 
-  const filteredIdsString = React.useMemo(() => {
-    return filteredEntries.map(e => e.id).join(',');
-  }, [filteredEntries]);
-
+  // Synchronously auto-clear selected entry if it gets filtered out of active query results
   useEffect(() => {
     if (selectedEntry) {
       const isVisible = filteredEntries.some(e => e.id === selectedEntry.id);
@@ -2882,7 +3024,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
         setSelectedEntry(null);
       }
     }
-  }, [filteredIdsString, selectedEntry?.id]);
+  }, [entries, filters, selectedEntry?.id]);
 
   const filteredTimeEntries = timeEntries.filter(t => {
     const matchesSearch = 
@@ -4249,7 +4391,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                             const discoverers = guildDiscoveries[activeGuild.id]?.[r.rank] || [];
                                             const isTeamDiscovered = discoverers.length > 0;
                                             const isMentorUser = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor';
-                                            const isSecret = !isUnlocked && !isTeamDiscovered && !isMentorUser;
+                                            const isSecret = !isUnlocked && !isMentorUser;
 
                                             // Points threshold for this rank
                                             const thresholds = activeGuild.id === 'Mentoring'
@@ -4260,8 +4402,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                             let displayedTitle = r.title;
                                             let displayedDesc = r.explanation;
                                             if (isSecret) {
-                                              displayedTitle = `??? [Undiscovered Link ${r.rank}]`;
-                                              displayedDesc = "This rank remains undiscovered. No member of the team has unlocked this rank level yet! Work hard in the lab and log high-fidelity journals to be the first to discover and claim this title!";
+                                              displayedTitle = `🔒 Rank Level ${r.rank} Locked`;
+                                              displayedDesc = "This rank and its rewards are hidden. Log build hours, complete outreach, and submit team journal entries to gain promotion and reveal this career milestone!";
                                             }
 
                                             return (
@@ -4959,6 +5101,46 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
             </div>
 
+            {/* CARD ledger: GENERAL LEDGER */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-emerald-500/30 group">
+              <div>
+                <div className="flex items-center gap-3.5 mb-4">
+                  <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
+                    <DollarSign className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                      General Ledger
+                    </h3>
+                    <p className="text-[10px] font-mono text-emerald-650 dark:text-emerald-400 uppercase tracking-widest mt-0.5">
+                      Budget &amp; Spend Tracker
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                  Track the team's balance sheets, raised funding vs. school allowances, and out-of-pocket reimbursements. Access real-time financial reporting breakdowns, expense pie charts, and funding sources.
+                </p>
+                
+                {/* Ledger Quick Stats */}
+                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
+                  <span className="text-slate-500">Logged Transactions:</span>
+                  <strong className="text-emerald-600 bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 rounded font-bold">
+                    {ledgerTransactions.length} items logged
+                  </strong>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setCurrentView('finance')}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
+                >
+                  <span>Open Ledger Panel</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
             {/* ONLY MENTORS/CAPTAINS CAN VIEW ROSTER MANAGEMENT & EMAIL COMMUNICATIONS */}
             {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
               <>
@@ -5092,6 +5274,18 @@ ${entry.planNextTime || '_No carry-over specified._'}
           )}
 
         </div>
+      )}
+
+      {/* GENERAL LEDGER VIEW */}
+      {currentView === 'finance' && (
+        <GeneralLedger
+          currentUser={currentUser}
+          transactions={ledgerTransactions}
+          onAddTransaction={handleAddLedgerTransaction}
+          onDeleteTransaction={handleDeleteLedgerTransaction}
+          onBack={() => setCurrentView('landing')}
+          showToast={showToast}
+        />
       )}
 
       {/* STUDENT TEAM HANDBOOK VIEW */}
@@ -5618,7 +5812,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           } no-print`}
           id="block-journal-form-panel"
         >
-          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-5 relative resize-y overflow-y-auto min-h-[400px]">
+          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-5 relative resize overflow-auto min-h-[400px] md:min-w-[400px]">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1">
               <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-widest flex items-center gap-2">
                 <Layers className="w-4 h-4 text-brand" />
@@ -5710,7 +5904,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Define objectives (e.g., Mount slide brackets, map sensors...)"
                     value={formPlanned}
                     onChange={(e) => setFormPlanned(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-y min-h-[80px] font-mono"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize min-h-[80px] font-mono"
                     required
                     id="input-planned"
                   />
@@ -5726,7 +5920,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Summarize results, mechanisms built/integrated, or autonomous tests passed..."
                     value={formAccomplished}
                     onChange={(e) => setFormAccomplished(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-y min-h-[80px] font-mono"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize min-h-[80px] font-mono"
                     required
                     id="input-accomplished"
                   />
@@ -5763,7 +5957,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           placeholder="Failure observed | Countermeasure/engineering correction applied"
                           value={paragraph}
                           onChange={(e) => handleUpdateProblemField(idx, e.target.value)}
-                          className="flex-1 bg-slate-50 dark:bg-slate-850 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand leading-normal resize-y min-h-[48px]"
+                          className="flex-1 bg-slate-50 dark:bg-slate-850 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand leading-normal resize min-h-[48px]"
                           id={`input-problem-${idx}`}
                         />
                         <button
@@ -5789,7 +5983,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Items to carry over and new objectives..."
                     value={formPlanNextTime}
                     onChange={(e) => setFormPlanNextTime(e.target.value)}
-                    className="w-full min-h-[100px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-y font-mono font-medium"
+                    className="w-full min-h-[100px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize font-mono font-medium"
                     id="input-next-time"
                   />
                 </div>
@@ -7804,6 +7998,21 @@ FTC #6567 Captains & Mentors`
                         <div className="flex flex-col">
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Simulated Outbox Emails</span>
                           <span className="text-[10px] text-slate-400">{dispatchedEmails.length} logged dispatches</span>
+                        </div>
+                      </label>
+
+                      {/* General Ledger Transactions */}
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={transitionState.ledgerTransactions}
+                          disabled={isProcessingTransition}
+                          onChange={(e) => setTransitionState({ ...transitionState, ledgerTransactions: e.target.checked })}
+                          className="mt-0.5 rounded text-red-656 focus:ring-red-500 h-3.5 w-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">General Ledger Logs</span>
+                          <span className="text-[10px] text-slate-400">{ledgerTransactions.length} items logged</span>
                         </div>
                       </label>
                     </div>

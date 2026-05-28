@@ -149,5 +149,20 @@ export interface XPAdjustment {
   createdAt: number;    // Date timestamp
 }
 
+export interface LedgerTransaction {
+  id: string;
+  amount: number;
+  type: 'income' | 'expense';
+  category: 'Parts & Hardware' | 'Tools & Equipment' | 'Travel & Lodging' | 'Team Registration' | 'Outreach & Marketing' | 'Food & Catering' | 'Other';
+  account: 'Self-Raised Funds' | 'School Allocated Budget';
+  fundingSource: 'School Direct Payment' | "Steve's Credit Card" | 'Out-of-Pocket Reimbursement' | 'Sponsor/Donation Check' | 'Other';
+  paidBy: string;
+  description: string;
+  date: string; // YYYY-MM-DD
+  createdBy: string;
+  createdByEmail: string;
+  createdAt: number;
+}
+
 
 

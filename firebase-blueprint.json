@@ -130,12 +130,36 @@
         "createdAt": { "type": "number" }
       },
       "required": ["id", "userId", "userName", "userEmail", "amount", "reason", "awardedBy", "awardedByEmail", "createdAt"]
+    },
+    "LedgerTransaction": {
+      "title": "Ledger Transaction",
+      "description": "A financial transaction tracking spending or budget allocations for the team.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "category": { "type": "string", "enum": ["Parts & Hardware", "Tools & Equipment", "Travel & Lodging", "Team Registration", "Outreach & Marketing", "Food & Catering", "Other"] },
+        "account": { "type": "string", "enum": ["Self-Raised Funds", "School Allocated Budget"] },
+        "fundingSource": { "type": "string", "enum": ["School Direct Payment", "Steve's Credit Card", "Out-of-Pocket Reimbursement", "Sponsor/Donation Check", "Other"] },
+        "paidBy": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "amount", "type", "category", "account", "fundingSource", "paidBy", "description", "date", "createdBy", "createdByEmail", "createdAt"]
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "UserAccount",
       "description": "User credentials, access requests, and configuration records."
+    },
+    "ledgerTransactions/{transactionId}": {
+      "schema": "LedgerTransaction",
+      "description": "Financial ledger of team expenditures and budget sources."
     },
     "journalEntries/{entryId}": {
       "schema": "JournalEntry",
