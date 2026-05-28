@@ -17,7 +17,9 @@ import {
   Heart,
   Upload,
   ArrowRight,
-  Info
+  Info,
+  Printer,
+  FileText
 } from 'lucide-react';
 import { OutreachEvent, OutreachImage, UserAccount } from '../types';
 import { compressAndResizeImage } from '../utils/image';
@@ -27,13 +29,15 @@ interface OutreachHubProps {
   accounts: UserAccount[];
   events: OutreachEvent[];
   onUpdateEvents: (newEvents: OutreachEvent[]) => void;
+  onPrintPDF?: (events: OutreachEvent[], subtitle: string) => void;
 }
 
 export default function OutreachHub({ 
   currentUser, 
   accounts, 
   events, 
-  onUpdateEvents 
+  onUpdateEvents,
+  onPrintPDF
 }: OutreachHubProps) {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,12 +53,18 @@ export default function OutreachHub({
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [customParticipant, setCustomParticipant] = useState('');
   const [eventImages, setEventImages] = useState<OutreachImage[]>([]);
+  const [reachedChildren, setReachedChildren] = useState<number>(0);
+  const [reachedAdults, setReachedAdults] = useState<number>(0);
 
   // Filtering states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMinHours, setFilterMinHours] = useState<string>('0');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
+
+  // Export states
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportScope, setExportScope] = useState<'all' | 'filtered'>('all');
 
   // UI state
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'danger' | 'info' } | null>(null);
@@ -90,6 +100,8 @@ export default function OutreachHub({
     setSelectedParticipants(currentUser ? [currentUser.name] : []);
     setEventImages([]);
     setCustomParticipant('');
+    setReachedChildren(0);
+    setReachedAdults(0);
     setIsModalOpen(true);
   };
 
@@ -105,6 +117,8 @@ export default function OutreachHub({
     setSelectedParticipants([...event.participants]);
     setEventImages([...event.images]);
     setCustomParticipant('');
+    setReachedChildren(event.reachedChildren !== undefined ? event.reachedChildren : 0);
+    setReachedAdults(event.reachedAdults !== undefined ? event.reachedAdults : 0);
     setIsModalOpen(true);
   };
 
@@ -221,7 +235,9 @@ export default function OutreachHub({
             participants: selectedParticipants,
             images: eventImages,
             updatedAt: Date.now(),
-            updatedBy: editorName
+            updatedBy: editorName,
+            reachedChildren: reachedChildren,
+            reachedAdults: reachedAdults
           };
         }
         return ev;
@@ -244,7 +260,9 @@ export default function OutreachHub({
         creatorEmail: editorEmail,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        updatedBy: editorName
+        updatedBy: editorName,
+        reachedChildren: reachedChildren,
+        reachedAdults: reachedAdults
       };
       onUpdateEvents([newEvent, ...events]);
       showToast(`Created Outreach Event: "${eventTitle.trim()}"`, 'success');
@@ -266,11 +284,21 @@ export default function OutreachHub({
   const totalEvents = events.length;
   const totalHours = events.reduce((sum, ev) => sum + ev.hoursLogged, 0);
   
-  // Approximate total outreach reach from metrics string
-  const totalReach = events.reduce((sum, ev) => {
+  // Computed children reach with fallback for old dataset records
+  const totalChildrenReached = events.reduce((sum, ev) => {
+    if (ev.reachedChildren !== undefined) {
+      return sum + ev.reachedChildren;
+    }
     const firstNum = parseInt(ev.impactMetrics.match(/\d+/)?.[0] || '0', 10);
     return sum + (isNaN(firstNum) ? 0 : firstNum);
   }, 0);
+
+  // Computed adults reach
+  const totalAdultsReached = events.reduce((sum, ev) => {
+    return sum + (ev.reachedAdults || 0);
+  }, 0);
+
+  const totalReach = totalChildrenReached + totalAdultsReached;
 
   // Compute top participants helper
   const getTopParticipants = () => {
@@ -333,6 +361,18 @@ export default function OutreachHub({
 
         <div className="flex flex-wrap items-center gap-2 self-start xl:self-center">
           <button
+            onClick={() => {
+              setExportScope('all');
+              setIsExportModalOpen(true);
+            }}
+            className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-extrabold text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5 cursor-pointer border border-slate-600"
+            title="Export Outreach events catalog to high-quality print PDF"
+          >
+            <Printer className="w-4 h-4 text-emerald-400" />
+            <span>Export PDF</span>
+          </button>
+
+          <button
             onClick={openCreateModal}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5 cursor-pointer border border-emerald-555"
           >
@@ -374,7 +414,10 @@ export default function OutreachHub({
           </div>
           <div>
             <span className="text-[10px] font-mono font-bold tracking-widest uppercase text-slate-400">Estimated Reach</span>
-            <p className="text-lg font-black font-display text-slate-800 dark:text-slate-100">{totalReach}+ students</p>
+            <p className="text-lg font-black font-display text-slate-800 dark:text-slate-100">{totalReach}+ people</p>
+            <p className="text-[10px] text-slate-450 dark:text-slate-405 font-semibold font-mono leading-tight mt-0.5">
+              👦 {totalChildrenReached} under 18 / 👨 {totalAdultsReached} 18+
+            </p>
           </div>
         </div>
 
@@ -570,6 +613,23 @@ export default function OutreachHub({
                       </div>
                     </div>
                   )}
+
+                  {/* Estimated Reach Breakdown */}
+                  {(ev.reachedChildren !== undefined || ev.reachedAdults !== undefined) && (
+                    <div className="mt-3 bg-blue-50/10 dark:bg-blue-950/10 border border-blue-105/20 dark:border-blue-900/20 p-2.5 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-550 dark:text-blue-400 shrink-0" />
+                        <span className="text-[9px] font-mono font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">
+                          Estimated Reach
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 flex gap-2">
+                        <span>👧 {ev.reachedChildren || 0} under 18</span>
+                        <span className="text-slate-300 dark:text-slate-700">|</span>
+                        <span>👨 {ev.reachedAdults || 0} 18+</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Participants checklist and Photos gallery */}
@@ -615,7 +675,7 @@ export default function OutreachHub({
 
               {/* Bottom control bar */}
               <div className="bg-slate-50 dark:bg-slate-950 px-5 py-3 border-t border-slate-100 dark:border-slate-850/50 flex justify-between items-center text-[9px] font-mono text-slate-400">
-                <span>Ref: {ev.updatedBy}</span>
+                <span>Author: {ev.updatedBy}</span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => openEditModal(ev)}
@@ -659,6 +719,133 @@ export default function OutreachHub({
             referrerPolicy="no-referrer"
             className="max-w-full max-h-[85vh] rounded-lg shadow-2xl object-contain animate-scale-up" 
           />
+        </div>
+      )}
+
+      {/* PDF EXPORT MODAL */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scale-up text-slate-800 dark:text-slate-105 p-0">
+            {/* Header */}
+            <div className="px-4 py-3.5 border-b border-slate-150 dark:border-slate-800 flex justify-between items-center bg-slate-900 text-white">
+              <div className="flex items-center gap-2">
+                <Printer className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-mono font-extrabold uppercase tracking-wider">
+                  Export Outreach PDF Report
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 flex flex-col gap-4">
+              <p className="text-xs leading-normal font-medium text-slate-650 dark:text-slate-400">
+                Compile documented workshops, demonstrative meetings, and robotics workshops into professional print-ready summary decks for binder submissions.
+              </p>
+
+              {/* Scope Selection */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  Export Scope
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExportScope('all')}
+                    className={`px-3 py-3 rounded-lg border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                      exportScope === 'all'
+                        ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-extrabold'
+                        : 'border-slate-200 dark:border-slate-805 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>All Events ({events.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExportScope('filtered')}
+                    disabled={filteredEvents.length === 0}
+                    className={`px-3 py-3 rounded-lg border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                      filteredEvents.length === 0 
+                        ? 'opacity-50 cursor-not-allowed border-slate-100 bg-slate-50 dark:border-slate-850 dark:bg-slate-950 text-slate-450'
+                        : exportScope === 'filtered'
+                        ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-extrabold'
+                        : 'border-slate-200 dark:border-slate-805 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <Search className="w-4 h-4" />
+                    <span>Filtered Set ({filteredEvents.length})</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Informative Stats Review */}
+              <div className="bg-slate-100 dark:bg-slate-850/50 p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-xs font-mono">
+                  <span className="text-slate-500 uppercase font-bold text-[9px] tracking-wider">Events Compiled:</span>
+                  <span className="font-extrabold text-slate-950 dark:text-slate-50">
+                    {exportScope === 'all' ? events.length : filteredEvents.length} Records
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs font-mono">
+                  <span className="text-slate-500 uppercase font-bold text-[9px] tracking-wider">Total Combined Hours:</span>
+                  <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+                    {(exportScope === 'all' ? events : filteredEvents).reduce((sum, ev) => sum + (ev.hoursLogged || 0), 0)} Hours
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs font-mono">
+                  <span className="text-slate-500 uppercase font-bold text-[9px] tracking-wider">Total Estimated Reach:</span>
+                  <span className="font-extrabold text-blue-600 dark:text-blue-400">
+                    {(() => {
+                      const targetSet = exportScope === 'all' ? events : filteredEvents;
+                      const kidsSum = targetSet.reduce((sum, ev) => {
+                        if (ev.reachedChildren !== undefined) return sum + ev.reachedChildren;
+                        const firstNum = parseInt(ev.impactMetrics.match(/\d+/)?.[0] || '0', 10);
+                        return sum + (isNaN(firstNum) ? 0 : firstNum);
+                      }, 0);
+                      const adultsSum = targetSet.reduce((sum, ev) => sum + (ev.reachedAdults || 0), 0);
+                      return `${kidsSum + adultsSum} (${kidsSum} under 18 / ${adultsSum} 18+)`;
+                    })()}
+                  </span>
+                </div>
+                <p className="text-[9px] text-slate-400 dark:text-slate-500 font-mono leading-normal mt-1 border-t border-slate-200 dark:border-slate-800 pt-1.5">
+                  🛡️ FTC PROTOCOL: Choose "Save as PDF" which isolates each outreach record cleanly on its own sheet. Includes registered hours, location, impact description, and uploaded imagery.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsExportModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetEvents = exportScope === 'all' ? events : filteredEvents;
+                    const subtitle = exportScope === 'all' ? 'All Documented Community Campaigns' : 'Filtered Field Campaigns Report';
+                    if (onPrintPDF) {
+                      onPrintPDF(targetEvents, subtitle);
+                    }
+                    setIsExportModalOpen(false);
+                  }}
+                  className="px-4 py-2 text-xs font-black uppercase bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md hover:shadow-emerald-500/10 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Generate PDF</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -760,16 +947,46 @@ export default function OutreachHub({
                 />
               </div>
 
+              {/* Estimated Reach Breakdown Inputs */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-550 uppercase tracking-widest">
+                    👧 Children Reached (under 18)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={reachedChildren}
+                    onChange={(e) => setReachedChildren(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    placeholder="0"
+                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-mono font-bold"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-550 uppercase tracking-widest">
+                    👨 Adults Reached (18+)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={reachedAdults}
+                    onChange={(e) => setReachedAdults(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    placeholder="0"
+                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-mono font-bold"
+                  />
+                </div>
+              </div>
+
               {/* Impact Metrics input */}
               <div className="flex flex-col gap-1">
                 <label className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-550 uppercase tracking-widest">
-                  Reach &amp; Quantized Impact Metrics
+                  Additional Notes / Quantized Impact Metrics:
                 </label>
                 <input
                   type="text"
                   value={eventImpactMetrics}
                   onChange={(e) => setEventImpactMetrics(e.target.value)}
-                  placeholder="e.g. 50 children reached, 2 local businesses signed sponsor packets"
+                  placeholder="e.g. 2 local businesses signed sponsor packets"
                   className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-bold"
                 />
               </div>

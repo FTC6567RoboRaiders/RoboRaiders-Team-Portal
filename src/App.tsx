@@ -117,6 +117,39 @@ export const formatSubteamLabel = (subteam: string | undefined): string => {
   return subteam;
 };
 
+export const canUserApproveEntry = (user: UserAccount | null, entry: JournalEntry | null): boolean => {
+  if (!user || !entry) return false;
+
+  // Make it so individuals cannot approve their own journal entries
+  const authorNorm = entry.author.toLowerCase().trim();
+  const userNameNorm = user.name.toLowerCase().trim();
+  const userEmailNorm = (user.schoolEmail || '').toLowerCase().trim();
+
+  const isAuthor = 
+    authorNorm === userNameNorm ||
+    authorNorm.includes(userNameNorm) ||
+    (userEmailNorm && authorNorm.includes(userEmailNorm));
+
+  if (isAuthor) return false;
+
+  // Captains and Mentors should be allowed to approve any journal entry regardless of subteam.
+  const isMentorOrCaptain = 
+    user.role === 'mentor' || 
+    user.role === 'mentor_captain' || 
+    user.role === 'captain' ||
+    user.primarySubteam === 'Lead/Captain' ||
+    user.primarySubteam === 'Mentor';
+
+  if (isMentorOrCaptain) return true;
+
+  // Otherwise, only members associated with that entry's subteam are eligible
+  const userSubteamPrimary = user.primarySubteam;
+  const userSubteamSecondary = user.secondarySubteam;
+  const entrySubteam = entry.subteam;
+
+  return userSubteamPrimary === entrySubteam || userSubteamSecondary === entrySubteam;
+};
+
 export const getSubteamColorTheme = (subteam: Subteam) => {
   const norm = (subteam as string) === 'Build' ? 'Design/Build/Fabrication' : subteam;
   switch (norm) {
@@ -1113,6 +1146,10 @@ export default function App() {
   const [selectedTimeExportSubteam, setSelectedTimeExportSubteam] = useState<Subteam | 'All'>('All');
   const [timeEntriesToPrint, setTimeEntriesToPrint] = useState<TimeEntry[] | null>(null);
 
+  // Outreach PDF Export States
+  const [outreachEventsToPrint, setOutreachEventsToPrint] = useState<OutreachEvent[] | null>(null);
+  const [outreachPrintSubtitle, setOutreachPrintSubtitle] = useState<string>('');
+
   // Gamification dashboard selectors
   const [gamificationTab, setGamificationTab] = useState<'profile' | 'badges' | 'quests' | 'leaderboard' | 'subteamRanks'>('profile');
   const [inspectLeaderboardAccount, setInspectLeaderboardAccount] = useState<UserAccount | null>(null);
@@ -1194,6 +1231,7 @@ export default function App() {
     const handleAfterPrint = () => {
       setEntriesToPrint(null);
       setTimeEntriesToPrint(null);
+      setOutreachEventsToPrint(null);
     };
     window.addEventListener('afterprint', handleAfterPrint);
     return () => {
@@ -1581,7 +1619,7 @@ FTC Team #6567 IT Administration`
 
   // Automated prompt trigger for accounts without custom passwords
   useEffect(() => {
-    if (currentUser && !currentUser.hasCustomPassword) {
+    if (currentUser && !currentUser.hasCustomPassword && auth.currentUser) {
       const timer = setTimeout(() => {
         setShowPasswordSetupPrompt(true);
       }, 1000);
@@ -1589,7 +1627,7 @@ FTC Team #6567 IT Administration`
     } else {
       setShowPasswordSetupPrompt(false);
     }
-  }, [currentUser]);
+  }, [currentUser, auth.currentUser]);
 
   const handleSetupCustomPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1608,10 +1646,24 @@ FTC Team #6567 IT Administration`
 
     setIsSettingUpPassword(true);
     try {
-      if (auth.currentUser) {
-        await updatePassword(auth.currentUser, setupCustomPassword.trim());
-      }
       if (currentUser) {
+        // 1. Silent re-authentication to refresh the user session and bypass Firebase's "requires-recent-login" restriction.
+        // Also logs the user in if the session was slow to load or not yet initialized in Auth SDK.
+        try {
+          const currentPassword = currentUser.hasCustomPassword 
+            ? currentUser.schoolId 
+            : currentUser.schoolId + "_ftc_auth";
+          await signInWithEmailAndPassword(auth, currentUser.schoolEmail, currentPassword);
+        } catch (reauthErr) {
+          console.warn("Silent re-authentication before password setup was bypassed or succeeded externally:", reauthErr);
+        }
+
+        // 2. Perform Firebase Auth password update
+        if (auth.currentUser) {
+          await updatePassword(auth.currentUser, setupCustomPassword.trim());
+        }
+
+        // 3. Save to database of the user document
         const updatedUser = {
           ...currentUser,
           schoolId: setupCustomPassword.trim(),
@@ -2387,6 +2439,23 @@ FTC #6567 Robotics Log System`
   const handleReviewAction = (nextStatus: 'Approved' | 'Needs Revision') => {
     if (!selectedEntry) return;
 
+    if (!canUserApproveEntry(currentUser, selectedEntry)) {
+      const authorNorm = selectedEntry.author.toLowerCase().trim();
+      const userNameNorm = (currentUser?.name || '').toLowerCase().trim();
+      const userEmailNorm = (currentUser?.schoolEmail || '').toLowerCase().trim();
+      const isSelfEntry = 
+        authorNorm === userNameNorm || 
+        authorNorm.includes(userNameNorm) || 
+        (userEmailNorm && authorNorm.includes(userEmailNorm));
+
+      if (isSelfEntry) {
+        showToast('ERROR: Self-approval is not permitted. You cannot approve or review your own journal entries.', 'danger');
+      } else {
+        showToast(`ERROR: You do not have approval privileges for the "${selectedEntry.subteam}" subteam. Only members associated with this subteam (or Captains and Mentors) can approve or review this entry.`, 'danger');
+      }
+      return;
+    }
+
     if (!reviewNoteInput.trim()) {
       showToast('ERROR: Please add an Action Statement / Appraisal Note before locking or returning this log.', 'danger');
       return;
@@ -2448,6 +2517,25 @@ FTC #6567 Captains & Mentors`
 
   const handleStatusDropdownChange = (nextStatus: 'Draft' | 'Pending Review' | 'Approved' | 'Needs Revision') => {
     if (!selectedEntry) return;
+
+    if (nextStatus === 'Approved' || nextStatus === 'Needs Revision') {
+      if (!canUserApproveEntry(currentUser, selectedEntry)) {
+        const authorNorm = selectedEntry.author.toLowerCase().trim();
+        const userNameNorm = (currentUser?.name || '').toLowerCase().trim();
+        const userEmailNorm = (currentUser?.schoolEmail || '').toLowerCase().trim();
+        const isSelfEntry = 
+          authorNorm === userNameNorm || 
+          authorNorm.includes(userNameNorm) || 
+          (userEmailNorm && authorNorm.includes(userEmailNorm));
+
+        if (isSelfEntry) {
+          showToast('ERROR: Self-approval is not permitted. You cannot approve or review your own journal entries.', 'danger');
+        } else {
+          showToast(`ERROR: You do not have approval privileges for the "${selectedEntry.subteam}" subteam. Only members associated with this subteam (or Captains and Mentors) can approve or review this entry.`, 'danger');
+        }
+        return;
+      }
+    }
 
     const stamp = Date.now();
     const updated = entries.map((entry) => {
@@ -2617,6 +2705,19 @@ FTC #6567 Captains & Mentors`
     setIsTimeExportModalOpen(false);
 
     // Delay printing slightly so the virtual DOM updates the batch element
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
+  const handlePrintOutreachPDF = (events: OutreachEvent[], subtitle: string) => {
+    if (events.length === 0) {
+      showToast('No matching outreach events found for the selected export criteria.', 'danger');
+      return;
+    }
+    const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
+    setOutreachEventsToPrint(sorted);
+    setOutreachPrintSubtitle(subtitle);
     setTimeout(() => {
       window.print();
     }, 150);
@@ -3083,7 +3184,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
             <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
               <span className="text-slate-400 uppercase tracking-wider text-[9px]">School ID (#)</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300 font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">{currentUser.schoolId}</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300 font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">••••••</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400 uppercase tracking-wider text-[9px]">Primary Subteam</span>
@@ -3287,7 +3388,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* DYNAMIC SYSTEM WORKFLOW INTELLIGENCE NOTIFICATIONS */}
       <AnimatePresence>
-        {userRole === 'reviewer' && entries.filter(e => e.status === 'Pending Review').length > 0 && (
+        {currentUser && entries.filter(e => e.status === 'Pending Review' && canUserApproveEntry(currentUser, e)).length > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -3297,7 +3398,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <div className="flex items-center gap-2">
               <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase font-mono">Pending Reviews</span>
               <span className="text-slate-700 dark:text-slate-300">
-                🔔 There are <strong>{entries.filter(e => e.status === 'Pending Review').length} entries</strong> awaiting your peer review. Filter by 'Pending Review' to inspect and process them.
+                🔔 There are <strong>{entries.filter(e => e.status === 'Pending Review' && canUserApproveEntry(currentUser, e)).length} entries</strong> awaiting your approval. Filter by 'Pending Review' to inspect and process them.
               </span>
             </div>
             <button 
@@ -3367,10 +3468,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 Welcome back, {currentUser?.name}!
               </h1>
               <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-1 items-center justify-center md:justify-start">
-                <span className="text-xs text-slate-400 font-mono">
-                  Identity: <strong className="text-slate-200">{currentUser?.schoolId}</strong>
-                </span>
-                <span className="text-slate-600">•</span>
                 <span className="text-xs text-slate-400 font-mono">
                   Primary Subteam: <strong className="text-slate-200">{formatSubteamLabel(currentUser?.primarySubteam)}</strong>
                 </span>
@@ -4796,6 +4893,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           accounts={accounts}
           events={outreachEvents}
           onUpdateEvents={saveOutreachEventsToLocalStorage}
+          onPrintPDF={handlePrintOutreachPDF}
         />
       )}
 
@@ -6165,8 +6263,34 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       >
                         <option value="Draft">✍️ Draft (Keeps log as an active working draft)</option>
                         <option value="Pending Review">⏳ Pending Review (Queue for coaching review)</option>
-                        <option value="Needs Revision">⚠️ Needs Revision (Flag for corrections, allow editing)</option>
-                        <option value="Approved">🔒 Approved (Seal log, locking it as complete)</option>
+                        <option value="Needs Revision" disabled={!canUserApproveEntry(currentUser, selectedEntry)}>
+                          ⚠️ Needs Revision (Flag for corrections, allow editing) {(() => {
+                            const authorNorm = selectedEntry.author.toLowerCase().trim();
+                            const userNameNorm = (currentUser?.name || '').toLowerCase().trim();
+                            const userEmailNorm = (currentUser?.schoolEmail || '').toLowerCase().trim();
+                            const isSelfEntry = 
+                              authorNorm === userNameNorm || 
+                              authorNorm.includes(userNameNorm) || 
+                              (userEmailNorm && authorNorm.includes(userEmailNorm));
+                            
+                            if (isSelfEntry) return ' [Self-Approval Restricted]';
+                            return !canUserApproveEntry(currentUser, selectedEntry) ? ' [Restricted]' : '';
+                          })()}
+                        </option>
+                        <option value="Approved" disabled={!canUserApproveEntry(currentUser, selectedEntry)}>
+                          🔒 Approved (Seal log, locking it as complete) {(() => {
+                            const authorNorm = selectedEntry.author.toLowerCase().trim();
+                            const userNameNorm = (currentUser?.name || '').toLowerCase().trim();
+                            const userEmailNorm = (currentUser?.schoolEmail || '').toLowerCase().trim();
+                            const isSelfEntry = 
+                              authorNorm === userNameNorm || 
+                              authorNorm.includes(userNameNorm) || 
+                              (userEmailNorm && authorNorm.includes(userEmailNorm));
+                            
+                            if (isSelfEntry) return ' [Self-Approval Restricted]';
+                            return !canUserApproveEntry(currentUser, selectedEntry) ? ' [Restricted]' : '';
+                          })()}
+                        </option>
                       </select>
                     </div>
 
@@ -6198,7 +6322,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     ) : (
                       /* ACTIVE ASSESSMENT PANEL (Renders if user role is privileged mentor, or if there is something input) */
                       <div className="flex flex-col gap-2">
-                        {userRole === 'reviewer' ? (
+                        {canUserApproveEntry(currentUser, selectedEntry) ? (
                           <>
                             <div className="flex flex-col gap-1">
                               <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider font-mono uppercase">
@@ -6235,7 +6359,20 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         ) : (
                           // General student user message
                           <div className="bg-slate-200/40 dark:bg-slate-850/40 border border-dashed border-slate-300 dark:border-slate-800 p-2.5 rounded text-[10px] text-center text-slate-500 dark:text-slate-450 font-mono font-bold leading-normal">
-                            🔒 FTC TEAM PROTOCOL: Entries are registered as Drafts. Designated review, appraisal, and final locking signature authority is exclusively assigned to Mentors & Captains.
+                            {(() => {
+                              const authorNorm = selectedEntry.author.toLowerCase().trim();
+                              const userNameNorm = (currentUser?.name || '').toLowerCase().trim();
+                              const userEmailNorm = (currentUser?.schoolEmail || '').toLowerCase().trim();
+                              const isSelfEntry = 
+                                authorNorm === userNameNorm || 
+                                authorNorm.includes(userNameNorm) || 
+                                (userEmailNorm && authorNorm.includes(userEmailNorm));
+                              
+                              if (isSelfEntry) {
+                                return `🔒 SELF-APPROVAL RESTRICTED: You are the author of this entry. Self-approval is not permitted under team integrity protocols. Another member of the "${selectedEntry.subteam}" subteam, or a Captain/Mentor, must review and approve this log.`;
+                              }
+                              return `🔒 SUBTEAM PROTOCOL: Only members associated with the "${selectedEntry.subteam}" subteam (or Captains and Mentors) are allowed to review or approve this entry.`;
+                            })()}
                           </div>
                         )}
                       </div>
@@ -6609,7 +6746,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             </div>
                              <div className="text-[11px] text-slate-700 dark:text-slate-350 font-mono mt-1 space-y-0.5">
                               <div>Email: <strong>{acc.schoolEmail}</strong></div>
-                              <div>ID/Lunch #: <strong className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">{acc.schoolId}</strong></div>
+                              <div>ID/Lunch #: <strong className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">••••••</strong></div>
                               <div>Primary: <strong>{formatSubteamLabel(acc.primarySubteam)}</strong> • Secondary: <strong>{acc.secondarySubteam}</strong></div>
                             </div>
                             <div className="mt-2 flex items-center gap-2">
@@ -6660,9 +6797,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
 Your access request to the FTC #6567 Workspace has been APPROVED by the Mentors/Captains.
 
-You can now log in using:
-• School Email: ${acc.schoolEmail}
-• School ID: ${acc.schoolId}
+You can now log in using your registered school email and the password (or school ID) you established during registration.
 
 Best of luck on the build season! Go RoboRaiders!
 
@@ -6775,9 +6910,7 @@ FTC #6567 Captains & Mentors`
 
 Your access request to the FTC #6567 Workspace has been APPROVED by the Mentors/Captains.
 
-You can now log in using:
-• School Email: ${acc.schoolEmail}
-• School ID: ${acc.schoolId}
+You can now log in using your registered school email and the password (or school ID) you established during registration.
 
 Best of luck on the build season! Go RoboRaiders!
 
@@ -7102,11 +7235,11 @@ FTC #6567 Captains & Mentors`
                       </label>
                     </div>
                     <input
-                      type="text"
+                      type="password"
                       disabled
                       placeholder="e.g. 558291"
                       value={settingsSchoolId}
-                      className="w-full bg-slate-100 border border-slate-250 dark:bg-slate-800 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-500 dark:text-slate-405 outline-none transition-all font-medium font-mono cursor-not-allowed"
+                      className="w-full bg-slate-100 border border-slate-250 dark:bg-slate-800 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-500 dark:text-slate-405 outline-none transition-all font-medium font-mono cursor-not-allowed animate-none"
                     />
                     <button
                       type="button"
@@ -8442,6 +8575,224 @@ FTC #6567 Captains & Mentors`
               </div>
             </div>
           )}
+
+        </div>
+      )}
+
+      {/* Dynamic Outreach Events Print Container - ONLY printed, completely invisible on screen, styles adjusted for print */}
+      {outreachEventsToPrint && outreachEventsToPrint.length > 0 && (
+        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
+          
+          {/* TITLE COVER PAGE */}
+          <div 
+            className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+            style={{ pageBreakAfter: 'always', minHeight: '240mm' }}
+          >
+            <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
+              <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
+                <span className="font-extrabold text-2xl tracking-tighter">RR</span>
+              </div>
+              <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
+                RoboRaiders Team Portal
+              </h1>
+              <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8">
+                Community Outreach & Impact Portfolio
+              </p>
+              
+              <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
+              
+              <p className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                FIRST Tech Challenge Team #6567
+              </p>
+              <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest mt-2">
+                {outreachPrintSubtitle}
+              </p>
+            </div>
+
+            <div className="mt-auto border-t-2 border-slate-950 pt-6">
+              <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700">
+                <div>
+                  <p><strong>DOCUMENT TYPE:</strong> Community Impact Portfolio</p>
+                  <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
+                </div>
+                <div className="text-right">
+                  <p><strong>CAMPAIGNS CLASSIFIED:</strong> {outreachEventsToPrint.length} Outreach Records</p>
+                  <p><strong>CUMULATIVE HOURS DEPLOYED:</strong> {outreachEventsToPrint.reduce((acc, c) => acc + (c.hoursLogged || 0), 0).toFixed(1)} hrs</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TABLE OF CONTENTS / SUMMARY LOG */}
+          <div 
+            className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+            style={{ pageBreakAfter: 'always', minHeight: '270mm' }}
+          >
+            <div className="border-b-4 border-slate-950 pb-4 mb-6">
+              <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
+                Summary Table of Events
+              </h2>
+              <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                FTC #6567 Community Engagement Index
+              </p>
+            </div>
+
+            <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
+              <thead>
+                <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100">
+                  <th className="py-2.5 px-2">Date</th>
+                  <th className="py-2.5 px-2">Campaign Initiative Title</th>
+                  <th className="py-2.5 px-2">Location Venue</th>
+                  <th className="py-2.5 px-2 text-right">Devoted Team Hours</th>
+                  <th className="py-2.5 px-2 text-right">Reps Tagged</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outreachEventsToPrint.map((ev, index) => (
+                  <tr key={ev.id} className="border-b border-slate-300">
+                    <td className="py-3 px-2 font-mono">{ev.date}</td>
+                    <td className="py-3 px-2 font-bold">
+                      <div>{ev.title}</div>
+                      {(ev.reachedChildren !== undefined || ev.reachedAdults !== undefined) && (
+                        <div className="text-[9px] text-slate-500 font-mono font-normal mt-0.5">
+                          Reach: {ev.reachedChildren || 0} children (under 18) / {ev.reachedAdults || 0} adults (18+)
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-2 text-slate-700">{ev.location}</td>
+                    <td className="py-3 px-2 text-right font-extrabold">{ev.hoursLogged} hrs</td>
+                    <td className="py-3 px-2 text-right font-mono text-slate-600">{ev.participants ? ev.participants.length : 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="mt-auto border-t border-slate-400 pt-6">
+              <div className="flex justify-between text-[11px] font-mono text-slate-600">
+                <span>FTC #6567 OUTREACH BINDER LEDGER INDEX SUMMARY</span>
+                <span>SIGNED VERIFIED BY CAPTAIN: _________________</span>
+              </div>
+            </div>
+          </div>
+
+          {/* INDIVIDUAL EVENT PROFILE SHEETS */}
+          {outreachEventsToPrint.map((ev) => {
+            return (
+              <div 
+                key={ev.id}
+                className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+                style={{ pageBreakAfter: 'always', minHeight: '270mm' }}
+              >
+                {/* Header card info */}
+                <div className="border-b-4 border-slate-950 pb-4 mb-6 flex justify-between items-start">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-mono font-black border border-slate-950 px-2.5 py-0.5 rounded bg-slate-100 uppercase tracking-wide">
+                      FTC Community Initiative Record
+                    </span>
+                    <h2 className="text-2xl font-extrabold uppercase font-display tracking-tight text-slate-950 mt-1">
+                      {ev.title}
+                    </h2>
+                  </div>
+                  <div className="text-right text-[10px] font-mono text-slate-705">
+                    <div><strong>DATE:</strong> {ev.date}</div>
+                    <div><strong>LOCATION:</strong> {ev.location}</div>
+                    <div><strong>HOURS DEVOTED:</strong> <span className="font-extrabold text-slate-950">{ev.hoursLogged} hrs</span></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6">
+                  {/* Campaign Impact Description */}
+                  <div className="bg-white border border-slate-300 p-4 rounded-xl">
+                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1">
+                      1. Workshop Objective & Community Experience Narrative
+                    </strong>
+                    <p className="text-slate-900 leading-relaxed text-[11.5px] font-medium whitespace-pre-wrap">
+                      {ev.description}
+                    </p>
+                  </div>
+
+                  {/* Impact & Alignment Metrics */}
+                  <div className="bg-white border border-slate-300 p-4 rounded-xl">
+                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1">
+                      2. Quantifiably Measured Impact & Target Demographics
+                    </strong>
+                    {(ev.reachedChildren !== undefined || ev.reachedAdults !== undefined) && (
+                      <div className="mb-3 text-[11px] font-mono text-slate-900 border-b border-slate-100 pb-2">
+                        <strong className="text-slate-505">DIRECT ESTIMATED REACH:</strong>
+                        <div className="flex gap-4 mt-1 font-extrabold">
+                          <span>👧 Children (under 18): <span className="text-slate-950 font-black">{ev.reachedChildren || 0}</span></span>
+                          <span>👨 Adults (18+): <span className="text-slate-950 font-black">{ev.reachedAdults || 0}</span></span>
+                        </div>
+                      </div>
+                    )}
+                    {ev.impactMetrics ? (
+                      <p className="text-slate-900 font-bold font-mono tracking-normal leading-relaxed text-xs whitespace-pre-wrap">
+                        {ev.impactMetrics}
+                      </p>
+                    ) : (
+                      <p className="text-slate-400 italic text-[11px] font-mono">No specific event metrics logged.</p>
+                    )}
+                  </div>
+
+                  {/* Tagged Active Participants */}
+                  <div className="bg-white border border-slate-300 p-4 rounded-xl">
+                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1">
+                      3. Registered Representing Team Members
+                    </strong>
+                    {ev.participants && ev.participants.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {ev.participants.map((name, idx) => (
+                          <span 
+                            key={idx} 
+                            className="bg-slate-100 border border-slate-300 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono"
+                          >
+                            👤 {name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 italic text-[11.2px] font-mono">No representatives registered for this event.</p>
+                    )}
+                  </div>
+
+                  {/* Attachment proofs */}
+                  {ev.images && ev.images.length > 0 && (
+                    <div className="space-y-2 mt-2">
+                      <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] font-black">
+                        4. Photographical Verification Attachment & Interactive Proofs
+                      </strong>
+                      <div className="grid grid-cols-2 gap-3.5">
+                        {ev.images.map((img) => (
+                          <div key={img.id} className="border border-slate-300 bg-white rounded-lg p-1.5 flex flex-col gap-1.5">
+                            <div className="aspect-[4/3] rounded-md overflow-hidden bg-slate-50 flex items-center justify-center border border-slate-250">
+                              <img 
+                                src={img.dataUrl} 
+                                alt={img.name} 
+                                className="max-h-full max-w-full object-contain pointer-events-none"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                            <div className="text-[9px] font-mono text-slate-500 px-1 truncate shrink-0">
+                              📁 {img.name} ({(img.size / 1024).toFixed(1)} KB)
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Proof sign off signature line */}
+                <div className="mt-auto pt-4 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2">
+                  <span>FTC #6567 OUTREACH BINDER INTEGRITY STAMP — VERIFIES LOCAL SYNCHED LEDGERS</span>
+                  <span className="shrink-0 font-bold border-b border-slate-950 w-64 text-right">
+                    VERIFIED BY MENTOR SIGNATURE: _________________
+                  </span>
+                </div>
+
+              </div>
+            );
+          })}
 
         </div>
       )}

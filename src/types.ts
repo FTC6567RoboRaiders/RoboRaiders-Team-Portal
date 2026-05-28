@@ -133,6 +133,8 @@ export interface OutreachEvent {
   createdAt: number;
   updatedAt: number;
   updatedBy: string;
+  reachedChildren?: number;
+  reachedAdults?: number;
 }
 
 export interface XPAdjustment {
