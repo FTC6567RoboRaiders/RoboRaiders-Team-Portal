@@ -332,14 +332,14 @@ export default function ArenaPortal({
                   <div className="relative mt-4 flex items-center justify-center">
                     <Award className="w-24 h-24 text-cyan-650 dark:text-cyan-400 group-hover:scale-110 transition-transform duration-300" />
                     <div className="absolute inset-0 flex items-center justify-center -translate-y-2.5 font-mono font-black text-2xl sm:text-3xl text-slate-900 dark:text-slate-50">
-                      {subRankData.currentRank.rank}
+                      {stats.level}
                     </div>
                   </div>
                   <h3 className="text-xs font-mono font-black uppercase text-slate-900 dark:text-slate-50 mt-4 tracking-wider">
-                    Level {subRankData.currentRank.rank}
+                    Level {stats.level}
                   </h3>
                   <h4 className="text-sm sm:text-[15px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider font-display leading-tight mt-1 animate-pulse px-3">
-                    {subRankData.currentRank.title}
+                    {stats.levelName}
                   </h4>
                   <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-2">
                     {stats.xp} Accumulated XP
