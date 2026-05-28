@@ -607,11 +607,11 @@ export const computeUserGamification = (
 
   const stats: UserStats = {
     xp: totalXp,
-    level: subStats.currentRank.rank,
-    levelName: subStats.currentRank.title,
-    xpIntoLevel: subXpIntoLevel,
-    xpForNextLevel: subXpForNextLevel <= 0 ? 100 : subXpForNextLevel,
-    percentToNextLevel: subStats.percentToNext,
+    level: levelInfo.level,
+    levelName: levelInfo.levelName,
+    xpIntoLevel: levelInfo.xpIntoLevel,
+    xpForNextLevel: levelInfo.xpForNextLevel,
+    percentToNextLevel: levelInfo.percentToNextLevel,
     badgesUnlocked: finalBadges.filter(b => b.unlocked).length,
     totalHours,
     totalJournals,
