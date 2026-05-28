@@ -150,9 +150,25 @@
         "createdAt": { "type": "number" }
       },
       "required": ["id", "amount", "type", "category", "account", "fundingSource", "paidBy", "description", "date", "createdBy", "createdByEmail", "createdAt"]
+    },
+    "SystemSetting": {
+      "title": "System Setting",
+      "description": "A global configuration or seeding state setting flag.",
+      "type": "object",
+      "properties": {
+        "journals_seeded": { "type": "boolean" },
+        "time_seeded": { "type": "boolean" },
+        "kanban_seeded": { "type": "boolean" },
+        "outreach_seeded": { "type": "boolean" },
+        "ledger_seeded": { "type": "boolean" }
+      }
     }
   },
   "firestore": {
+    "systemSettings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "Global settings for tracking if database collections have been initialized with demo data."
+    },
     "users/{userId}": {
       "schema": "UserAccount",
       "description": "User credentials, access requests, and configuration records."

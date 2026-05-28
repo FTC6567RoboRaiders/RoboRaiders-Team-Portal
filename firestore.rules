@@ -230,5 +230,12 @@ service cloud.firestore {
       allow update: if isApprovedUser() && isValidLedgerTransaction(request.resource.data) && (resource.data.createdByEmail == request.auth.token.email || isMentorOrCaptain());
       allow delete: if isMentorOrCaptain();
     }
+
+    // 9. System Settings
+    match /systemSettings/{settingId} {
+      allow read: if isSignedIn();
+      allow create, update: if isApprovedUser();
+      allow delete: if isMentorOrCaptain();
+    }
   }
 }
