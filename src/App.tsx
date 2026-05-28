@@ -297,78 +297,7 @@ export const getGamifiedIcon = (iconName: string, sizeClass = "w-4 h-4") => {
   }
 };
 
-const DEFAULT_LEDGER_TRANSACTIONS: LedgerTransaction[] = [
-  {
-    id: "tx_1",
-    amount: 1500,
-    type: "income",
-    category: "Other",
-    account: "Self-Raised Funds",
-    fundingSource: "Sponsor/Donation Check",
-    paidBy: "Local Rotary Club Sponsor",
-    description: "Annual corporate STEM sponsorship grant check",
-    date: "2026-05-01",
-    createdBy: "Mentor Sarah",
-    createdByEmail: "mentor@school.edu",
-    createdAt: 1777610000000
-  },
-  {
-    id: "tx_2",
-    amount: 300,
-    type: "expense",
-    category: "Team Registration",
-    account: "School Allocated Budget",
-    fundingSource: "School Direct Payment",
-    paidBy: "School Administration",
-    description: "FIRST Tech Challenge team seasonal registration renewal",
-    date: "2026-05-05",
-    createdBy: "Mentor Sarah",
-    createdByEmail: "mentor@school.edu",
-    createdAt: 1777620000000
-  },
-  {
-    id: "tx_3",
-    amount: 450,
-    type: "expense",
-    category: "Parts & Hardware",
-    account: "School Allocated Budget",
-    fundingSource: "School Direct Payment",
-    paidBy: "School Administration",
-    description: "GoBILDA Strafer high-velocity chassis build kit",
-    date: "2026-05-10",
-    createdBy: "Captain Justin",
-    createdByEmail: "ftc6567@gmail.com",
-    createdAt: 1777630000000
-  },
-  {
-    id: "tx_4",
-    amount: 120,
-    type: "expense",
-    category: "Tools & Equipment",
-    account: "Self-Raised Funds",
-    fundingSource: "Steve's Credit Card",
-    paidBy: "Steve (Mentor)",
-    description: "Metric Allen wrench sets and high-leverage wire crimpers",
-    date: "2026-05-15",
-    createdBy: "Steve Cooper",
-    createdByEmail: "schen@school.edu",
-    createdAt: 1777640000000
-  },
-  {
-    id: "tx_5",
-    amount: 85,
-    type: "expense",
-    category: "Food & Catering",
-    account: "Self-Raised Funds",
-    fundingSource: "Out-of-Pocket Reimbursement",
-    paidBy: "Maria (Parent Vol)",
-    description: "Pizza and refreshments for robotics lab build sprint Saturday",
-    date: "2026-05-20",
-    createdBy: "Captain Justin",
-    createdByEmail: "ftc6567@gmail.com",
-    createdAt: 1777650000000
-  }
-];
+const DEFAULT_LEDGER_TRANSACTIONS: LedgerTransaction[] = [];
 
 export default function App() {
   // --- STATE ---
@@ -1018,11 +947,15 @@ export default function App() {
                       const isSeeded = seedingConfigRef.current?.ledger_seeded || seedingConfigRef.current?.errorFallback;
                       if (!isSeeded) {
                         const local = ledgerTransactionsRef.current.length > 0 ? ledgerTransactionsRef.current : DEFAULT_LEDGER_TRANSACTIONS;
-                        local.forEach(tx => {
-                          setDoc(doc(db, 'ledgerTransactions', tx.id), tx).catch(err => {
-                            handleFirestoreError(err, OperationType.WRITE, `ledgerTransactions/${tx.id}`);
+                        if (local.length > 0) {
+                          local.forEach(tx => {
+                            setDoc(doc(db, 'ledgerTransactions', tx.id), tx).catch(err => {
+                              handleFirestoreError(err, OperationType.WRITE, `ledgerTransactions/${tx.id}`);
+                            });
                           });
-                        });
+                        } else {
+                          setLedgerTransactions([]);
+                        }
                         setDoc(doc(db, 'systemSettings', 'seeding'), { ledger_seeded: true }, { merge: true }).catch(() => {});
                       } else {
                         setLedgerTransactions([]);
@@ -1178,11 +1111,15 @@ export default function App() {
                       const isSeeded = seedingConfigRef.current?.ledger_seeded || seedingConfigRef.current?.errorFallback;
                       if (!isSeeded) {
                         const local = ledgerTransactionsRef.current.length > 0 ? ledgerTransactionsRef.current : DEFAULT_LEDGER_TRANSACTIONS;
-                        local.forEach(tx => {
-                          setDoc(doc(db, 'ledgerTransactions', tx.id), tx).catch(err => {
-                            handleFirestoreError(err, OperationType.WRITE, `ledgerTransactions/${tx.id}`);
+                        if (local.length > 0) {
+                          local.forEach(tx => {
+                            setDoc(doc(db, 'ledgerTransactions', tx.id), tx).catch(err => {
+                              handleFirestoreError(err, OperationType.WRITE, `ledgerTransactions/${tx.id}`);
+                            });
                           });
-                        });
+                        } else {
+                          setLedgerTransactions([]);
+                        }
                         setDoc(doc(db, 'systemSettings', 'seeding'), { ledger_seeded: true }, { merge: true }).catch(() => {});
                       } else {
                         setLedgerTransactions([]);
