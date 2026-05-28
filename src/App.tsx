@@ -1181,6 +1181,62 @@ export default function App() {
     outreachEventsRef.current = outreachEvents;
   }, [outreachEvents]);
 
+  // Compute discovered ranks per guild based on approved users to gamify the ladder discoveries
+  const guildDiscoveries = React.useMemo(() => {
+    const map: { 
+      [guildId: string]: { 
+        [rank: number]: Array<{ name: string; email: string; points: number }> 
+      } 
+    } = {};
+
+    SUBTEAM_GUILDS.forEach(g => {
+      map[g.id] = {};
+    });
+
+    // Process only approved accounts
+    const approvedAccounts = accounts.filter(a => a.status === 'Approved');
+
+    approvedAccounts.forEach(acc => {
+      const email = acc.schoolEmail.toLowerCase();
+      const isMentorUser = acc.role === 'mentor_captain' || acc.role === 'mentor';
+
+      SUBTEAM_GUILDS.forEach(g => {
+        const isM = g.id === 'Mentoring';
+        
+        // Mentors only count towards Mentoring guild, student members only count towards other guilds
+        const isLocked = isM ? !isMentorUser : isMentorUser;
+        if (isLocked) return;
+
+        // Calculate hours and journals for this user in this guild
+        const guildHours = isM 
+          ? timeEntries.filter(t => t.userEmail.toLowerCase() === email).reduce((sum, h) => sum + h.durationHours, 0)
+          : timeEntries.filter(t => t.userEmail.toLowerCase() === email && t.subteam === g.id).reduce((sum, h) => sum + h.durationHours, 0);
+
+        const guildJournals = isM
+          ? entries.filter(e => e.author.toLowerCase().includes(email) || e.author.toLowerCase().includes(acc.name.toLowerCase())).length
+          : entries.filter(e => (e.author.toLowerCase().includes(email) || e.author.toLowerCase().includes(acc.name.toLowerCase())) && e.subteam === g.id).length;
+
+        const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, acc.role);
+        
+        // Every rank from 1 up to subStats.currentRank.rank is achieved by this user
+        for (let r = 1; r <= subStats.currentRank.rank; r++) {
+          if (!map[g.id][r]) {
+            map[g.id][r] = [];
+          }
+          if (!map[g.id][r].some(item => item.email === email)) {
+            map[g.id][r].push({
+              name: acc.name,
+              email: email,
+              points: subStats.points
+            });
+          }
+        }
+      });
+    });
+
+    return map;
+  }, [accounts, timeEntries, entries]);
+
   // --- INITIALIZATION ---
   useEffect(() => {
     const stored = localStorage.getItem('ftc_journal_entries');
@@ -2815,6 +2871,19 @@ ${entry.planNextTime || '_No carry-over specified._'}
     return true;
   });
 
+  const filteredIdsString = React.useMemo(() => {
+    return filteredEntries.map(e => e.id).join(',');
+  }, [filteredEntries]);
+
+  useEffect(() => {
+    if (selectedEntry) {
+      const isVisible = filteredEntries.some(e => e.id === selectedEntry.id);
+      if (!isVisible) {
+        setSelectedEntry(null);
+      }
+    }
+  }, [filteredIdsString, selectedEntry?.id]);
+
   const filteredTimeEntries = timeEntries.filter(t => {
     const matchesSearch = 
       t.userName.toLowerCase().includes(timeSearch.toLowerCase()) || 
@@ -3990,7 +4059,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                       <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mb-1">
                                         <span>Division XP: <strong>{subRankData.points} XP</strong></span>
                                         {subRankData.nextRank ? (
-                                          <span>Next Link: <strong>{subRankData.nextRank.title}</strong> in {subRankData.totalNeededForNext} XP</span>
+                                          <span>Next Link: <strong>{(() => {
+                                            const nextRankNum = subRankData.currentRank.rank + 1;
+                                            const isNextDiscovered = guildDiscoveries[guildObj.id]?.[nextRankNum]?.length > 0;
+                                            const isMentorBypass = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+                                            return (isNextDiscovered || isMentorBypass) ? subRankData.nextRank.title : `??? [Level ${nextRankNum} Undiscovered]`;
+                                          })()}</strong> in {subRankData.totalNeededForNext} XP</span>
                                         ) : (
                                           <span className="text-amber-500 animate-pulse font-bold">✨ SECRET ZENITH UNLOCKED</span>
                                         )}
@@ -4172,13 +4246,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                         <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
                                           {activeGuild.ranks.map((r, i) => {
                                             const isUnlocked = subStats.rankIndex >= i;
-                                            const isSecretType = activeGuild.id !== 'Mentoring' && r.rank === 11;
-                                            
-                                            // Handle masking for locked secret level
-                                            const displayedTitle = (!isUnlocked && isSecretType) ? "??? [Classified Cryptic Tier]" : r.title;
-                                            const displayedDesc = (!isUnlocked && isSecretType) 
-                                              ? "This legendary 11th rank holds custom classified properties. Amass 10000+ XP in this division to unlock the secret title and inspect this description!" 
-                                              : r.explanation;
+                                            const discoverers = guildDiscoveries[activeGuild.id]?.[r.rank] || [];
+                                            const isTeamDiscovered = discoverers.length > 0;
+                                            const isMentorUser = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor';
+                                            const isSecret = !isUnlocked && !isTeamDiscovered && !isMentorUser;
 
                                             // Points threshold for this rank
                                             const thresholds = activeGuild.id === 'Mentoring'
@@ -4186,45 +4257,81 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                               : [0, 100, 300, 600, 1000, 1600, 2500, 3800, 5500, 7500, 10000];
                                             const reqPoints = thresholds[i] !== undefined ? thresholds[i] : 0;
 
+                                            let displayedTitle = r.title;
+                                            let displayedDesc = r.explanation;
+                                            if (isSecret) {
+                                              displayedTitle = `??? [Undiscovered Link ${r.rank}]`;
+                                              displayedDesc = "This rank remains undiscovered. No member of the team has unlocked this rank level yet! Work hard in the lab and log high-fidelity journals to be the first to discover and claim this title!";
+                                            }
+
                                             return (
                                               <div 
                                                 key={r.rank}
-                                                className={`p-3 rounded-lg border transition-all flex items-start gap-4 hover:bg-white dark:hover:bg-slate-900/40 ${
+                                                className={`p-3.5 rounded-lg border transition-all flex items-start gap-4 ${
                                                   isUnlocked 
-                                                    ? 'bg-emerald-500/[0.02] border-emerald-500/25 dark:border-emerald-900/40 shadow-sm' 
-                                                    : isSecretType 
-                                                      ? 'bg-amber-500/[0.01] border-dashed border-amber-300/30'
-                                                      : 'bg-transparent border-slate-200/50 dark:border-slate-800/40 opacity-75'
+                                                    ? 'bg-emerald-500/[0.02] border-emerald-500/25 dark:border-emerald-950/30' 
+                                                    : isTeamDiscovered
+                                                      ? 'bg-slate-50/70 border-slate-200 dark:bg-slate-900/15 dark:border-slate-800'
+                                                      : 'bg-transparent border-dashed border-slate-250 dark:border-slate-850 opacity-60'
                                                 }`}
                                               >
                                                 {/* Rank Badge Indicator */}
-                                                <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-mono font-black text-xs shrink-0 ${
+                                                <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-mono font-black text-xs shrink-0 select-none ${
                                                   isUnlocked 
                                                     ? 'bg-emerald-100 border-emerald-300 text-emerald-850 dark:bg-emerald-950 dark:border-emerald-905 dark:text-emerald-400' 
-                                                    : isSecretType
-                                                      ? 'bg-amber-100/40 border-amber-300 text-amber-700 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-400'
-                                                      : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400'
+                                                    : isTeamDiscovered
+                                                      ? 'bg-indigo-50 border-indigo-250 text-indigo-700 dark:bg-indigo-950/50 dark:border-indigo-900 dark:text-indigo-455'
+                                                      : 'bg-slate-100/40 border-slate-205 text-slate-400 dark:bg-slate-900/30 dark:border-slate-800 dark:text-slate-600'
                                                 }`}>
-                                                  {isUnlocked ? "✓" : r.rank}
+                                                  {isUnlocked ? "✓" : isSecret ? "❓" : r.rank}
                                                 </div>
 
                                                 <div className="flex-1 min-w-0">
-                                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                                                    <h3 className={`text-xs font-black uppercase tracking-wide truncate ${isUnlocked ? 'text-slate-850 dark:text-slate-100 font-extrabold' : 'text-slate-500 dark:text-slate-400'}`}>
-                                                      {isUnlocked ? "🏅 " : ""}{displayedTitle}
-                                                    </h3>
+                                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 w-full">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                      <h3 className={`text-xs font-black uppercase tracking-wide truncate ${isUnlocked ? 'text-slate-850 dark:text-slate-100 font-extrabold' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                        {isUnlocked ? "🏆 " : ""}{displayedTitle}
+                                                      </h3>
+                                                      {isUnlocked && (
+                                                        <span className="text-[8px] bg-emerald-105 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 font-mono font-black uppercase tracking-wider px-1.5 py-0.2 rounded leading-none border border-emerald-200 dark:border-emerald-900">
+                                                          Earned
+                                                        </span>
+                                                      )}
+                                                      {isTeamDiscovered && !isUnlocked && (
+                                                        <span className="text-[8px] bg-indigo-105 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-450 font-mono font-black uppercase tracking-wider px-1.5 py-0.2 rounded leading-none border border-indigo-200 dark:border-indigo-900">
+                                                          Discovered
+                                                        </span>
+                                                      )}
+                                                      {isSecret && (
+                                                        <span className="text-[8px] bg-slate-100 dark:bg-slate-800 text-slate-550 dark:text-slate-400 font-mono font-black uppercase tracking-wider px-1.5 py-0.2 rounded leading-none border border-slate-200 dark:border-slate-700">
+                                                          Classified
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                    
                                                     <span className={`text-[9px] font-mono px-1.5 py-0.2 select-none shrink-0 uppercase rounded-sm border ${
                                                       isUnlocked 
-                                                        ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-850 text-emerald-750 dark:text-emerald-400' 
-                                                        : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-500'
+                                                        ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-250 dark:border-emerald-900/40 text-emerald-750 dark:text-emerald-400' 
+                                                        : 'bg-slate-105 border-slate-205 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-500'
                                                     }`}>
                                                       Requires {reqPoints} XP
                                                     </span>
                                                   </div>
                                                   
-                                                  <p className={`text-[11px] mt-1 leading-normal italic ${isUnlocked ? 'text-slate-650 dark:text-slate-350 font-medium' : 'text-slate-400 dark:text-slate-500 font-normal'}`}>
+                                                  <p className={`text-[11px] mt-1.5 leading-normal italic ${isUnlocked ? 'text-slate-650 dark:text-slate-350 font-medium' : isSecret ? 'text-slate-450 dark:text-slate-500 font-light' : 'text-slate-400 dark:text-slate-500 font-normal'}`}>
                                                     "{displayedDesc}"
                                                   </p>
+
+                                                  {discoverers.length > 0 && (
+                                                    <div className="mt-2 text-[9px] font-mono flex items-center gap-1.5 flex-wrap">
+                                                      <span className={isUnlocked ? 'text-emerald-700 dark:text-emerald-450' : 'text-indigo-600 dark:text-indigo-400'}>
+                                                        {isUnlocked ? '👥 Achieved by:' : '✨ Discovered by:'}
+                                                      </span>
+                                                      <span className={`font-bold uppercase tracking-wider ${isUnlocked ? 'text-emerald-800 dark:text-emerald-300' : 'text-indigo-700 dark:text-indigo-300'}`}>
+                                                        {discoverers.map(d => d.name).join(', ')}
+                                                      </span>
+                                                    </div>
+                                                  )}
                                                 </div>
                                               </div>
                                             );
@@ -5812,7 +5919,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <div className="flex items-center gap-1 px-1 mb-2 border-b border-slate-100 dark:border-slate-800 pb-1 shrink-0">
               <Search className="w-3.5 h-3.5 text-slate-400" />
               <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                Search &amp; Filter Engineering Logs
+                Search &amp; Filter Team Journal
               </span>
             </div>
             
