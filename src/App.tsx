@@ -857,16 +857,7 @@ export default function App() {
               });
               unsubscribeAll.push(unsubOutreach);
 
-              const unsubEmails = onSnapshot(collection(db, 'dispatchedEmails'), (snapshot) => {
-                const list: DispatchedEmail[] = [];
-                snapshot.forEach(d => {
-                  list.push(d.data() as DispatchedEmail);
-                });
-                setDispatchedEmails(list.sort((a,b) => b.timestamp - a.timestamp));
-              }, (error) => {
-                handleFirestoreError(error, OperationType.GET, 'dispatchedEmails');
-              });
-              unsubscribeAll.push(unsubEmails);
+              // Public dispatched emails listener is now handled globally at top-level so it works for unauthenticated users as well.
 
               const unsubXp = onSnapshot(collection(db, 'xpAdjustments'), (snapshot) => {
                 const list: XPAdjustment[] = [];
@@ -1038,8 +1029,19 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('ftc_dispatched_emails', JSON.stringify(dispatchedEmails));
-  }, [dispatchedEmails]);
+    const unsub = onSnapshot(collection(db, 'dispatchedEmails'), (snapshot) => {
+      const list: DispatchedEmail[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as DispatchedEmail);
+      });
+      const sorted = list.sort((a,b) => b.timestamp - a.timestamp);
+      setDispatchedEmails(sorted);
+      localStorage.setItem('ftc_dispatched_emails', JSON.stringify(sorted));
+    }, (error) => {
+      console.error("Global dispatchedEmails subscription error:", error);
+    });
+    return () => unsub();
+  }, []);
 
   const sendEmailNotification = (to: string, subject: string, body: string) => {
     const newEmail: DispatchedEmail = {
@@ -3134,6 +3136,60 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
 
         </div>
+
+        {/* Simulated System Mail Logs at the bottom of login screens */}
+        <div className="w-full max-w-md mt-6 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 shadow-xl flex flex-col">
+          <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-800 pb-2">
+            <h3 className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-1.5 leading-none">
+              <Mail className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span>Simulated Outbox Logs ({dispatchedEmails.length})</span>
+            </h3>
+            {dispatchedEmails.length > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const emailDocs = dispatchedEmails.map(e => deleteDoc(doc(db, 'dispatchedEmails', e.id)));
+                    await Promise.all(emailDocs);
+                    setDispatchedEmails([]);
+                    showToast('Purged entire public simulated email database.', 'success');
+                  } catch (err: any) {
+                    showToast(`Clear failed: ${err.message}`, 'danger');
+                  }
+                }}
+                className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+              >
+                Clear Outbox
+              </button>
+            )}
+          </div>
+
+          {dispatchedEmails.length === 0 ? (
+            <div className="bg-slate-50 dark:bg-slate-850/50 border border-slate-200/60 dark:border-slate-800/40 rounded p-4 text-center text-slate-450 dark:text-slate-450 font-mono text-[10px] leading-relaxed">
+              📬 Outgoing team notifications will log here in real-time (e.g. registration request alerts or password reset verification codes).
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1">
+              {dispatchedEmails.map((email) => (
+                <div 
+                  key={email.id}
+                  className="bg-slate-950 text-slate-250 border border-slate-800/80 rounded p-3 text-[10px] font-mono leading-relaxed"
+                >
+                  <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400">
+                    <div className="flex justify-between items-center text-[9px]">
+                      <div><span className="text-purple-405 font-bold">FROM:</span> {email.from}</div>
+                      <span>{new Date(email.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div><span className="text-emerald-405 font-bold">TO:</span> <strong className="text-emerald-350">{email.to}</strong></div>
+                    <div className="text-slate-100 font-bold mt-1 text-[10.5px] border-l-2 border-brand pl-1.5 select-all">{email.subject}</div>
+                  </div>
+                  <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 select-all">{email.body}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     );
   }
@@ -3218,6 +3274,60 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </p>
           </div>
         </div>
+
+        {/* Simulated System Mail Logs at the bottom of pending screen */}
+        <div className="w-full max-w-md mt-6 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 shadow-xl flex flex-col">
+          <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-800 pb-2">
+            <h3 className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-1.5 leading-none">
+              <Mail className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span>Simulated Outbox Logs ({dispatchedEmails.length})</span>
+            </h3>
+            {dispatchedEmails.length > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const emailDocs = dispatchedEmails.map(e => deleteDoc(doc(db, 'dispatchedEmails', e.id)));
+                    await Promise.all(emailDocs);
+                    setDispatchedEmails([]);
+                    showToast('Purged entire public simulated email database.', 'success');
+                  } catch (err: any) {
+                    showToast(`Clear failed: ${err.message}`, 'danger');
+                  }
+                }}
+                className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-705 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+              >
+                Clear Outbox
+              </button>
+            )}
+          </div>
+
+          {dispatchedEmails.length === 0 ? (
+            <div className="bg-slate-50 dark:bg-slate-850/50 border border-slate-200/60 dark:border-slate-800/40 rounded p-4 text-center text-slate-450 dark:text-slate-450 font-mono text-[10px] leading-relaxed">
+              📬 Outgoing team notifications will log here in real-time (e.g. registration request alerts or password reset verification codes).
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1">
+              {dispatchedEmails.map((email) => (
+                <div 
+                  key={email.id}
+                  className="bg-slate-950 text-slate-250 border border-slate-800/80 rounded p-3 text-[10px] font-mono leading-relaxed"
+                >
+                  <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400">
+                    <div className="flex justify-between items-center text-[9px]">
+                      <div><span className="text-purple-405 font-bold">FROM:</span> {email.from}</div>
+                      <span>{new Date(email.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div><span className="text-emerald-405 font-bold">TO:</span> <strong className="text-emerald-350">{email.to}</strong></div>
+                    <div className="text-slate-100 font-bold mt-1 text-[10.5px] border-l-2 border-brand pl-1.5 select-all">{email.subject}</div>
+                  </div>
+                  <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 select-all">{email.body}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     );
   }

@@ -192,8 +192,8 @@ service cloud.firestore {
 
     // 6. Dispatched Emails
     match /dispatchedEmails/{emailId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidEmail(request.resource.data);
+      allow read: if true;
+      allow create: if isValidEmail(request.resource.data);
       allow update: if isApprovedUser() && isValidEmail(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
