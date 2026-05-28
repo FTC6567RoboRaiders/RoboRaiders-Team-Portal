@@ -5618,7 +5618,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           } no-print`}
           id="block-journal-form-panel"
         >
-          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-5 relative">
+          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-5 relative resize-y overflow-y-auto min-h-[400px]">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1">
               <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-widest flex items-center gap-2">
                 <Layers className="w-4 h-4 text-brand" />
@@ -5710,7 +5710,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Define objectives (e.g., Mount slide brackets, map sensors...)"
                     value={formPlanned}
                     onChange={(e) => setFormPlanned(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-y min-h-[80px] font-mono"
                     required
                     id="input-planned"
                   />
@@ -5726,7 +5726,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Summarize results, mechanisms built/integrated, or autonomous tests passed..."
                     value={formAccomplished}
                     onChange={(e) => setFormAccomplished(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-y min-h-[80px] font-mono"
                     required
                     id="input-accomplished"
                   />
@@ -5763,7 +5763,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           placeholder="Failure observed | Countermeasure/engineering correction applied"
                           value={paragraph}
                           onChange={(e) => handleUpdateProblemField(idx, e.target.value)}
-                          className="flex-1 bg-slate-50 dark:bg-slate-850 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand leading-normal resize-none"
+                          className="flex-1 bg-slate-50 dark:bg-slate-850 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand leading-normal resize-y min-h-[48px]"
                           id={`input-problem-${idx}`}
                         />
                         <button
@@ -5789,7 +5789,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Items to carry over and new objectives..."
                     value={formPlanNextTime}
                     onChange={(e) => setFormPlanNextTime(e.target.value)}
-                    className="w-full h-[calc(100%-20px)] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-none font-mono font-medium"
+                    className="w-full min-h-[100px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize-y font-mono font-medium"
                     id="input-next-time"
                   />
                 </div>
