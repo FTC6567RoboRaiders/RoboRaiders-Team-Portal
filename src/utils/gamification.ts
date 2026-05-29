@@ -593,7 +593,7 @@ export const computeUserGamification = (
   const guildHours = isMentorUser ? totalHours : (subteamHours[userSubteam] || 0);
   const guildJournals = isMentorUser ? userJournals.length : userJournals.filter(e => e.subteam === userSubteam).length;
   
-  const subStats = getSubteamStatsAndRank(userSubteam, guildHours, guildJournals, user.role);
+  const subStats = getSubteamStatsAndRank(userSubteam, guildHours, guildJournals, user.role, totalXp);
 
   const subteamThresholds = userSubteam === 'Mentoring'
     ? [0, 100, 300, 600, 1000, 1600, 2500, 3800, 5500, 7500, 10000, 11000, 12100, 13300, 14600, 16000, 17500, 19100, 20800, 22600, 24500, 26500, 28600, 30800, 33200]

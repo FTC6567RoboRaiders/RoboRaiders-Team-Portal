@@ -411,7 +411,8 @@ export const getSubteamStatsAndRank = (
   subteam: string,
   hours: number,
   journalsCount: number,
-  userRole?: string
+  userRole?: string,
+  overallXp?: number
 ): {
   points: number;
   rankIndex: number; // 0 to 24
@@ -420,7 +421,9 @@ export const getSubteamStatsAndRank = (
   percentToNext: number;
   totalNeededForNext: number;
 } => {
-  let points = Math.round(hours * 5 + journalsCount * 12);
+  let points = overallXp !== undefined && overallXp !== null
+    ? overallXp
+    : Math.round(hours * 5 + journalsCount * 12);
 
   const isMentor = userRole === 'mentor_captain' || userRole === 'mentor';
   if (subteam === 'Mentoring') {

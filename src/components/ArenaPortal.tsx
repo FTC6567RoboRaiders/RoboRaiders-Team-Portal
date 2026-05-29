@@ -312,7 +312,7 @@ export default function ArenaPortal({
                   e.subteam === userGuildId
                 ).length;
 
-            const subRankData = getSubteamStatsAndRank(userGuildId, guildHours, guildJournals, currentUser.role);
+            const subRankData = getSubteamStatsAndRank(userGuildId, guildHours, guildJournals, currentUser.role, stats.xp);
             const guildObj = SUBTEAM_GUILDS.find(g => g.id === userGuildId) || SUBTEAM_GUILDS[0];
 
             return (
@@ -511,7 +511,7 @@ export default function ArenaPortal({
                               e.subteam === g.id
                             ).length;
                         
-                        const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, currentUser.role);
+                        const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, currentUser.role, stats.xp);
                         
                         let activeColor = "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-350";
                         if (isActive) {
@@ -572,7 +572,7 @@ export default function ArenaPortal({
                             e.subteam === activeGuild.id
                           ).length;
                       
-                      const subStats = getSubteamStatsAndRank(activeGuild.id, guildHours, guildJournals, currentUser.role);
+                      const subStats = getSubteamStatsAndRank(activeGuild.id, guildHours, guildJournals, currentUser.role, stats.xp);
                       const isLocked = activeGuild.id === 'Mentoring' ? !isMentorUser : isMentorUser;
                       
                       return (

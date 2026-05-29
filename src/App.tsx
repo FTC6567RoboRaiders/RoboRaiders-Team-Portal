@@ -57,7 +57,8 @@ import {
   createUserWithEmailAndPassword, 
   onAuthStateChanged, 
   signOut,
-  updatePassword
+  updatePassword,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
   collection, 
@@ -1326,6 +1327,18 @@ export default function App() {
     setDoc(doc(db, 'dispatchedEmails', newEmail.id), newEmail).catch(err => {
       handleFirestoreError(err, OperationType.WRITE, `dispatchedEmails/${newEmail.id}`);
     });
+
+    // Path A: Robust, automatic delivery trigger via device mail client
+    try {
+      const mailtoUrl = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      showToast('Opening native mail client to dispatch pre-filled notification...', 'info');
+      // Set short timeout to let current synchronous dispatch flow/render complete first
+      setTimeout(() => {
+        window.location.href = mailtoUrl;
+      }, 500);
+    } catch (mailErr) {
+      console.warn("Could not auto-trigger local mail client:", mailErr);
+    }
   };
 
   // Create New Author profile modal state
@@ -1496,7 +1509,8 @@ export default function App() {
           ? entries.filter(e => e.author.toLowerCase().includes(email) || e.author.toLowerCase().includes(acc.name.toLowerCase())).length
           : entries.filter(e => (e.author.toLowerCase().includes(email) || e.author.toLowerCase().includes(acc.name.toLowerCase())) && e.subteam === g.id).length;
 
-        const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, acc.role);
+        const userGamified = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+        const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, acc.role, userGamified.stats.xp);
         
         // Every rank from 1 up to subStats.currentRank.rank is achieved by this user
         for (let r = 1; r <= subStats.currentRank.rank; r++) {
@@ -1515,7 +1529,7 @@ export default function App() {
     });
 
     return map;
-  }, [accounts, timeEntries, entries]);
+  }, [accounts, timeEntries, entries, kanbanTasks, outreachEvents, xpAdjustments]);
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -1835,7 +1849,7 @@ FTC #6567 Robotics Log System`
     }
   };
 
-  const handleRequestReset = (targetEmail: string) => {
+  const handleRequestReset = async (targetEmail: string) => {
     const acc = accounts.find(a => a.schoolEmail.toLowerCase() === targetEmail.trim().toLowerCase());
     if (!acc) {
       showToast('No record matches this school email address in our directory.', 'danger');
@@ -1869,6 +1883,14 @@ Note: If you did not initiate this system action, you can safely continue loggin
 Kind regards,
 FTC Team #6567 IT Administration`
     );
+
+    // Trigger REAL Firebase Password Reset Email delivery!
+    try {
+      await sendPasswordResetEmail(auth, acc.schoolEmail);
+      showToast('Real password reset email dispatched via Firebase!', 'success');
+    } catch (fbErr: any) {
+      console.warn("Firebase email dispatch warning/notice:", fbErr);
+    }
 
     setAuthMode('forgot_password');
     showToast('Success! A 6-digit security reset code was sent to your school email!', 'success');
@@ -3527,7 +3549,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               {dispatchedEmails.map((email) => (
                 <div 
                   key={email.id}
-                  className="bg-slate-950 text-slate-250 border border-slate-800/80 rounded p-3 text-[10px] font-mono leading-relaxed"
+                  className="bg-slate-950 text-slate-250 border border-slate-800/80 rounded p-3 text-[10px] font-mono leading-relaxed pb-2.5"
                 >
                   <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400">
                     <div className="flex justify-between items-center text-[9px]">
@@ -3537,7 +3559,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <div><span className="text-emerald-405 font-bold">TO:</span> <strong className="text-emerald-350">{email.to}</strong></div>
                     <div className="text-slate-100 font-bold mt-1 text-[10.5px] border-l-2 border-brand pl-1.5 select-all">{email.subject}</div>
                   </div>
-                  <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 select-all">{email.body}</div>
+                  <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 select-all mb-2.5">{email.body}</div>
+                  <button
+                    onClick={() => {
+                      window.open(`mailto:${email.to}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`);
+                    }}
+                    className="w-full bg-brand/10 hover:bg-brand/20 text-brand-hover dark:text-emerald-350 border border-brand/25 dark:border-emerald-500/25 rounded py-1 px-2 text-[9px] font-bold tracking-wider uppercase flex items-center justify-center gap-1 cursor-pointer transition-all"
+                  >
+                    <Send className="w-2.5 h-2.5" />
+                    <span>Send Real Email via Mail Client</span>
+                  </button>
                 </div>
               ))}
             </div>
@@ -3665,7 +3696,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               {dispatchedEmails.map((email) => (
                 <div 
                   key={email.id}
-                  className="bg-slate-950 text-slate-250 border border-slate-800/80 rounded p-3 text-[10px] font-mono leading-relaxed"
+                  className="bg-slate-950 text-slate-250 border border-slate-800/80 rounded p-3 text-[10px] font-mono leading-relaxed pb-2.5"
                 >
                   <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400">
                     <div className="flex justify-between items-center text-[9px]">
@@ -3675,7 +3706,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <div><span className="text-emerald-405 font-bold">TO:</span> <strong className="text-emerald-350">{email.to}</strong></div>
                     <div className="text-slate-100 font-bold mt-1 text-[10.5px] border-l-2 border-brand pl-1.5 select-all">{email.subject}</div>
                   </div>
-                  <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 select-all">{email.body}</div>
+                  <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 select-all mb-2.5">{email.body}</div>
+                  <button
+                    onClick={() => {
+                      window.open(`mailto:${email.to}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`);
+                    }}
+                    className="w-full bg-brand/10 hover:bg-brand/20 text-brand-hover dark:text-emerald-350 border border-brand/25 dark:border-emerald-500/25 rounded py-1 px-2 text-[9px] font-bold tracking-wider uppercase flex items-center justify-center gap-1 cursor-pointer transition-all"
+                  >
+                    <Send className="w-2.5 h-2.5" />
+                    <span>Send Real Email via Mail Client</span>
+                  </button>
                 </div>
               ))}
             </div>
@@ -4303,7 +4343,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     e.subteam === userGuildId
                                   ).length;
 
-                              const subRankData = getSubteamStatsAndRank(userGuildId, guildHours, guildJournals, currentUser.role);
+                              const subRankData = getSubteamStatsAndRank(userGuildId, guildHours, guildJournals, currentUser.role, stats.xp);
                               const guildObj = SUBTEAM_GUILDS.find(g => g.id === userGuildId) || SUBTEAM_GUILDS[0];
 
                               return (
@@ -4424,7 +4464,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                           e.subteam === g.id
                                         ).length;
                                     
-                                    const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, currentUser.role);
+                                    const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, currentUser.role, stats.xp);
                                     
                                     let activeColor = "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-350";
                                     if (isActive) {
@@ -4485,7 +4525,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                         e.subteam === activeGuild.id
                                       ).length;
                                   
-                                  const subStats = getSubteamStatsAndRank(activeGuild.id, guildHours, guildJournals, currentUser.role);
+                                  const subStats = getSubteamStatsAndRank(activeGuild.id, guildHours, guildJournals, currentUser.role, stats.xp);
                                   const isLocked = activeGuild.id === 'Mentoring' ? !isMentorUser : isMentorUser;
                                   
                                   return (
@@ -4940,7 +4980,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       e.subteam === targetGuildId
                     ).length;
 
-                const targetSubRank = getSubteamStatsAndRank(targetGuildId, targetGuildHours, targetGuildJournals, inspectLeaderboardAccount.role);
+                const targetSubRank = getSubteamStatsAndRank(targetGuildId, targetGuildHours, targetGuildJournals, inspectLeaderboardAccount.role, stats.xp);
 
                 return (
                   <motion.div
@@ -7574,7 +7614,7 @@ FTC #6567 Captains & Mentors`
                       {dispatchedEmails.map((email) => (
                         <div 
                           key={email.id}
-                          className="bg-slate-950 text-slate-250 border border-slate-800 rounded p-3 text-[10px] font-mono leading-relaxed"
+                          className="bg-slate-950 text-slate-250 border border-slate-800 rounded p-3 text-[10px] font-mono leading-relaxed pb-2.5"
                         >
                           <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400">
                             <div className="flex justify-between items-center text-[9px]">
@@ -7584,7 +7624,16 @@ FTC #6567 Captains & Mentors`
                             <div><span className="text-emerald-400 font-bold">TO:</span> <strong className="text-emerald-350">{email.to}</strong></div>
                             <div className="text-slate-100 font-bold mt-1 text-[10.5px] border-l-2 border-brand pl-1.5">{email.subject}</div>
                           </div>
-                          <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5">{email.body}</div>
+                          <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 mb-2.5">{email.body}</div>
+                          <button
+                            onClick={() => {
+                              window.open(`mailto:${email.to}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`);
+                            }}
+                            className="w-full bg-brand/10 hover:bg-brand/20 text-brand-hover dark:text-emerald-350 border border-brand/25 dark:border-emerald-500/25 rounded py-1 px-2 text-[9px] font-bold tracking-wider uppercase flex items-center justify-center gap-1 cursor-pointer transition-all"
+                          >
+                            <Send className="w-2.5 h-2.5" />
+                            <span>Send Real Email via Mail Client</span>
+                          </button>
                         </div>
                       ))}
                     </div>
