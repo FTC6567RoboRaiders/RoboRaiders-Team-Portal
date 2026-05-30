@@ -89,7 +89,7 @@ body {
 
 /* Relax UI components spacing to make them less busy */
 input, select, textarea {
-  padding: 0.5rem 0.75rem !important;
+  padding: 0.5rem 0.75rem;
 }
 
 /* Print optimizations for FTC Engineering Notebook alignment */
@@ -150,5 +150,30 @@ input, select, textarea {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Make scrollbars inside handbook index more prominent and obviously scrollable */
+.visible-scrollbar::-webkit-scrollbar {
+  width: 7px;
+}
+.visible-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+}
+.visible-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.visible-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand, #c00000);
+}
+.dark .visible-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+}
+.dark .visible-scrollbar::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+.dark .visible-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand, #c00000);
 }
 

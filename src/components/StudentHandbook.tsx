@@ -9,12 +9,10 @@ import {
   Compass, 
   Award, 
   Mail, 
-  ShieldCheck, 
   Scroll, 
   Briefcase, 
   Heart,
   UserCheck,
-  CheckCircle,
   HelpCircle,
   AlertTriangle,
   X
@@ -32,13 +30,6 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
   const [activeChapterIndex, setActiveChapterIndex] = useState<number>(0);
   const [activeSectionId, setActiveSectionId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [signatureName, setSignatureName] = useState<string>(currentUser?.name || '');
-  const [parentName, setParentName] = useState<string>('');
-  const [childSigned, setChildSigned] = useState<boolean>(false);
-  const [parentSigned, setParentSigned] = useState<boolean>(false);
-  const [isSignSubmitted, setIsSignSubmitted] = useState<boolean>(() => {
-    return localStorage.getItem('signed_handbook_' + (currentUser?.schoolEmail || 'unauth')) === 'true';
-  });
 
   const activeChapter = HANDBOOK_CHAPTERS[activeChapterIndex] || HANDBOOK_CHAPTERS[0];
 
@@ -49,26 +40,7 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
     }
   }, [activeChapterIndex]);
 
-  // Handle Sign-off Submit
-  const handleSignOff = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!signatureName.trim()) {
-      showToast('Please provide your student digital signature.', 'warning');
-      return;
-    }
-    if (!parentName.trim()) {
-      showToast('Please provide your parent/guardian digital signature.', 'warning');
-      return;
-    }
-    if (!childSigned || !parentSigned) {
-      showToast('Both student and parent/guardian must consent to the rules checkboxes.', 'warning');
-      return;
-    }
 
-    localStorage.setItem('signed_handbook_' + (currentUser?.schoolEmail || 'unauth'), 'true');
-    setIsSignSubmitted(true);
-    showToast('Handbook digitally signed, verified, and saved in local school registrar!', 'success');
-  };
 
   // Search filter index
   const filteredChapters = useMemo(() => {
@@ -89,6 +61,22 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
     }).filter(ch => ch.sections.length > 0);
   }, [searchQuery]);
 
+  // Group chapters and appendices from filteredChapters
+  const { chaptersOnly, appendicesOnly } = useMemo(() => {
+    const chapters: HandbookChapter[] = [];
+    const appendices: HandbookChapter[] = [];
+
+    filteredChapters.forEach(ch => {
+      if (ch.title.toLowerCase().includes('appendix')) {
+        appendices.push(ch);
+      } else {
+        chapters.push(ch);
+      }
+    });
+
+    return { chaptersOnly: chapters, appendicesOnly: appendices };
+  }, [filteredChapters]);
+
   // Total pages count
   const totalChapters = HANDBOOK_CHAPTERS.length;
 
@@ -108,14 +96,17 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
   const highlightedContent = (text: string): React.ReactNode => {
     if (!text) return null;
 
+    let hlCounter = 0;
+    let linkCounter = 0;
+
     // Helper to highlight a leaf node of text
     const applyHighlight = (chunk: string): React.ReactNode[] => {
       if (!searchQuery.trim()) return [chunk];
       const escapedQuery = searchQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       const parts = chunk.split(new RegExp(`(${escapedQuery})`, 'gi'));
-      return parts.map((part, idx) => 
+      return parts.map((part) => 
         part.toLowerCase() === searchQuery.toLowerCase()
-          ? <mark key={`hl-${idx}`} className="bg-yellow-200 text-slate-950 font-bold px-0.5 rounded-sm dark:bg-yellow-400 dark:text-slate-900">{part}</mark>
+          ? <mark key={`hl-${hlCounter++}`} className="bg-yellow-200 text-slate-950 font-bold px-0.5 rounded-sm dark:bg-yellow-400 dark:text-slate-900">{part}</mark>
           : part
       );
     };
@@ -146,7 +137,7 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
         
         subParts.push(
           <a
-            key={`link-${match.index}-${boldIdx}`}
+            key={`link-${linkCounter++}-${boldIdx}`}
             href={url}
             target={isMail ? '_self' : '_blank'}
             rel="noopener noreferrer"
@@ -171,6 +162,8 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
           </strong>
         );
       } else {
+        // Wrap elements as list in elements. Since subParts has React nodes,
+        // we can assign a unique key to any non-string element or use fragments, but the uniquely keyed <mark> and <a> elements inside subParts already have unique keys from our incremental counters.
         elements.push(...subParts);
       }
     });
@@ -178,21 +171,7 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
     return <>{elements}</>;
   };
 
-  // Jump to Appendix C for signature
-  const jumpToSignature = () => {
-    // Find Appendix C chapter
-    const idx = HANDBOOK_CHAPTERS.findIndex(c => c.id === 'chap-20');
-    if (idx !== -1) {
-      setActiveChapterIndex(idx);
-      setTimeout(() => {
-        setActiveSectionId('acknowledgement');
-        const element = document.getElementById('handbook-reader-content');
-        if (element) {
-          element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
-        }
-      }, 100);
-    }
-  };
+
 
   return (
     <div className="flex-1 flex flex-col gap-6 lg:p-10 p-4 max-w-[1700px] mx-auto w-full no-print animate-fade-in" id="student-handbook-page">
@@ -251,13 +230,13 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
                   setSearchQuery(e.target.value);
                   setActiveChapterIndex(0);
                 }}
-                className="w-full bg-slate-50 border border-slate-250 dark:bg-slate-855 dark:border-slate-800 rounded pl-8 pr-2 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
+                className="w-full bg-slate-50 border border-slate-250 dark:bg-slate-855 dark:border-slate-800 rounded pl-10 pr-2 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               {searchQuery && (
                 <button 
                   onClick={() => setSearchQuery('')}
-                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white absolute right-1.5 top-1.5"
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white absolute right-1.5 top-1/2 -translate-y-1/2"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -265,29 +244,63 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto max-h-[350px] lg:max-h-[500px] pr-1">
-            <span className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-2">
-              Chapters Index
-            </span>
-            <div className="space-y-1">
-              {filteredChapters.map((ch, idx) => {
-                const globalIndex = HANDBOOK_CHAPTERS.findIndex(c => c.id === ch.id);
-                const isActive = globalIndex === activeChapterIndex;
-                return (
-                  <button
-                    key={ch.id}
-                    onClick={() => setActiveChapterIndex(globalIndex)}
-                    className={`w-full text-left p-2.5 rounded-lg flex items-center justify-between transition-all cursor-pointer text-xs font-mono border ${
-                      isActive 
-                        ? 'bg-brand/10 dark:bg-brand/15 border-brand/50 text-brand font-extrabold' 
-                        : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-950/20 dark:hover:bg-slate-800 border-slate-150 dark:border-slate-850 text-slate-700 dark:text-slate-350'
-                    }`}
-                  >
-                    <span className="truncate pr-1">{ch.title}</span>
-                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isActive ? 'rotate-90 text-brand scale-110' : 'text-slate-400'}`} />
-                  </button>
-                );
-              })}
+          <div className="relative flex-1 flex flex-col min-h-0 border border-slate-150 dark:border-slate-800/80 rounded-xl p-2.5 bg-slate-50/40 dark:bg-slate-950/20">
+            <div className="flex-1 overflow-y-auto max-h-[380px] lg:max-h-[580px] pr-2.5 space-y-4 visible-scrollbar">
+              {chaptersOnly.length > 0 && (
+                <div>
+                  <span className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-2">
+                    Chapters Index
+                  </span>
+                  <div className="space-y-1">
+                    {chaptersOnly.map((ch) => {
+                      const globalIndex = HANDBOOK_CHAPTERS.findIndex(c => c.id === ch.id);
+                      const isActive = globalIndex === activeChapterIndex;
+                      return (
+                        <button
+                          key={ch.id}
+                          onClick={() => setActiveChapterIndex(globalIndex)}
+                          className={`w-full text-left p-2.5 rounded-lg flex items-center justify-between transition-all cursor-pointer text-xs font-mono border ${
+                            isActive 
+                              ? 'bg-brand/10 dark:bg-brand/15 border-brand/50 text-brand font-extrabold' 
+                              : 'bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border-slate-150 dark:border-slate-850 text-slate-700 dark:text-slate-350 shadow-2xs'
+                          }`}
+                        >
+                          <span className="truncate pr-1">{ch.title}</span>
+                          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isActive ? 'rotate-90 text-brand scale-110' : 'text-slate-400'}`} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {appendicesOnly.length > 0 && (
+                <div>
+                  <span className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-2">
+                    Appendices Index
+                  </span>
+                  <div className="space-y-1">
+                    {appendicesOnly.map((ch) => {
+                      const globalIndex = HANDBOOK_CHAPTERS.findIndex(c => c.id === ch.id);
+                      const isActive = globalIndex === activeChapterIndex;
+                      return (
+                        <button
+                          key={ch.id}
+                          onClick={() => setActiveChapterIndex(globalIndex)}
+                          className={`w-full text-left p-2.5 rounded-lg flex items-center justify-between transition-all cursor-pointer text-xs font-mono border ${
+                            isActive 
+                              ? 'bg-brand/10 dark:bg-brand/15 border-brand/50 text-brand font-extrabold' 
+                              : 'bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border-slate-150 dark:border-slate-850 text-slate-700 dark:text-slate-350 shadow-2xs'
+                          }`}
+                        >
+                          <span className="truncate pr-1">{ch.title}</span>
+                          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isActive ? 'rotate-90 text-brand scale-110' : 'text-slate-400'}`} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {filteredChapters.length === 0 && (
                 <div className="p-4 text-center text-xs text-slate-450 dark:text-slate-500 bg-slate-50 dark:bg-slate-950/40 border border-slate-150 dark:border-slate-850 rounded-lg">
@@ -296,29 +309,17 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
                 </div>
               )}
             </div>
+
+            {/* Fading bottom indicator layout overlay */}
+            <div className="absolute bottom-2.5 left-2.5 right-3 h-10 bg-gradient-to-t from-slate-50 dark:from-slate-950/40 to-transparent pointer-events-none rounded-b-xl opacity-85" />
           </div>
 
-          <div className="border-t border-slate-200/55 dark:border-slate-800 pt-3">
-            <span className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1.5">
-              Team Signature Portal
+          <div className="text-center py-1 mt-0.5 border-t border-slate-105 dark:border-slate-800/60">
+            <span className="text-[8.5px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center justify-center gap-1.5 animate-pulse">
+              <span>⇅ Scroll inside index to view all elements</span>
             </span>
-            {isSignSubmitted ? (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 rounded-lg p-2.5 text-[11px] leading-relaxed flex items-start gap-1.5">
-                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <div>
-                  <strong>Approved Sign-off</strong><br />
-                  Verified on your profile. Document control guidelines are met.
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={jumpToSignature}
-                className="w-full bg-slate-900 border border-slate-800 hover:border-slate-750 text-white font-mono uppercase font-black tracking-wider text-[10px] py-1.5 rounded transition-all text-center block cursor-pointer"
-              >
-                Sign Acknowledgement
-              </button>
-            )}
           </div>
+
         </div>
 
         {/* PANEL B: INTENSE INTERACTIVE READER CONTAINER (6 cols) */}
@@ -457,108 +458,7 @@ export default function StudentHandbook({ currentUser, showToast, onBack }: Stud
               </div>
             ))}
 
-            {/* If checking last appendices chapter, append digital signature sheet direct */}
-            {activeChapter.id === 'chap-20' && (
-              <div className="bg-slate-50 dark:bg-slate-950/60 p-5 rounded-xl border border-slate-250 dark:border-slate-800 mt-8" id="digital-signature-card">
-                <span className="text-[10px] font-mono font-black text-brand uppercase tracking-wider block mb-1">
-                  OFFICIAL SIGN-OFF SHEET
-                </span>
-                <h3 className="text-sm font-black text-slate-950 dark:text-slate-550 uppercase tracking-wide">
-                  Submit Handbook Acknowledgement
-                </h3>
-                <p className="text-[11px] text-slate-400 leading-normal mt-1 mb-4">
-                  Signing certifies that you have thoroughly studied and understood this Document Control edition and agree to safety and eligibility standards.
-                </p>
 
-                {isSignSubmitted ? (
-                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5 flex flex-col items-center justify-center text-center gap-2">
-                    <div className="p-2 mb-1 bg-emerald-500/10 text-emerald-500 rounded-full">
-                      <ShieldCheck className="w-10 h-10" />
-                    </div>
-                    <h4 className="text-xs font-black uppercase text-slate-900 dark:text-slate-50 font-mono tracking-wider">
-                      Handbook Fully Signed &amp; Approved!
-                    </h4>
-                    <p className="text-[11px] text-slate-400 leading-relaxed max-w-xs font-sans">
-                      Congratulations! Your digital consent has been verified and registered on local school logs. You are fully cleared to proceed.
-                    </p>
-                    <button
-                      onClick={() => {
-                        localStorage.removeItem('signed_handbook_' + (currentUser?.schoolEmail || 'unauth'));
-                        setIsSignSubmitted(false);
-                      }}
-                      className="text-[9px] text-slate-400 underline uppercase mt-2 font-mono hover:text-slate-600 dark:hover:text-slate-300"
-                    >
-                      Reset Signature (Sign Again)
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleSignOff} className="flex flex-col gap-4 text-xs font-mono">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] uppercase text-slate-400 font-bold block">
-                          Student Electronic Signature
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={signatureName}
-                          onChange={(e) => setSignatureName(e.target.value)}
-                          placeholder="Type Student Full Name"
-                          className="bg-white border border-slate-250 dark:bg-slate-900 dark:border-slate-800 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
-                        />
-                      </div>
-                      
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] uppercase text-slate-400 font-bold block">
-                          Parent/Guardian Electronic Signature
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={parentName}
-                          onChange={(e) => setParentName(e.target.value)}
-                          placeholder="Type Parent/Guardian Name"
-                          className="bg-white border border-slate-250 dark:bg-slate-900 dark:border-slate-800 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 mt-2">
-                      <label className="flex items-start gap-2 text-[10px] text-slate-700 dark:text-slate-350 leading-relaxed cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={childSigned}
-                          onChange={(e) => setChildSigned(e.target.checked)}
-                          className="mt-0.5"
-                        />
-                        <span>
-                          <strong>Student Consent:</strong> I agree to the academic eligibility standards, mentoring hourly minimums (10 hrs FLL), attendance checks, and cell phone workspace constraints.
-                        </span>
-                      </label>
-                      
-                      <label className="flex items-start gap-2 text-[10px] text-slate-700 dark:text-slate-350 leading-relaxed cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={parentSigned}
-                          onChange={(e) => setParentSigned(e.target.checked)}
-                          className="mt-0.5"
-                        />
-                        <span>
-                          <strong>Parental Consent:</strong> I support my child's participation and consent to team regulations, travel policies, and emergency safety guidelines.
-                        </span>
-                      </label>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full bg-brand hover:bg-brand-hover text-white font-mono font-black uppercase tracking-wider text-xs py-2 rounded-lg transition-all shadow-md mt-2 cursor-pointer"
-                    >
-                      Authenticate Digital Credentials
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Reader Footer Indicators */}

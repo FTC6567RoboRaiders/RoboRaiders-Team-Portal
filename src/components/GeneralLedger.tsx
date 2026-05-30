@@ -470,13 +470,13 @@ export default function GeneralLedger({
 
             {/* Keyword Search Input */}
             <div className="relative w-full md:w-64">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search ledger receipts..."
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-8 pr-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-sans w-full focus:outline-none focus:border-indigo-500"
+                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-sans w-full focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>
@@ -685,7 +685,7 @@ export default function GeneralLedger({
                 Transaction Value (USD $)
               </label>
               <div className="relative">
-                <DollarSign className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                <DollarSign className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="number"
                   step="0.01"
@@ -693,7 +693,7 @@ export default function GeneralLedger({
                   placeholder="e.g. 154.50"
                   value={formAmount}
                   onChange={(e) => setFormAmount(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-8 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500 font-mono"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500 font-mono"
                 />
               </div>
             </div>
@@ -763,14 +763,14 @@ export default function GeneralLedger({
                 Payment Source / Original Funder Name <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   required
                   placeholder={formType === 'income' ? 'e.g. Sponsor / Rotary Club' : 'e.g. Steve Jackson, Parent Vol Maria, School Admin'}
                   value={formPaidBy}
                   onChange={(e) => setFormPaidBy(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-8 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
@@ -781,13 +781,13 @@ export default function GeneralLedger({
                 Effective Transaction Date <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <Calendar className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="date"
                   required
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-8 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500 font-mono"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500 font-mono"
                 />
               </div>
             </div>

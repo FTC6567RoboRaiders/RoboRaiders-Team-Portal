@@ -3479,7 +3479,28 @@ ${entry.planNextTime || '_No carry-over specified._'}
   // Conditional Auth / Approvals screens
   if (!currentUser) {
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center font-sans p-4 border-t-8 border-brand transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="auth-root">
+      <div className={`min-h-screen relative overflow-hidden flex flex-col items-center justify-center font-sans p-4 border-t-8 border-brand transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="auth-root">
+        {/* Decorative diagonal repeating watermark background */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0 opacity-[0.06] dark:opacity-[0.035]">
+          <div className="absolute -inset-[50%] flex flex-col justify-around rotate-[-15deg] font-mono tracking-widest text-[11px] font-black uppercase text-slate-800 dark:text-slate-100 leading-none">
+            {Array.from({ length: 30 }).map((_, rIdx) => (
+              <div 
+                key={rIdx} 
+                className="whitespace-nowrap flex gap-12"
+                style={{ transform: `translateX(${rIdx % 2 === 0 ? '-10%' : '10%'})` }}
+              >
+                {Array.from({ length: 15 }).map((_, cIdx) => (
+                  <span key={cIdx} className="flex items-center gap-1.5">
+                    <span>ROBORAIDERS</span> 
+                    <span className="text-brand dark:text-brand-hover">•</span> 
+                    <span>FTC 6567</span>
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Toast alerts inside login page */}
         {statusMessage && (
           <div className="fixed top-4 right-4 max-w-sm z-50 shadow-lg border animate-slide-in">
@@ -3496,11 +3517,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
         )}
 
-        <div className="w-full max-w-md bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-6 md:p-8 shadow-xl flex flex-col items-center justify-center relative">
+        <div className="w-full max-w-md bg-white/95 border border-slate-200 dark:bg-slate-900/95 dark:border-slate-800 rounded-xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center relative z-10 backdrop-blur-xs">
           {/* Logo */}
-          <div className="mb-5 flex flex-col items-center text-center">
+          <div className="mb-6 flex flex-col items-center text-center">
             <RoboraidersLogo className="w-16 h-16 text-brand mb-2" />
-            <h1 className="text-md font-black tracking-widest text-slate-900 dark:text-slate-100 uppercase font-display select-none animate-pulse">
+            <h1 className="text-md font-black tracking-widest text-slate-900 dark:text-slate-100 uppercase font-display select-none">
               RoboRaiders Team Portal
             </h1>
             <p className="text-[10px] text-slate-500 font-mono mt-1">FTC Team #6567</p>
@@ -3509,53 +3530,68 @@ ${entry.planNextTime || '_No carry-over specified._'}
           {authMode === 'login' ? (
             /* Login Form */
             <form onSubmit={handleLogin} className="w-full space-y-4">
-              <div className="text-center mb-1">
-                <span className="text-[10px] font-black text-brand bg-brand/10 px-2 py-0.5 rounded uppercase tracking-widest">Team members only</span>
-              </div>
-
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                   School Email
                 </label>
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="e.g. m_member@school.edu"
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-3 py-2 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
-                  required
-                />
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                    <Mail className="h-4 w-4 text-slate-400" />
+                  </span>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="e.g. m_member@school.edu"
+                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-lg pl-10 pr-3 py-2 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                   School ID / Password (lunch #)
                 </label>
-                <input
-                  type="password"
-                  value={loginSchoolId}
-                  onChange={(e) => setLoginSchoolId(e.target.value)}
-                  placeholder="e.g. 123456"
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-3 py-2 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
-                  required
-                />
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                    <Lock className="h-4 w-4 text-slate-400" />
+                  </span>
+                  <input
+                    type="password"
+                    value={loginSchoolId}
+                    onChange={(e) => setLoginSchoolId(e.target.value)}
+                    placeholder="e.g. 123456"
+                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-lg pl-10 pr-3 py-2 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
+                    required
+                  />
+                </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2 px-4 rounded uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" /> <span>Sign In to System</span>
               </button>
 
-              <div className="flex flex-col gap-2 pt-2 items-center text-center">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('register')}
-                  className="text-[11px] text-slate-500 hover:text-brand font-bold transition-colors uppercase tracking-wider cursor-pointer font-sans"
-                >
-                  Need an account? Request access / Register
-                </button>
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
+                <span className="flex-shrink mx-3 text-[9px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500">Don't have an account?</span>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
+              </div>
+
+              {/* Main Button to Create Account */}
+              <button
+                type="button"
+                onClick={() => setAuthMode('register')}
+                className="w-full bg-indigo-50/50 hover:bg-indigo-50 dark:bg-slate-850 dark:hover:bg-slate-800 text-brand dark:text-brand-hover font-black text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all border border-dashed border-brand/40 hover:border-brand flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <UserPlus className="w-4 h-4 text-brand" />
+                <span>Create a New Account</span>
+              </button>
+
+              <div className="text-center pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -3572,11 +3608,28 @@ ${entry.planNextTime || '_No carry-over specified._'}
             /* Forgot Password Form */
             <form onSubmit={handleConfirmReset} className="w-full space-y-3.5">
               <div className="text-center mb-1">
-                <span className="text-[10px] font-black text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-2.5 py-0.5 rounded uppercase tracking-widest">Verify Password Reset</span>
+                <span className="text-[10px] font-black text-rose-600 bg-rose-50 dark:bg-rose-955 px-2.5 py-0.5 rounded uppercase tracking-widest">Verify Password Reset</span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center leading-relaxed">
-                Enter your School Email and click 'Send Code' to receive a temporary 6-digit cryptographic verification code inside the Simulated Email logs at the bottom.
+                Enter your School Email and click 'Send Code' to retrieve a temporary 6-digit cryptographic verification code.
               </p>
+
+              {/* Inline Delivery of Generated Security Tokens */}
+              {generatedResetCode && (
+                <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-900/50 p-3 rounded-lg text-xs text-center text-emerald-850 dark:text-emerald-300 font-sans shadow-xs">
+                  <div className="font-extrabold uppercase tracking-wider text-[9px] text-emerald-600 dark:text-emerald-400 mb-1 flex items-center justify-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-555 animate-pulse" />
+                    <span>Simulated Email Notification Dispatched</span>
+                  </div>
+                  <div>Your 6-digit security reset code is:</div>
+                  <div className="mt-1.5 font-mono font-black text-base tracking-widest bg-emerald-100/70 dark:bg-emerald-900/40 px-3 py-1 rounded inline-block text-brand border border-emerald-200 dark:border-emerald-800 select-all">
+                    {generatedResetCode}
+                  </div>
+                  <div className="text-[9px] text-slate-450 mt-1 leading-normal">
+                    (Use this code in the input below to change password)
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
@@ -3711,7 +3764,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   <select
                     value={registerPrimary}
                     onChange={(e) => setRegisterPrimary(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold"
+                    className="w-full bg-slate-50 border border-slate-350 dark:bg-slate-900 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold"
                   >
                     <option value="Design/Build/Fabrication">Design/Build/Fabrication</option>
                     <option value="Programming">Programming</option>
@@ -3769,86 +3822,28 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
               <button
                 type="submit"
-                className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2 px-4 rounded uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
                 <UserPlus className="w-3.5 h-3.5" /> <span>Request Database Access</span>
               </button>
 
-              <div className="text-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('login')}
-                  className="text-[11px] text-slate-500 hover:text-brand font-bold transition-colors uppercase tracking-wider cursor-pointer"
-                >
-                  Already registered? Sign in
-                </button>
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
+                <span className="flex-shrink mx-3 text-[9px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500">Already registered?</span>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setAuthMode('login')}
+                className="w-full bg-slate-50 hover:bg-emerald-50 dark:bg-slate-850 dark:hover:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-black text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all border border-dashed border-emerald-500/30 hover:border-emerald-500 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <LogIn className="w-4 h-4 text-emerald-500" />
+                <span>Sign In to Existing Account</span>
+              </button>
             </form>
           )}
 
-
-        </div>
-
-        {/* Simulated System Mail Logs at the bottom of login screens */}
-        <div className="w-full max-w-md mt-6 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 shadow-xl flex flex-col">
-          <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-800 pb-2">
-            <h3 className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-1.5 leading-none">
-              <Mail className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              <span>Simulated Outbox Logs ({dispatchedEmails.length})</span>
-            </h3>
-            {dispatchedEmails.length > 0 && (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const emailDocs = dispatchedEmails.map(e => deleteDoc(doc(db, 'dispatchedEmails', e.id)));
-                    await Promise.all(emailDocs);
-                    setDispatchedEmails([]);
-                    showToast('Purged entire public simulated email database.', 'success');
-                  } catch (err: any) {
-                    showToast(`Clear failed: ${err.message}`, 'danger');
-                  }
-                }}
-                className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
-              >
-                Clear Outbox
-              </button>
-            )}
-          </div>
-
-          {dispatchedEmails.length === 0 ? (
-            <div className="bg-slate-50 dark:bg-slate-850/50 border border-slate-200/60 dark:border-slate-800/40 rounded p-4 text-center text-slate-450 dark:text-slate-450 font-mono text-[10px] leading-relaxed">
-              📬 Outgoing team notifications will log here in real-time (e.g. registration request alerts or password reset verification codes).
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1">
-              {dispatchedEmails.map((email) => (
-                <div 
-                  key={email.id}
-                  className="bg-slate-950 text-slate-250 border border-slate-800/80 rounded p-3 text-[10px] font-mono leading-relaxed pb-2.5"
-                >
-                  <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400">
-                    <div className="flex justify-between items-center text-[9px]">
-                      <div><span className="text-purple-405 font-bold">FROM:</span> {email.from}</div>
-                      <span>{new Date(email.timestamp).toLocaleTimeString()}</span>
-                    </div>
-                    <div><span className="text-emerald-405 font-bold">TO:</span> <strong className="text-emerald-350">{email.to}</strong></div>
-                    <div className="text-slate-100 font-bold mt-1 text-[10.5px] border-l-2 border-brand pl-1.5 select-all">{email.subject}</div>
-                  </div>
-                  <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 select-all mb-2.5">{email.body}</div>
-                  <button
-                    onClick={() => {
-                      window.open(`mailto:${email.to}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`);
-                    }}
-                    className="w-full bg-brand/10 hover:bg-brand/20 text-brand-hover dark:text-emerald-350 border border-brand/25 dark:border-emerald-500/25 rounded py-1 px-2 text-[9px] font-bold tracking-wider uppercase flex items-center justify-center gap-1 cursor-pointer transition-all"
-                  >
-                    <Send className="w-2.5 h-2.5" />
-                    <span>Send Real Email via Mail Client</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
       </div>
@@ -5512,7 +5507,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   </div>
                 </div>
                 <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
-                  Access the formal 2026-2027 RoboRaiders handbook. Review laboratory safety guidelines, student attendance minimums, FLL community mentoring hours requirements, and sign the official digital acknowledgement register.
+                  Access the formal 2026-2027 RoboRaiders handbook. Review laboratory safety guidelines, student attendance minimums, and FLL community mentoring hours requirements.
                 </p>
                 
                 {/* Handbook Quick Stats */}
@@ -6133,13 +6128,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 {/* Search */}
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   <div className="relative flex-1 sm:max-w-[180px]">
-                    <Search className="absolute left-2.5 top-2.5 w-3 h-3 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
                       placeholder="Search name/task..."
                       value={timeSearch}
                       onChange={(e) => setTimeSearch(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-300 dark:border-slate-700 p-2 pl-7.5 rounded text-[11px] outline-none text-slate-850 dark:text-slate-100"
+                      className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-300 dark:border-slate-700 py-2 pl-10 pr-3 rounded text-[11px] outline-none text-slate-850 dark:text-slate-100"
                     />
                   </div>
                   
@@ -6345,12 +6340,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     Session Date <span className="text-brand">*</span>
                   </label>
                   <div className="relative">
-                    <Calendar className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="date"
                       value={formDate}
                       onChange={(e) => setFormDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded pl-8 pr-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium transition-all"
+                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-855 dark:border-slate-700 rounded pl-10 pr-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium transition-all"
                       required
                       id="input-date"
                     />
@@ -6676,13 +6671,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
 
               <div className="relative">
-                <Search className="absolute left-2 top-1.5 w-3 h-3 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Keyword search..."
                   value={filters.searchQuery}
                   onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded pl-7 pr-2 py-1 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 dark:text-slate-100 transition-all"
+                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded pl-10 pr-2 py-1 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 dark:text-slate-100 transition-all"
                   id="filter-query"
                 />
               </div>
@@ -8451,13 +8446,13 @@ FTC #6567 Captains & Mentors`
                 <div className="flex flex-col gap-1 p-0.5">
                   <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Search Records</span>
                   <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
                       value={auditSearch}
                       onChange={(e) => setAuditSearch(e.target.value)}
                       placeholder="Search member, tasks..."
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded pl-8 pr-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 font-medium text-slate-950 dark:text-white text-xs"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 font-medium text-slate-950 dark:text-white text-xs"
                     />
                   </div>
                 </div>
