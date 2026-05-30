@@ -1631,6 +1631,17 @@ export default function App() {
 
   // Gamification dashboard selectors
   const [gamificationTab, setGamificationTab] = useState<'profile' | 'badges' | 'quests' | 'leaderboard' | 'subteamRanks'>('profile');
+  const [expandedBadges, setExpandedBadges] = useState<Record<string, boolean>>({});
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  
+  useEffect(() => {                
+    setPendingStatus(null);
+  }, [selectedEntry]);
+
+  const toggleBadge = (badgeId: string) => {
+    setExpandedBadges(prev => ({ ...prev, [badgeId]: !prev[badgeId] }));
+  };
+
   const [inspectLeaderboardAccount, setInspectLeaderboardAccount] = useState<UserAccount | null>(null);
   const [activeGuildTab, setActiveGuildTab] = useState<string>('');
 
@@ -2629,6 +2640,7 @@ FTC Team #6567 IT Administration`
     setFormProblemsAndSolutions(['']);
     setFormPlanNextTime('');
     setFormImages([]);
+    setFormAttendees([]);
     setIsEditing(false);
     setEditingId(null);
   };
@@ -2951,6 +2963,7 @@ FTC Team #6567 IT Administration`
             problemsAndSolutions: cleanedProblems,
             planNextTime: formPlanNextTime.trim(),
             images: formImages,
+            attendees: formAttendees,
             updatedAt: stamp,
             status: submissionType,
             reviewer: null,
@@ -2975,6 +2988,7 @@ FTC Team #6567 IT Administration`
         problemsAndSolutions: cleanedProblems,
         planNextTime: formPlanNextTime.trim(),
         images: formImages,
+        attendees: formAttendees,
         createdAt: stamp,
         updatedAt: stamp,
         status: submissionType,
@@ -4114,23 +4128,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </button>
           )}
 
-          {(currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain') && (
-            <button
-              onClick={() => setIsApprovalsOpen(true)}
-              className="bg-purple-950/40 hover:bg-purple-900/60 border border-purple-800 text-purple-200 hover:text-white px-3 py-1 text-xs font-bold transition-all uppercase tracking-wider relative flex items-center gap-1.5 cursor-pointer shadow-xs rounded"
-              title="Assess Pending Space Approvals"
-              id="approvals-mgr-trigger"
-            >
-              <Users className="w-3 w-3 text-purple-350" />
-              <span>Team Approvals</span>
-              {accounts.filter(a => a.status === 'Pending').length > 0 && (
-                <span className="bg-red-500 text-white font-mono text-[9px] font-black rounded-full h-4 min-w-4 flex items-center justify-center px-1 animate-pulse border border-red-400 absolute -top-1 px-1 -right-1">
-                  {accounts.filter(a => a.status === 'Pending').length}
-                </span>
-              )}
-            </button>
-          )}
-
           <button
             onClick={openSettingsModal}
             className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-350 dark:border-slate-700 text-slate-800 dark:text-slate-200 px-3 py-1 rounded text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
@@ -4452,7 +4449,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         </span>
                       </div>
                       <h2 className="text-base font-extrabold uppercase font-display text-slate-900 dark:text-slate-50 mt-1 flex items-center gap-2">
-                        <span>RoboRaiders Cyber-Championship Lounge</span>
+                        <span>RoboRaiders Achievement Portal</span>
                       </h2>
                       <p className="text-[11px] text-slate-550 dark:text-slate-400 font-sans mt-0.5">
                         Earn experience multipliers directly by submitting engineering logs, punching time cards, and solving complex robotics loop blocks.
@@ -4957,12 +4954,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                               return (
                                 <div 
                                   key={badge.id} 
-                                  className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all duration-300 relative overflow-hidden group select-none ${
+                                  onClick={() => toggleBadge(badge.id)}
+                                  className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all duration-300 relative overflow-hidden group select-none cursor-pointer ${
                                     badge.unlocked 
                                       ? 'bg-slate-50 dark:bg-slate-905 border-cyan-500/40 shadow-sm hover:shadow-cyan-500/10 hover:border-cyan-500/80 ring-1 ring-cyan-500/5' 
                                       : 'bg-slate-50/40 dark:bg-slate-955/20 border-slate-200/60 dark:border-slate-800/50 opacity-60 hover:opacity-100'
                                   }`}
-                                  title={`${badge.name}: ${badge.description}`}
+                                  title={`${badge.name}`}
                                 >
                                   {badge.unlocked && (
                                     <div className="absolute top-0 right-0 transform translate-x-4 -translate-y-4 w-10 h-10 bg-cyan-500/10 rounded-full blur-sm group-hover:scale-150 transition-all"></div>
@@ -4984,13 +4982,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                       <h4 className="font-extrabold text-[12px] text-slate-900 dark:text-slate-100 uppercase tracking-wide truncate">
                                         {badge.name}
                                       </h4>
-                                      <p className="text-[10px] text-slate-450 dark:text-slate-400 leading-tight mt-0.5 line-clamp-2">
+                                      <p className={`text-[10px] text-slate-450 dark:text-slate-400 leading-tight mt-0.5 transition-all duration-300 ${expandedBadges[badge.id] ? '' : 'line-clamp-2'}`}>
                                         {badge.description}
                                       </p>
                                     </div>
                                   </div>
 
-                                  <div className="mt-3.5 border-t border-slate-105 dark:border-slate-800 pt-2 flex flex-col gap-1 text-[9px] font-mono">
+                                  <div className={`mt-3.5 border-t border-slate-105 dark:border-slate-800 pt-2 flex flex-col gap-1 text-[9px] font-mono transition-all duration-300 ${expandedBadges[badge.id] ? 'opacity-100 translate-y-0' : 'opacity-100'}`}>
                                     <div className="flex justify-between items-center text-slate-400 dark:text-slate-500">
                                       <span className="uppercase">Requirement:</span>
                                       <span className="font-bold truncate max-w-[110px]" title={badge.reqText}>{badge.reqText}</span>
@@ -6591,6 +6589,41 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </div>
               </div>
 
+              {/* Attendance */}
+              <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
+                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
+                  Attendance
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {accounts.map(acc => (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => handleToggleAttendee(acc.name)}
+                      className={`px-2 py-1 rounded text-[9px] font-bold ${formAttendees.includes(acc.name) ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
+                    >
+                      {acc.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Or add custom attendee..."
+                    value={customAttendee}
+                    onChange={(e) => setCustomAttendee(e.target.value)}
+                    className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomAttendee}
+                    className="bg-slate-900 dark:bg-slate-700 text-white px-2.5 rounded text-xs font-bold cursor-pointer"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
               {/* Form Controls */}
               <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
@@ -6923,7 +6956,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   {/* UTILITIES PANEL */}
                   <div className="no-print flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-3 shrink-0">
                     <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest font-mono">
-                      Journal Entries
+                      Journal Entry
                     </span>
 
                     <div className="flex items-center gap-1.5">
@@ -6954,10 +6987,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <div className="border-b-4 border-slate-900 dark:border-slate-100 pb-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-mono font-black border border-slate-800 dark:border-slate-700 px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 uppercase tracking-wide text-slate-800 dark:text-slate-200">
-                          {selectedEntry.subteam} CATEGORY
+                          {selectedEntry.subteam}
                         </span>
                         <h4 className="text-xs font-black text-slate-950 dark:text-slate-50 uppercase font-display tracking-widest">
-                          FTC ENGINEERING LOG
+                          SUBTEAM JOURNAL ENTRY
                         </h4>
                       </div>
 
@@ -7196,8 +7229,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       </label>
                       <select
                         id="lifecycle-status-selector"
-                        value={selectedEntry.status || 'Draft'}
-                        onChange={(e) => handleStatusDropdownChange(e.target.value as any)}
+                        value={pendingStatus || selectedEntry.status || 'Draft'}
+                        onChange={(e) => setPendingStatus(e.target.value)}
                         className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-2 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-extrabold focus:ring-1 focus:ring-purple-500 outline-none cursor-pointer"
                       >
                         <option value="Draft">✍️ Draft (Keeps log as an active working draft)</option>
@@ -7231,6 +7264,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           })()}
                         </option>
                       </select>
+                      {pendingStatus && pendingStatus !== (selectedEntry.status || 'Draft') && (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => {
+                              handleStatusDropdownChange(pendingStatus as any);
+                              setPendingStatus(null);
+                            }}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-1.5 rounded text-[10px] uppercase tracking-wider transition-all cursor-pointer"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setPendingStatus(null)}
+                            className="flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 font-extrabold py-1.5 rounded text-[10px] uppercase tracking-wider transition-all cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Historical Mentor Comment details if they exist in the model */}
@@ -8766,7 +8818,7 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-650 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Journal Entries</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Journal Entry</span>
                           <span className="text-[10px] text-slate-400">{entries.length} items logged</span>
                         </div>
                       </label>
@@ -9159,6 +9211,54 @@ FTC #6567 Captains & Mentors`
                   </div>
                 )}
 
+                {/* Print Layout & Formatting Settings */}
+                <div className="bg-slate-50 dark:bg-slate-950/30 p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-3 animate-fade-in">
+                  <span className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                    Print Layout & Formatting
+                  </span>
+                  
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-900 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Show Visual Preview</span>
+                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowPreview ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                        <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowPreview ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
+                      </div>
+                      <input type="checkbox" className="hidden" checked={timeExportShowPreview} onChange={(e) => setTimeExportShowPreview(e.target.checked)} />
+                    </label>
+
+                    <label className="flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-900 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Title Cover</span>
+                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowCover ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                        <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowCover ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
+                      </div>
+                      <input type="checkbox" className="hidden" checked={timeExportShowCover} onChange={(e) => setTimeExportShowCover(e.target.checked)} />
+                    </label>
+
+                    <label className="flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-900 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Table of Contents</span>
+                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowTOC ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                        <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowTOC ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
+                      </div>
+                      <input type="checkbox" className="hidden" checked={timeExportShowTOC} onChange={(e) => setTimeExportShowTOC(e.target.checked)} />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 mt-2">
+                    <label className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                      Paper Size
+                    </label>
+                    <select
+                      value={timeExportPaperSize}
+                      onChange={(e) => setTimeExportPaperSize(e.target.value as 'letter' | 'a4' | 'legal')}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-cyan-600 font-mono cursor-pointer"
+                    >
+                      <option value="letter">US Letter (8.5" x 11")</option>
+                      <option value="a4">A4 (210 x 297 mm)</option>
+                      <option value="legal">US Legal (8.5" x 14")</option>
+                    </select>
+                  </div>
+                </div>
+
                 {/* Score Live counter and disclaimer */}
                 <div className="bg-slate-100 dark:bg-slate-850/50 p-3.5 rounded-md border border-slate-200 dark:border-slate-800 flex flex-col gap-1 text-slate-800 dark:text-slate-200 text-xs">
                   {(() => {
@@ -9204,7 +9304,7 @@ FTC #6567 Captains & Mentors`
                   <div className="flex items-center gap-1.5">
                     <LayoutTemplate className="w-4 h-4 text-cyan-500 animate-[pulse_3s_infinite]" />
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
-                      Live Timesheets Format: <span className="text-cyan-600 dark:text-cyan-400 underline">LETTER</span>
+                      Live Timesheets Format: <span className="text-cyan-600 dark:text-cyan-400 underline">{timeExportPaperSize.toUpperCase()}</span>
                     </span>
                   </div>
                   <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
@@ -9233,10 +9333,47 @@ FTC #6567 Captains & Mentors`
                   }
 
                   const totalHr = matchingEntries.reduce((sum, e) => sum + e.durationHours, 0);
+                  const paperAspectRatio = timeExportPaperSize === 'letter' ? '8.5 / 11' : timeExportPaperSize === 'legal' ? '8.5 / 14' : '1 / 1.414';
 
                   return (
                     <div className="flex flex-col gap-6 w-full max-w-md items-center py-2 animate-fade-in">
-                      <div className="bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-lg aspect-[8.5/11] w-[380px] p-5 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative">
+                      
+                      {/* Cover Page Preview */}
+                      {timeExportShowCover && (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-lg w-[380px] p-8 flex flex-col items-center justify-center text-slate-950 dark:text-slate-100 overflow-hidden relative" style={{ aspectRatio: paperAspectRatio }}>
+                          <h1 className="text-xl font-black uppercase max-w-[250px] text-center mb-2">Time Records Report</h1>
+                          <div className="w-16 h-1 bg-cyan-500 mb-6"></div>
+                          <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest text-center">FTC Team 6567</p>
+                          <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest mt-1 text-center">{new Date().toLocaleDateString()}</p>
+                          <div className="mt-8 text-[8px] text-slate-500 font-mono text-center border p-2 border-slate-200 dark:border-slate-800">
+                            <strong>SCOPE:</strong> {timeExportScope.toUpperCase()}<br/>
+                            <strong>TOTAL TIME:</strong> {totalHr.toFixed(2)} HOURS
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TOC Page Preview */}
+                      {timeExportShowTOC && (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-lg w-[380px] p-6 flex flex-col text-slate-950 dark:text-slate-100 overflow-hidden relative" style={{ aspectRatio: paperAspectRatio }}>
+                          <h2 className="text-sm font-black uppercase border-b border-slate-950 dark:border-slate-100 pb-2 mb-4">Table of Contents</h2>
+                          <div className="flex flex-col gap-2 font-mono text-[9px]">
+                            <div className="flex justify-between border-b border-dashed border-slate-300 dark:border-slate-700 pb-1">
+                              <span>1. Summary Overview</span>
+                              <span>1</span>
+                            </div>
+                            <div className="flex justify-between border-b border-dashed border-slate-300 dark:border-slate-700 pb-1">
+                              <span>2. Detailed Time Entries</span>
+                              <span>2</span>
+                            </div>
+                            <div className="flex justify-between border-b border-dashed border-slate-300 dark:border-slate-700 pb-1 text-slate-400">
+                              <span>3. Signatures & Approvals</span>
+                              <span>{timeExportScope === 'members' ? 3 : 5}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-lg w-[380px] p-5 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative" style={{ aspectRatio: paperAspectRatio }}>
                         <div className="border border-slate-900/10 dark:border-slate-100/5 flex-grow p-3.5 flex flex-col justify-between min-h-0 text-[10px]">
                           <div>
                             <div className="border-b border-slate-950 pb-2 mb-3 flex justify-between items-start">
@@ -9600,8 +9737,7 @@ FTC #6567 Captains & Mentors`
                         );
                       }
 
-                      // Dynamic classes
-                      const aspectClass = exportPaperSize === 'letter' ? 'aspect-[8.5/11]' : exportPaperSize === 'a4' ? 'aspect-[210/297]' : 'aspect-[8.5/14]';
+                      const paperAspect = exportPaperSize === 'letter' ? '8.5 / 11' : exportPaperSize === 'a4' ? '1 / 1.414' : '8.5 / 14';
 
                       return (
                         <div className="flex flex-col gap-8 w-full max-w-md items-center shadow-inner py-4">
@@ -9612,7 +9748,7 @@ FTC #6567 Captains & Mentors`
                             return (
                               <div className="flex flex-col items-center gap-1 w-full">
                                 <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md ${aspectClass} w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative`}>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
                                   <div className="border border-slate-900/30 dark:border-slate-100/10 flex-1 p-4 flex flex-col justify-between">
                                     <div className="text-center my-auto py-8">
                                       <div className="w-12 h-12 mb-4 border-2 border-slate-950 dark:border-slate-100 flex items-center justify-center rounded-full mx-auto">
@@ -9654,7 +9790,7 @@ FTC #6567 Captains & Mentors`
                             return (
                               <div className="flex flex-col items-center gap-1 w-full">
                                 <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (TABLE OF CONTENTS)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md ${aspectClass} w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-100 overflow-hidden relative`}>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-100 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
                                   <div className="border-b border-slate-950 dark:border-white pb-1.5 mb-3 flex justify-between items-baseline">
                                     <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-white">Table of Contents</h4>
                                     <span className="text-[7.5px] font-mono text-slate-450 uppercase tracking-wider">FTC #6567 Binder</span>
@@ -9697,7 +9833,7 @@ FTC #6567 Captains & Mentors`
                             return (
                               <div key={entry.id} className="flex flex-col items-center gap-1 w-full">
                                 <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} ({entry.subteam} LOG)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md ${aspectClass} w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-200 overflow-hidden relative`}>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-200 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
                                   
                                   {/* Header */}
                                   <div className="border-b-2 border-slate-950 dark:border-slate-200 pb-1 flex justify-between items-start text-[7.5px] font-mono text-slate-700 dark:text-slate-200 shrink-0">
@@ -9738,6 +9874,263 @@ FTC #6567 Captains & Mentors`
                                         </div>
                                       </div>
                                     )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div className="flex-1 bg-slate-50 dark:bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                    <LayoutTemplate className="w-12 h-12 text-slate-300 dark:text-slate-800 mb-3" />
+                    <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500">Preview Closed</p>
+                    <p className="text-[10px] mt-1 italic max-w-xs leading-normal">
+                      Enable the "Live Page Preview Frame" switch in the configuration column on the left to see sheets dynamic sizing and alignment in real-time.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* OUTREACH PDF EXPORT MENU MODAL */}
+      <AnimatePresence>
+        {isOutreachExportModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
+            onClick={() => setIsOutreachExportModalOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className={`relative w-full ${outreachExportShowPreview ? 'max-w-6xl' : 'max-w-md'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-emerald-500" />
+                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider">
+                    Export Community Outreach Portfolio
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOutreachExportModalOpen(false)}
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Grid split-container when showPreview is enabled */}
+              <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40 dark:bg-slate-950/20">
+                
+                {/* CONFIGURATION COLUMN */}
+                <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900">
+                  <div className="flex flex-col gap-4">
+                    
+                    {/* Paper Sizing Formats */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-505 uppercase tracking-wider">
+                        Paper Dimensions Format
+                      </span>
+                      <div className="grid grid-cols-3 gap-1 tracking-tight">
+                        {(['letter', 'a4', 'legal'] as const).map((sz) => (
+                          <button
+                            key={sz}
+                            type="button"
+                            onClick={() => setOutreachExportPaperSize(sz)}
+                            className={`py-1.5 px-1 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                              outreachExportPaperSize === sz
+                                ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 font-extrabold'
+                                : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            <span className="uppercase text-[9px] tracking-wide">{sz}</span>
+                            <span className="text-[8px] font-mono font-normal block opacity-75">
+                              {sz === 'letter' ? '8.5" × 11"' : sz === 'a4' ? '210×297mm' : '8.5" × 14"'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Document Contents Elements (TOC, Cover, etc) */}
+                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/20 border border-slate-150 dark:border-slate-805">
+                      <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">
+                        Select Notebook Sheets
+                      </span>
+                      
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                        <input
+                          type="checkbox"
+                          checked={outreachExportShowCover}
+                          onChange={(e) => setOutreachExportShowCover(e.target.checked)}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                        />
+                        <span>Include Cover Title Banner</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                        <input
+                          type="checkbox"
+                          checked={outreachExportShowTOC}
+                          onChange={(e) => setOutreachExportShowTOC(e.target.checked)}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                        />
+                        <span>Include Table of Contents</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none border-t border-slate-250 dark:border-slate-800 pt-2.5 mt-0.5">
+                        <input
+                          type="checkbox"
+                          checked={outreachExportShowPreview}
+                          onChange={(e) => setOutreachExportShowPreview(e.target.checked)}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                        />
+                        <span className="font-bold flex items-center gap-1">Live Page Preview Frame <Sparkles className="w-3 h-3 text-emerald-500" /></span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Actions inside column */}
+                  <div className="pt-4 mt-4 border-t border-slate-105 dark:border-slate-800 flex justify-end gap-2 text-xs shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsOutreachExportModalOpen(false)}
+                      className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTimeout(() => {
+                           window.print();
+                        }, 150);
+                      }}
+                      className="px-4 py-1.5 rounded text-[11px] font-bold font-mono uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
+                {outreachExportShowPreview ? (
+                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 dark:bg-slate-950/40 select-none pb-12">
+                    <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-2 sticky top-0 bg-slate-100 dark:bg-slate-900/90 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <LayoutTemplate className="w-4 h-4 text-emerald-500 animate-[pulse_3s_infinite]" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
+                          Live Outreach Portfolio Format: <span className="text-emerald-550 dark:text-emerald-400 underline uppercase">{outreachExportPaperSize}</span>
+                        </span>
+                      </div>
+                      <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
+                        SCALED PREVIEW
+                      </span>
+                    </div>
+
+                    {(() => {
+                      const totalPages = (outreachExportShowCover ? 1 : 0) + (outreachExportShowTOC ? 1 : 0) + (outreachEventsToPrint?.length || 0);
+                      let currentPageNum = 1;
+
+                      if (totalPages === 0) {
+                        return (
+                          <div className="my-12 text-center p-8 border border-dashed border-slate-300 dark:border-slate-800 rounded bg-white dark:bg-slate-900 max-w-sm text-slate-400">
+                            <AlertTriangle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                            <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Selected</p>
+                          </div>
+                        );
+                      }
+
+                      const paperAspect = outreachExportPaperSize === 'letter' ? '8.5 / 11' : outreachExportPaperSize === 'a4' ? '1 / 1.414' : '8.5 / 14';
+
+                      return (
+                        <div className="flex flex-col gap-8 w-full max-w-md items-center shadow-inner py-4">
+                          
+                          {/* 1. COVER PAGE PREVIEW */}
+                          {outreachExportShowCover && (() => {
+                            const thisPage = currentPageNum++;
+                            return (
+                              <div className="flex flex-col items-center gap-1 w-full">
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                  <div className="border-4 border-double border-slate-900/30 flex-1 p-4 flex flex-col justify-between">
+                                    <div className="text-center my-auto py-8">
+                                      <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none">
+                                        Community Impact Portfolio
+                                      </h3>
+                                      <p className="text-[7px] font-mono uppercase tracking-widest mt-1">
+                                        FIRST Tech Challenge Team #6567
+                                      </p>
+                                    </div>
+                                    <div className="border-t border-slate-350 pt-3 flex justify-between items-end text-[7px] font-mono leading-none">
+                                      <div>
+                                        <p>DATE: {new Date().toLocaleDateString()}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* 2. TOC / SUMMARY PAGE PREVIEW */}
+                          {outreachExportShowTOC && (() => {
+                            const thisPage = currentPageNum++;
+                            return (
+                              <div className="flex flex-col items-center gap-1 w-full">
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (SUMMARY LIST)</span>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-100 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                  <div className="border-b border-slate-950 dark:border-white pb-1.5 mb-3 flex justify-between items-baseline">
+                                    <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-white">Summary Table</h4>
+                                  </div>
+                                  <div className="flex-1 overflow-hidden">
+                                     <div className="text-[7.5px] font-sans">
+                                       {(outreachEventsToPrint || []).slice(0, 10).map((entry, idx) => (
+                                         <div key={entry.id} className="border-b border-slate-300 dark:border-slate-800 py-1 font-mono text-slate-700 dark:text-slate-300 flex justify-between truncate">
+                                            <span>{entry.date} - {entry.title}</span>
+                                            <span>{entry.hoursLogged}h</span>
+                                         </div>
+                                       ))}
+                                     </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* 3. EVENT LOG PREVIEWS */}
+                          {(outreachEventsToPrint || []).map((entry, idx) => {
+                            const thisPage = currentPageNum++;
+                            return (
+                              <div key={entry.id} className="flex flex-col items-center gap-1 w-full">
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} ({entry.title.substring(0, 10)}...)</span>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-200 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                  <div className="border-b-2 border-slate-950 dark:border-slate-200 pb-1 flex justify-between items-start text-[7.5px] font-mono shrink-0">
+                                    <span className="font-sans font-black uppercase text-[8px] text-slate-950 dark:text-white truncate max-w-[150px] leading-tight">
+                                      {entry.title}
+                                    </span>
+                                    <div className="text-right text-[6.5px] font-bold whitespace-nowrap leading-none space-y-0.5">
+                                      <div>{entry.date}</div>
+                                      <div>{entry.hoursLogged} hrs</div>
+                                    </div>
+                                  </div>
+                                  <div className="flex-1 mt-2.5 overflow-hidden text-[7px] text-slate-950 dark:text-slate-100 font-sans pr-1 leading-normal">
+                                    {entry.description}
                                   </div>
                                 </div>
                               </div>
@@ -9989,16 +10382,16 @@ FTC #6567 Captains & Mentors`
                 className={`flex-1 flex flex-col gap-4 p-6 bg-white border border-slate-200 rounded-lg mb-8 relative print:border-none print:p-0 ${
                   index < entriesToPrint.length - 1 ? 'break-after-page' : ''
                 }`}
-                style={{ pageBreakAfter: index < entriesToPrint.length - 1 ? 'always' : 'auto' }}
+                style={{ pageBreakAfter: index < entriesToPrint.length - 1 ? 'always' : 'auto', minHeight: exportPaperSize === 'legal' ? '300mm' : '240mm' }}
               >
                 {/* FTC Header Plate */}
                 <div className="border-b-4 border-slate-950 pb-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950">
-                      {entry.subteam} CATEGORY
+                      {entry.subteam}
                     </span>
                     <h4 className="text-xs font-black text-slate-950 uppercase font-display tracking-widest">
-                      FTC ENGINEERING LOG
+                      SUBTEAM JOURNAL ENTRY
                     </h4>
                   </div>
 
@@ -10133,28 +10526,128 @@ FTC #6567 Captains & Mentors`
       {timeEntriesToPrint && timeEntriesToPrint.length > 0 && (
         <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
           
-          {/* Cover / Header Plate */}
-          <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950 animate-none">
-                  ROBORAIDERS TIME LEDGER
-                </span>
+          {/* TITLE COVER PAGE */}
+          {timeExportShowCover && (
+            <div 
+              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+              style={{ pageBreakAfter: 'always', minHeight: timeExportPaperSize === 'legal' ? '300mm' : '240mm' }}
+            >
+              <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
+                <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
+                  <span className="font-extrabold text-2xl tracking-tighter">RR</span>
+                </div>
+                <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
+                  RoboRaiders Team Portal
+                </h1>
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8">
+                  Time Records Report
+                </p>
+                
+                <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
+                
+                <p className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                  FIRST Tech Challenge Team #6567
+                </p>
               </div>
-              <h1 className="text-xl font-extrabold uppercase mt-1">
-                {timeExportScope === 'all' && 'Entire Team Cumulative Time Report'}
-                {timeExportScope === 'members' && 'Individual Participant Time Sheets'}
-                {timeExportScope === 'subteam' && `Subteam Time Sheet — ${selectedTimeExportSubteam}`}
-              </h1>
-            </div>
 
-            <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5">
-              <div><strong>GENERATED:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>
-              <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950">{timeEntriesToPrint.length} Records</span></div>
-              <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
-              <div><strong>TEAM NUMBER:</strong> FTC #6567</div>
+              <div className="mt-auto border-t-2 border-slate-950 pt-6">
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700">
+                  <div>
+                    <p><strong>DOCUMENT TYPE:</strong> Time Ledger</p>
+                    <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
+                    <p><strong>PAPER SIZE:</strong> {timeExportPaperSize.toUpperCase()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p><strong>RECORDS CLASSIFIED:</strong> {timeEntriesToPrint.length} Entries</p>
+                    <p><strong>CUMULATIVE STRENGTH:</strong> {timeEntriesToPrint.reduce((acc, c) => acc + (c.durationHours || 0), 0).toFixed(2)} hrs</p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* TABLE OF CONTENTS / SUMMARY LOG */}
+          {timeExportShowTOC && (
+            <div 
+              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+              style={{ pageBreakAfter: 'always', minHeight: timeExportPaperSize === 'legal' ? '300mm' : '240mm' }}
+            >
+              <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
+                    Summary Table
+                  </h2>
+                  <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                    FTC #6567 Time Ledger Index
+                  </p>
+                </div>
+                <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5">
+                  <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950">{timeEntriesToPrint.length} Records</span></div>
+                  <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
+                </div>
+              </div>
+
+              <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
+                <thead>
+                  <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100">
+                    <th className="py-2.5 px-2">Date</th>
+                    <th className="py-2.5 px-2">Team Member</th>
+                    <th className="py-2.5 px-2">Subteam</th>
+                    <th className="py-2.5 px-2 text-right">Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timeEntriesToPrint.slice(0, 45).map((ev, index) => (
+                    <tr key={ev.id} className="border-b border-slate-300">
+                      <td className="py-3 px-2 font-mono">{ev.date}</td>
+                      <td className="py-3 px-2 font-bold">{ev.userName}</td>
+                      <td className="py-3 px-2 font-mono text-[9px] uppercase">{ev.subteam}</td>
+                      <td className="py-3 px-2 text-right font-extrabold">{ev.durationHours.toFixed(2)} hrs</td>
+                    </tr>
+                  ))}
+                  {timeEntriesToPrint.length > 45 && (
+                    <tr>
+                      <td colSpan={4} className="py-4 text-center italic text-xs text-slate-500">
+                        ... and {timeEntriesToPrint.length - 45} more records enclosed ...
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              <div className="mt-auto border-t border-slate-400 pt-6">
+                <div className="flex justify-between text-[11px] font-mono text-slate-600">
+                  <span>FTC #6567 TIME BINDER INDEX SUMMARY</span>
+                  <span>SIGNED VERIFIED BY CAPTAIN: _________________</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Header Plate for inline first page if cover is disabled */}
+          {(!timeExportShowCover && !timeExportShowTOC) && (
+            <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950 animate-none">
+                    ROBORAIDERS TIME LEDGER
+                  </span>
+                </div>
+                <h1 className="text-xl font-extrabold uppercase mt-1">
+                  {timeExportScope === 'all' && 'Entire Team Cumulative Time Report'}
+                  {timeExportScope === 'members' && 'Individual Participant Time Sheets'}
+                  {timeExportScope === 'subteam' && `Subteam Time Sheet — ${selectedTimeExportSubteam}`}
+                </h1>
+              </div>
+
+              <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5">
+                <div><strong>GENERATED:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>
+                <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950">{timeEntriesToPrint.length} Records</span></div>
+                <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
+                <div><strong>TEAM NUMBER:</strong> FTC #6567</div>
+              </div>
+            </div>
+          )}
 
           {/* Render individual tables per member if in "members" mode to give professional layout, or print a single consolidated master registry for "all" or "subteam" options */}
           {timeExportScope === 'members' ? (
@@ -10264,66 +10757,69 @@ FTC #6567 Captains & Mentors`
         <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
           
           {/* TITLE COVER PAGE */}
-          <div 
-            className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
-            style={{ pageBreakAfter: 'always', minHeight: '240mm' }}
-          >
-            <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
-              <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
-                <span className="font-extrabold text-2xl tracking-tighter">RR</span>
+          {outreachExportShowCover && (
+            <div 
+              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+              style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
+            >
+              <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
+                <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
+                  <span className="font-extrabold text-2xl tracking-tighter">RR</span>
+                </div>
+                <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
+                  RoboRaiders Team Portal
+                </h1>
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8">
+                  Community Outreach & Impact Portfolio
+                </p>
+                
+                <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
+                
+                <p className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                  FIRST Tech Challenge Team #6567
+                </p>
+                <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest mt-2">
+                  {outreachPrintSubtitle}
+                </p>
               </div>
-              <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
-                RoboRaiders Team Portal
-              </h1>
-              <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8">
-                Community Outreach & Impact Portfolio
-              </p>
-              
-              <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
-              
-              <p className="text-sm font-bold text-slate-800 uppercase tracking-wide">
-                FIRST Tech Challenge Team #6567
-              </p>
-              <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest mt-2">
-                {outreachPrintSubtitle}
-              </p>
-            </div>
 
-            <div className="mt-auto border-t-2 border-slate-950 pt-6">
-              <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700">
-                <div>
-                  <p><strong>DOCUMENT TYPE:</strong> Community Impact Portfolio</p>
-                  <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
-                </div>
-                <div className="text-right">
-                  <p><strong>CAMPAIGNS CLASSIFIED:</strong> {outreachEventsToPrint.length} Outreach Records</p>
-                  <p><strong>CUMULATIVE HOURS DEPLOYED:</strong> {outreachEventsToPrint.reduce((acc, c) => acc + (c.hoursLogged || 0), 0).toFixed(1)} hrs</p>
+              <div className="mt-auto border-t-2 border-slate-950 pt-6">
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700">
+                  <div>
+                    <p><strong>DOCUMENT TYPE:</strong> Community Impact Portfolio</p>
+                    <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p><strong>CAMPAIGNS CLASSIFIED:</strong> {outreachEventsToPrint.length} Outreach Records</p>
+                    <p><strong>CUMULATIVE HOURS DEPLOYED:</strong> {outreachEventsToPrint.reduce((acc, c) => acc + (c.hoursLogged || 0), 0).toFixed(1)} hrs</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* TABLE OF CONTENTS / SUMMARY LOG */}
-          <div 
-            className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
-            style={{ pageBreakAfter: 'always', minHeight: '270mm' }}
-          >
-            <div className="border-b-4 border-slate-950 pb-4 mb-6">
-              <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
-                Summary Table of Events
-              </h2>
-              <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
-                FTC #6567 Community Engagement Index
-              </p>
-            </div>
+          {outreachExportShowTOC && (
+            <div 
+              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+              style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
+            >
+              <div className="border-b-4 border-slate-950 pb-4 mb-6">
+                <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
+                  Summary Table of Events
+                </h2>
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                  FTC #6567 Community Engagement Index
+                </p>
+              </div>
 
-            <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
-              <thead>
-                <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100">
-                  <th className="py-2.5 px-2">Date</th>
-                  <th className="py-2.5 px-2">Campaign Initiative Title</th>
-                  <th className="py-2.5 px-2">Location Venue</th>
-                  <th className="py-2.5 px-2 text-right">Devoted Team Hours</th>
+              <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
+                <thead>
+                  <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100">
+                    <th className="py-2.5 px-2">Date</th>
+                    <th className="py-2.5 px-2">Campaign Initiative Title</th>
+                    <th className="py-2.5 px-2">Location Venue</th>
+                    <th className="py-2.5 px-2 text-right">Devoted Team Hours</th>
                   <th className="py-2.5 px-2 text-right">Reps Tagged</th>
                 </tr>
               </thead>
@@ -10354,6 +10850,7 @@ FTC #6567 Captains & Mentors`
               </div>
             </div>
           </div>
+          )}
 
           {/* INDIVIDUAL EVENT PROFILE SHEETS */}
           {outreachEventsToPrint.map((ev) => {
@@ -10361,7 +10858,7 @@ FTC #6567 Captains & Mentors`
               <div 
                 key={ev.id}
                 className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
-                style={{ pageBreakAfter: 'always', minHeight: '270mm' }}
+                style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
               >
                 {/* Header card info */}
                 <div className="border-b-4 border-slate-950 pb-4 mb-6 flex justify-between items-start">

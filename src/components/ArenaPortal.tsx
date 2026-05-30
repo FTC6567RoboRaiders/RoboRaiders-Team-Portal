@@ -95,6 +95,11 @@ export default function ArenaPortal({
   const [xpAdjustmentReason, setXpAdjustmentReason] = useState<string>('');
   const [adjustmentError, setAdjustmentError] = useState<string>('');
   const [adjustmentSuccess, setAdjustmentSuccess] = useState<string>('');
+  const [expandedBadges, setExpandedBadges] = useState<Record<string, boolean>>({});
+
+  const toggleBadge = (badgeId: string) => {
+    setExpandedBadges(prev => ({ ...prev, [badgeId]: !prev[badgeId] }));
+  };
 
   const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
   const { stats, badges, quests } = gameResult;
@@ -237,7 +242,7 @@ export default function ArenaPortal({
           </div>
           <div>
             <h2 className="text-base font-extrabold uppercase font-display text-slate-900 dark:text-slate-50 flex items-center gap-2">
-              <span>RoboRaiders Cyber-Championship Lounge</span>
+              <span>RoboRaiders Achievement Portal</span>
             </h2>
             <p className="text-[11px] text-slate-505 dark:text-slate-400 font-sans mt-0.5">
               Accumulate XP and ranks by logging laboratory sessions, completing peer reviews, and tracking subteam contributions.
@@ -710,12 +715,13 @@ export default function ArenaPortal({
                   return (
                     <div 
                       key={badge.id} 
-                      className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all duration-300 relative overflow-hidden group select-none ${
+                      onClick={() => toggleBadge(badge.id)}
+                      className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all duration-300 relative overflow-hidden group select-none cursor-pointer ${
                         badge.unlocked 
                           ? 'bg-slate-50 dark:bg-slate-905 border-cyan-500/40 shadow-sm hover:shadow-cyan-500/10 hover:border-cyan-500/80 ring-1 ring-cyan-500/5' 
                           : 'bg-slate-50/40 dark:bg-slate-955/20 border-slate-200/60 dark:border-slate-800/50 opacity-60 hover:opacity-100'
                       }`}
-                      title={`${badge.name}: ${badge.description}`}
+                      title={`${badge.name}`}
                     >
                       {badge.unlocked && (
                         <div className="absolute top-0 right-0 transform translate-x-4 -translate-y-4 w-10 h-10 bg-cyan-500/10 rounded-full blur-sm group-hover:scale-150 transition-all"></div>
@@ -737,13 +743,13 @@ export default function ArenaPortal({
                           <h4 className="font-extrabold text-[12px] text-slate-900 dark:text-slate-100 uppercase tracking-wide truncate">
                             {badge.name}
                           </h4>
-                          <p className="text-[10px] text-slate-455 dark:text-slate-400 leading-tight mt-0.5 line-clamp-2">
+                          <p className={`text-[10px] text-slate-455 dark:text-slate-400 leading-tight mt-0.5 transition-all duration-300 ${expandedBadges[badge.id] ? '' : 'line-clamp-2'}`}>
                             {badge.description}
                           </p>
                         </div>
                       </div>
 
-                      <div className="mt-3.5 border-t border-slate-105 dark:border-slate-800 pt-2 flex flex-col gap-1 text-[9px] font-mono">
+                      <div className={`mt-3.5 border-t border-slate-105 dark:border-slate-800 pt-2 flex flex-col gap-1 text-[9px] font-mono transition-all duration-300 ${expandedBadges[badge.id] ? 'opacity-100 translate-y-0' : 'opacity-100'}`}>
                         <div className="flex justify-between items-center text-slate-400 dark:text-slate-500">
                           <span className="uppercase">Requirement:</span>
                           <span className="font-bold truncate max-w-[110px]" title={badge.reqText}>{badge.reqText}</span>

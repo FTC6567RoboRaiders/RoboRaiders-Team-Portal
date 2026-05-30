@@ -18,7 +18,12 @@ import {
   Sparkles,
   ChevronRight,
   Info,
-  Calendar
+  Calendar,
+  Download,
+  Printer,
+  FileText,
+  LayoutTemplate,
+  AlertTriangle
 } from 'lucide-react';
 import { UserAccount, JournalEntry, TimeEntry, KanbanTask, OutreachEvent, XPAdjustment, Subteam } from '../types';
 import { computeUserGamification, calculateJournalQualityScore } from '../utils/gamification';
@@ -57,6 +62,11 @@ export default function MemberDirectory({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSubteam, setFilterSubteam] = useState<string>('All');
   const [filterRole, setFilterRole] = useState<string>('All');
+  const [isRosterExportModalOpen, setIsRosterExportModalOpen] = useState(false);
+  const [rosterExportPaperSize, setRosterExportPaperSize] = useState<'letter' | 'a4' | 'legal'>('letter');
+  const [rosterExportShowCover, setRosterExportShowCover] = useState<boolean>(true);
+  const [rosterExportShowTOC, setRosterExportShowTOC] = useState<boolean>(true);
+  const [rosterExportShowPreview, setRosterExportShowPreview] = useState<boolean>(true);
   const [selectedUserForAudit, setSelectedUserForAudit] = useState<UserAccount | null>(() => {
     // Default to first user if available
     return accounts.find(a => a.status === 'Approved') || null;
@@ -185,8 +195,49 @@ export default function MemberDirectory({
     };
   };
 
+  const handleExportRoster = () => {
+    const csvRows = [];
+    csvRows.push(['Name', 'Email', 'Role', 'Leadership', 'Status', 'Primary Subteam', 'Secondary Subteam', 'Level', 'Total XP', 'Total Hours', 'Journals', 'Outreach Events'].join(','));
+    
+    // Allow users to export the full directory including gamification logic
+    accounts.forEach((acc) => {
+      // Recompute logic per acc
+      // NOTE gamification for MemberDirectory components only uses these props: 
+      // computeUserGamification(user: UserAccount, journals: JournalEntry[], timeEntries: TimeEntry[], kanbanTasks: KanbanTask[], outreachEvents: OutreachEvent[], xpAdjs: XPAdjustment[])
+      const g = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+      const audit = getUserXpAudit(acc);
+      const outreachCount = audit.outreachLogs.length;
+
+      const row = [
+        `"${acc.name.replace(/"/g, '""')}"`,
+        `"${acc.schoolEmail.replace(/"/g, '""')}"`,
+        `"${acc.role.replace(/"/g, '""')}"`,
+        `"${acc.leadership || 'None'}"`,
+        `"${acc.status.replace(/"/g, '""')}"`,
+        `"${acc.primarySubteam || 'None'}"`,
+        `"${acc.secondarySubteam || 'None'}"`,
+        `${g.stats.level}`,
+        `${g.stats.xp}`,
+        `${g.stats.totalHours.toFixed(2)}`,
+        `${g.stats.totalJournals}`,
+        `${outreachCount}`
+      ];
+      csvRows.push(row.join(','));
+    });
+    
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `FTC_Roster_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors animate-fade-in p-4 md:p-6" id="member-approvals-directory-viewport">
+    <>
+    <div className={`flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors p-4 md:p-6 ${isRosterExportModalOpen ? 'print:hidden' : ''}`} id="member-approvals-directory-viewport">
       
       {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200 dark:border-slate-900 no-print">
@@ -203,7 +254,23 @@ export default function MemberDirectory({
           </p>
         </div>
         
-        <div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setIsRosterExportModalOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md"
+            title="Export Roster to PDF"
+          >
+            <Printer className="w-4 h-4" />
+            <span className="hidden sm:inline">Export PDF</span>
+          </button>
+          <button
+            onClick={handleExportRoster}
+            className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold px-3 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md border border-slate-350 dark:border-slate-700"
+            title="Export Roster to CSV"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Export CSV</span>
+          </button>
           <button
             onClick={onBack}
             className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold px-4 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md border border-slate-350 dark:border-slate-700"
@@ -692,5 +759,417 @@ export default function MemberDirectory({
 
       </div>
     </div>
+
+    {/* ROSTER PDF EXPORT MENU MODAL */}
+    <AnimatePresence>
+      {isRosterExportModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
+          onClick={() => setIsRosterExportModalOpen(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 15, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.95, y: 15, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 350 }}
+            className={`relative w-full ${rosterExportShowPreview ? 'max-w-6xl' : 'max-w-md'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-emerald-500" />
+                <span className="text-xs font-mono font-extrabold uppercase tracking-wider">
+                  Export Roster Directory
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRosterExportModalOpen(false)}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40 dark:bg-slate-950/20">
+              
+              {/* CONFIGURATION COLUMN */}
+              <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-505 uppercase tracking-wider">
+                      Paper Dimensions Format
+                    </span>
+                    <div className="grid grid-cols-3 gap-1 tracking-tight">
+                      {(['letter', 'a4', 'legal'] as const).map((sz) => (
+                        <button
+                          key={sz}
+                          type="button"
+                          onClick={() => setRosterExportPaperSize(sz)}
+                          className={`py-1.5 px-1 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                            rosterExportPaperSize === sz
+                              ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 font-extrabold'
+                              : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          <span className="uppercase text-[9px] tracking-wide">{sz}</span>
+                          <span className="text-[8px] font-mono font-normal block opacity-75">
+                            {sz === 'letter' ? '8.5" × 11"' : sz === 'a4' ? '210×297mm' : '8.5" × 14"'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/20 border border-slate-150 dark:border-slate-805">
+                    <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">
+                      Select Display Elements
+                    </span>
+                    
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                      <input
+                        type="checkbox"
+                        checked={rosterExportShowCover}
+                        onChange={(e) => setRosterExportShowCover(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                      />
+                      <span>Include Cover Sheet</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                      <input
+                        type="checkbox"
+                        checked={rosterExportShowTOC}
+                        onChange={(e) => setRosterExportShowTOC(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                      />
+                      <span>Include Matrix Summary</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none border-t border-slate-250 dark:border-slate-800 pt-2.5 mt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={rosterExportShowPreview}
+                        onChange={(e) => setRosterExportShowPreview(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                      />
+                      <span className="font-bold flex items-center gap-1">Live Page Preview Frame <Sparkles className="w-3 h-3 text-emerald-500" /></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-4 mt-4 border-t border-slate-105 dark:border-slate-800 flex justify-end gap-2 text-xs shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsRosterExportModalOpen(false)}
+                    className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setTimeout(() => { window.print(); }, 150); }}
+                    className="px-4 py-1.5 rounded text-[11px] font-bold font-mono uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* VISUAL PAGE PREVIEW */}
+              {rosterExportShowPreview ? (
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 dark:bg-slate-950/40 select-none pb-12">
+                  <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-2 sticky top-0 bg-slate-100 dark:bg-slate-900/90 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10">
+                    <div className="flex items-center gap-1.5">
+                      <LayoutTemplate className="w-4 h-4 text-emerald-500 animate-[pulse_3s_infinite]" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
+                        Format: <span className="text-emerald-550 dark:text-emerald-400 underline uppercase">{rosterExportPaperSize}</span>
+                      </span>
+                    </div>
+                    <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
+                      SCALED PREVIEW
+                    </span>
+                  </div>
+
+                  {(() => {
+                    const approvedAccounts = accounts.filter(a => a.status === 'Approved');
+                    const totalPages = (rosterExportShowCover ? 1 : 0) + (rosterExportShowTOC ? 1 : 0) + approvedAccounts.length;
+                    let currentPageNum = 1;
+                    const paperAspect = rosterExportPaperSize === 'letter' ? '8.5 / 11' : rosterExportPaperSize === 'a4' ? '1 / 1.414' : '8.5 / 14';
+
+                    return (
+                      <div className="flex flex-col gap-8 w-full max-w-md items-center shadow-inner py-4">
+                        {/* 1. COVER PAGE PREVIEW */}
+                        {rosterExportShowCover && (() => {
+                          const thisPage = currentPageNum++;
+                          return (
+                            <div className="flex flex-col items-center gap-1 w-full">
+                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages}</span>
+                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col justify-between text-black overflow-hidden relative" style={{ aspectRatio: paperAspect }}>
+                                <div className="border border-slate-900 flex-1 p-4 flex flex-col justify-between">
+                                  <div className="text-center my-auto py-8">
+                                    <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none mb-1">
+                                      Member Roster Directory
+                                    </h3>
+                                    <p className="text-[7px] font-mono uppercase tracking-widest mt-1">
+                                      FIRST Tech Challenge Team #6567
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* 2. TOC SUMMARY PREVIEW */}
+                        {rosterExportShowTOC && (() => {
+                          const thisPage = currentPageNum++;
+                          return (
+                            <div className="flex flex-col items-center gap-1 w-full">
+                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (SUMMARY)</span>
+                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col text-slate-850 overflow-hidden relative" style={{ aspectRatio: paperAspect }}>
+                                <div className="border-b border-black pb-1 mb-2">
+                                  <h4 className="text-[9px] font-black uppercase text-black">Member Summary Table</h4>
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                  <div className="text-[6px] font-sans">
+                                    {approvedAccounts.slice(0, 15).map(acc => (
+                                      <div key={acc.id} className="border-b border-slate-200 py-1 font-mono text-slate-800 flex justify-between">
+                                        <span>{acc.name}</span>
+                                        <span>{acc.primarySubteam || 'No Subteam'}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* 3. ROSTER CARDS */}
+                        {approvedAccounts.slice(0, 3).map(acc => {
+                          const thisPage = currentPageNum++;
+                          return (
+                            <div key={acc.id} className="flex flex-col items-center gap-1 w-full">
+                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} ({acc.name.split(' ')[0]})</span>
+                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col text-black overflow-hidden relative" style={{ aspectRatio: paperAspect }}>
+                                <div className="border-b-2 border-black pb-1 mb-2 flex justify-between">
+                                  <span className="font-sans font-black uppercase text-[8px] truncate">{acc.name}</span>
+                                  <span className="font-mono text-[7px]">{acc.role}</span>
+                                </div>
+                                <div className="text-[7px]">Profile statistics overview...</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="flex-1 bg-slate-50 dark:bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                  <LayoutTemplate className="w-12 h-12 text-slate-300 dark:text-slate-800 mb-3" />
+                  <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500">Preview Closed</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* PRINT ONLY RENDER (Visible to browser during print operation) */}
+    {isRosterExportModalOpen && (
+      <div className="print-only bg-white text-black p-0 m-0 z-[200] relative font-sans">
+        
+        {rosterExportShowCover && (
+          <div 
+            className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+            style={{ pageBreakAfter: 'always', minHeight: rosterExportPaperSize === 'legal' ? '300mm' : '240mm' }}
+          >
+            <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
+              <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
+                <span className="font-extrabold text-2xl tracking-tighter">RR</span>
+              </div>
+              <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
+                Team Member Directory
+              </h1>
+              <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8">
+                FTC Security & Credential Logs
+              </p>
+              
+              <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
+              
+              <p className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                FIRST Tech Challenge Team #6567
+              </p>
+            </div>
+            <div className="mt-auto border-t-2 border-slate-950 pt-6">
+              <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700">
+                <div>
+                  <p><strong>DOCUMENT TYPE:</strong> Secure Team Roster</p>
+                  <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
+                </div>
+                <div className="text-right">
+                  <p><strong>APPROVED ACCOUNTS:</strong> {accounts.filter(a => a.status === 'Approved').length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {rosterExportShowTOC && (
+          <div 
+            className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+            style={{ pageBreakAfter: 'always', minHeight: rosterExportPaperSize === 'legal' ? '300mm' : '240mm' }}
+          >
+            <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
+                  Registry Summary
+                </h2>
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                  Team Members Status Matrix
+                </p>
+              </div>
+            </div>
+            <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
+              <thead>
+                <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100">
+                  <th className="py-2.5 px-2">Name</th>
+                  <th className="py-2.5 px-2">Role</th>
+                  <th className="py-2.5 px-2">Leadership</th>
+                  <th className="py-2.5 px-2 text-right">Subteams</th>
+                  <th className="py-2.5 px-2 text-right">Level</th>
+                  <th className="py-2.5 px-2 text-right">Hours</th>
+                  <th className="py-2.5 px-2 text-right">Journals</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.filter(a => a.status === 'Approved').map(acc => {
+                  const g = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+                  return (
+                    <tr key={acc.id} className="border-b border-slate-300">
+                      <td className="py-2 px-2 font-bold">{acc.name}</td>
+                      <td className="py-2 px-2 font-mono text-[9px] uppercase"><span className="bg-slate-100 border border-slate-300 px-1 py-0.5 rounded">{acc.role}</span></td>
+                      <td className="py-2 px-2 font-mono text-[9px] uppercase"><span className={`px-1 py-0.5 rounded border ${acc.leadership === 'Captain' || acc.leadership === 'Subteam leader' ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{acc.leadership || 'None'}</span></td>
+                      <td className="py-2 px-2 text-[10px] text-right text-slate-600">{acc.primarySubteam || 'N/A'}</td>
+                      <td className="py-2 px-2 text-[10px] text-right font-bold text-slate-700">{g.stats.level}</td>
+                      <td className="py-2 px-2 text-[10px] text-right text-slate-600">{g.stats.totalHours.toFixed(1)}</td>
+                      <td className="py-2 px-2 text-[10px] text-right text-slate-600">{g.stats.totalJournals}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {accounts.filter(a => a.status === 'Approved').map((acc, index, array) => {
+                          const g = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+          const audit = getUserXpAudit(acc);
+          const journalXp = audit.journalLogs.reduce((sum, item) => sum + item.xp, 0);
+          const timeXp = audit.hoursLogs.reduce((sum, item) => sum + item.xp, 0);
+          const outreachXp = audit.outreachLogs.reduce((sum, item) => sum + item.xp, 0);
+          const manualXp = audit.manualLogs.reduce((sum, item) => sum + item.xp, 0);
+          const kanbanXp = 0; // Kanban tasks no longer award XP in current system
+
+          return (
+            <div 
+              key={acc.id}
+              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+              style={{ pageBreakAfter: index < array.length - 1 ? 'always' : 'auto', minHeight: rosterExportPaperSize === 'legal' ? '300mm' : '240mm' }}
+            >
+              <div className="border-b-4 border-slate-950 pb-4 mb-6 flex justify-between items-start">
+                <div>
+                  <h2 className="text-3xl font-black uppercase tracking-wider text-slate-955">
+                    {acc.name}
+                  </h2>
+                  <div className="flex gap-2 mt-2 font-mono text-xs text-slate-600 uppercase">
+                    <span className="font-bold">{acc.role}</span>
+                    <span>•</span>
+                    <span>{acc.schoolEmail}</span>
+                  </div>
+                </div>
+                <div className="text-right flex flex-col items-end gap-1">
+                  <div className="bg-slate-950 text-white px-3 py-1 font-bold font-mono text-xs inline-block">
+                    LVL {g.stats.level}: {g.stats.levelName}
+                  </div>
+                  <div className="text-[10px] font-mono tracking-widest font-extrabold uppercase mt-1 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded">
+                    {g.stats.xp} XP 
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-8 mb-8">
+                <div>
+                  <h3 className="font-mono text-[10px] font-bold text-slate-400 mb-2 border-b border-slate-200 pb-1 uppercase">Profile Config</h3>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-bold">Primary Discipline:</span>
+                      <span className="font-mono">{acc.primarySubteam || 'None'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-bold">Secondary Focus:</span>
+                      <span className="font-mono">{acc.secondarySubteam || 'None'}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-100 pt-1 mt-1">
+                      <span className="text-slate-500 font-bold text-[10px]">Leader Status:</span>
+                      <span className="font-mono text-[10px] bg-slate-100 px-1 text-slate-600 rounded">
+                        {acc.leadership || 'None'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-100 pt-1 mt-1">
+                      <span className="text-slate-500 font-bold text-[10px]">Security Clearance:</span>
+                      <span className="font-mono text-[10px] bg-slate-100 px-1 text-slate-600 rounded">
+                        {acc.leadership === 'Captain' ? 'Tier 1 : CPT' : acc.leadership === 'Subteam leader' ? 'Tier 2 : LEAD' : 'Tier 3 : OPR'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="font-mono text-[10px] font-bold text-slate-400 mb-2 border-b border-slate-200 pb-1 uppercase">Metric Summary & XP</h3>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-emerald-700 font-bold">Journals Published ({g.stats.totalJournals}):</span>
+                      <span className="font-mono">{journalXp} XP</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-cyan-700 font-bold">Time Logged ({g.stats.totalHours.toFixed(1)}h):</span>
+                      <span className="font-mono">{timeXp} XP</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-amber-700 font-bold">Kanban Tasks Resolved:</span>
+                      <span className="font-mono">{kanbanXp} XP</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-rose-700 font-bold">Community Outreach ({audit.outreachLogs.length}):</span>
+                      <span className="font-mono">{outreachXp} XP</span>
+                    </div>
+                    {manualXp !== 0 && (
+                      <div className="flex justify-between items-center border-t border-slate-200 pt-1 mt-1">
+                        <span className="text-indigo-700 font-bold">Direct Adjustments:</span>
+                        <span className="font-mono">{manualXp} XP</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 p-4 border border-slate-200 bg-slate-50 rounded italic text-[11px] text-slate-500">
+                End of generated intelligence log for user {acc.id}.
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
+    </>
   );
 }

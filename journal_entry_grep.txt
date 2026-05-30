@@ -1,0 +1,22 @@
+55:import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction } from './types';
+141:export const canUserApproveEntry = (user: UserAccount | null, entry: JournalEntry | null): boolean => {
+196:export const getEntryReferenceCode = (entry: JournalEntry, allEntries: JournalEntry[] = []): string => {
+323:  const [entries, setEntries] = useState<JournalEntry[]>([]);
+661:  const syncEntriesToFirestore = async (newEntries: JournalEntry[]) => {
+864:                      const list: JournalEntry[] = [];
+866:                        list.push(d.data() as JournalEntry);
+1028:                      const list: JournalEntry[] = [];
+1030:                        list.push(d.data() as JournalEntry);
+1568:  const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
+1603:  const [entriesToPrint, setEntriesToPrint] = useState<JournalEntry[] | null>(null);
+1656:  const entriesRef = useRef<JournalEntry[]>([]);
+1795:        const parsed = JSON.parse(stored) as JournalEntry[];
+2532:  const saveEntriesToLocalStorage = (newEntries: JournalEntry[]) => {
+2955:          const u: JournalEntry = {
+2979:      const u: JournalEntry = {
+3047:  const handleEditInit = (entry: JournalEntry) => {
+3110:        const u: JournalEntry = {
+3186:        const u: JournalEntry = {
+3289:    let filtered: JournalEntry[] = [];
+3402:  const handleCopyMarkdown = (entry: JournalEntry) => {
+9672:                      let prefiltered: JournalEntry[] = [];
