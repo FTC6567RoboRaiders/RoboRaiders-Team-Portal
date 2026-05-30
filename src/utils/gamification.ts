@@ -168,10 +168,10 @@ export const computeUserGamification = (
   });
 
   // Calculate quality-driven XP
-  // 35 XP per hour of lab attendance
-  const hoursXp = Math.floor(userHours.reduce((sum, h) => sum + h.durationHours, 0) * 35);
+  // 10 XP per hour of lab attendance
+  const hoursXp = Math.floor(userHours.reduce((sum, h) => sum + h.durationHours, 0) * 10);
   
-  // 50 XP per Journal Entry published + actual quality score bonus (0 to 100 XP)
+  // 50 XP per Journal Entry published + actual quality score bonus (0 to 105 XP)
   const journalCountXp = userJournals.length * 50;
   
   // Award full quality points directly as extra XP
@@ -185,21 +185,17 @@ export const computeUserGamification = (
   const imagesCount = userJournals.reduce((sum, j) => sum + (j.images?.length || 0), 0);
   const imageXp = imagesCount * 15;
 
-  // 100 XP per completed Kanban Task assigned to the user
-  const completedTasks = (kanbanTasks || []).filter(k => 
-    k.column === 'done' && 
-    k.assignedTo.toLowerCase() === user.name.toLowerCase()
-  );
-  const kanbanXp = completedTasks.length * 100;
+  // Completed Kanban Tasks no longer award XP
+  const kanbanXp = 0;
 
-  // 150 XP per Outreach Event participated in
+  // 50 XP per Outreach Event participated in
   const participatedOutreach = (outreachEvents || []).filter(ev => 
     ev.participants?.some(p => 
       p.toLowerCase() === user.name.toLowerCase() || 
       p.toLowerCase() === user.schoolEmail.toLowerCase()
     )
   );
-  const outreachXp = participatedOutreach.length * 150;
+  const outreachXp = participatedOutreach.length * 50;
 
   // Manual adjustments from Mentors/Admins
   const userAdjustments = (xpAdjustments || []).filter(adj => 
@@ -207,7 +203,7 @@ export const computeUserGamification = (
   );
   const manualXp = userAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
 
-  const totalXp = Math.max(0, hoursXp + journalCountXp + qualityXpBonus + approvedJournalXp + imageXp + kanbanXp + outreachXp + manualXp + 50); // +50 base for signing up!
+  const totalXp = Math.max(0, hoursXp + journalCountXp + qualityXpBonus + approvedJournalXp + imageXp + kanbanXp + outreachXp + manualXp); // base sign up + kanban removed!
 
   const totalHours = userHours.reduce((sum, h) => sum + h.durationHours, 0);
   const totalJournals = userJournals.length;

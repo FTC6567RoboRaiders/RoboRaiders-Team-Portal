@@ -23,6 +23,7 @@ interface KanbanBoardProps {
   tasks: KanbanTask[];
   onUpdateTasks: (newTasks: KanbanTask[]) => void;
   formatSubteamLabel: (subteam: any) => string;
+  onBack?: () => void;
 }
 
 const COLUMNS: { id: KanbanColumn; name: string; color: string; border: string; bg: string; text: string }[] = [
@@ -65,7 +66,8 @@ export default function KanbanBoard({
   accounts, 
   tasks, 
   onUpdateTasks,
-  formatSubteamLabel
+  formatSubteamLabel,
+  onBack
 }: KanbanBoardProps) {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -291,6 +293,16 @@ export default function KanbanBoard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start xl:self-center">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="bg-slate-200 hover:bg-slate-350 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5 cursor-pointer border border-slate-300 dark:border-slate-700 mr-2"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back to Hub</span>
+            </button>
+          )}
+
           <button
             onClick={() => openCreateModal('todo')}
             className="bg-brand hover:bg-brand-hover text-white font-extrabold text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5 cursor-pointer"

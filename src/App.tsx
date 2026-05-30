@@ -31,6 +31,9 @@ import {
   Heart,
   Settings,
   Database,
+  Eye,
+  EyeOff,
+  LayoutTemplate,
   Sun,
   Moon,
   Send,
@@ -98,6 +101,7 @@ import { DEMO_ENTRIES, DEFAULT_TIME_ENTRIES } from './data/journalDemo';
 import StudentHandbook from './components/StudentHandbook';
 import TimePicker from './components/TimePicker';
 import GeneralLedger from './components/GeneralLedger';
+import MemberDirectory from './components/MemberDirectory';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -399,7 +403,7 @@ export default function App() {
   });
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals'>('landing');
 
   // Outreach events state
   const [outreachEvents, setOutreachEvents] = useState<OutreachEvent[]>(() => {
@@ -1383,23 +1387,9 @@ export default function App() {
         t.userEmail.toLowerCase() === email
       );
 
-      // 1. Initial Space Registration
-      logs.push({
-        id: `signup-${user.id}`,
-        userName: user.name,
-        userEmail: user.schoolEmail,
-        userId: user.id,
-        type: 'signup',
-        amount: 50,
-        description: 'Initial space signup bonus',
-        timestamp: user.createdAt || Date.now() - 1000 * 60 * 60 * 24,
-        details: 'Awarded automatically on profile configuration within the FTC #6567 systems.',
-        subteam: user.primarySubteam
-      });
-
-      // 2. Lab hours log
+      // 1. Lab hours log (10 XP per hour)
       userHours.forEach(t => {
-        const amt = Math.floor(t.durationHours * 35);
+        const amt = Math.floor(t.durationHours * 10);
         if (amt > 0) {
           logs.push({
             id: `hours-${t.id}`,
@@ -1416,11 +1406,11 @@ export default function App() {
         }
       });
 
-      // 3. Journal entries rewards
+      // 2. Journal entries rewards
       userJournals.forEach(j => {
         const dateTimestamp = j.createdAt || new Date(j.date).getTime();
 
-        // 3.1. Raw journal log
+        // 2.1. Raw journal log
         logs.push({
           id: `journal-sub-${j.id}`,
           userName: user.name,
@@ -1434,7 +1424,7 @@ export default function App() {
           subteam: j.subteam
         });
 
-        // 3.2. Technical depth / quality
+        // 2.2. Technical depth / quality
         const qScore = calculateJournalQualityScore(j);
         if (qScore > 0) {
           logs.push({
@@ -1451,7 +1441,7 @@ export default function App() {
           });
         }
 
-        // 3.3. Attached visual proof
+        // 2.3. Attached visual proof
         const imagesCount = j.images?.length || 0;
         if (imagesCount > 0) {
           logs.push({
@@ -1468,7 +1458,7 @@ export default function App() {
           });
         }
 
-        // 3.4. Vetted approved journal
+        // 2.4. Vetted approved journal
         if (j.status === 'Approved') {
           logs.push({
             id: `journal-appr-${j.id}`,
@@ -1485,27 +1475,7 @@ export default function App() {
         }
       });
 
-      // 4. Finished Kanban Tickets
-      const completedTasks = (kanbanTasks || []).filter(k => 
-        k.column === 'done' && 
-        k.assignedTo.toLowerCase() === user.name.toLowerCase()
-      );
-      completedTasks.forEach(task => {
-        logs.push({
-          id: `kanban-${task.id}`,
-          userName: user.name,
-          userEmail: user.schoolEmail,
-          userId: user.id,
-          type: 'kanban_task',
-          amount: 100,
-          description: `Completed Kanban Ticket`,
-          timestamp: task.updatedAt || task.createdAt || Date.now(),
-          details: `Ticket context: "${task.title}". Priority: ${task.priority}. Description: ${task.description || 'N/A'}`,
-          subteam: task.subteam
-        });
-      });
-
-      // 5. Outreach Programs Participated
+      // 3. Outreach Programs Participated (50 XP per Event)
       const participatedOutreach = (outreachEvents || []).filter(ev => 
         ev.participants?.some(p => 
           p.toLowerCase() === user.name.toLowerCase() || 
@@ -1519,14 +1489,14 @@ export default function App() {
           userEmail: user.schoolEmail,
           userId: user.id,
           type: 'outreach',
-          amount: 150,
+          amount: 50,
           description: `Participated in Outreach Event`,
           timestamp: ev.createdAt || new Date(ev.date).getTime(),
           details: `Special Program Event: "${ev.title}" at ${ev.location || 'FTC arena'}. Logged ${ev.hoursLogged} outreach hours. Reached ${ev.reachedChildren || 0} students.`
         });
       });
 
-      // 6. Manual Adjustments page
+      // 4. Manual Adjustments page
       const userAdjustments = (xpAdjustments || []).filter(adj => 
         adj.userId === user.id || adj.userEmail.toLowerCase() === email
       );
@@ -1631,6 +1601,10 @@ export default function App() {
   const [exportSubteam, setExportSubteam] = useState<Subteam | 'All'>('All');
   const [exportStatus, setExportStatus] = useState<string | 'All'>('All');
   const [entriesToPrint, setEntriesToPrint] = useState<JournalEntry[] | null>(null);
+  const [exportPaperSize, setExportPaperSize] = useState<'letter' | 'a4' | 'legal'>('letter');
+  const [exportShowCover, setExportShowCover] = useState<boolean>(true);
+  const [exportShowTOC, setExportShowTOC] = useState<boolean>(true);
+  const [exportShowPreview, setExportShowPreview] = useState<boolean>(true);
 
   // Time Card PDF Export States
   const [isTimeExportModalOpen, setIsTimeExportModalOpen] = useState(false);
@@ -1638,10 +1612,22 @@ export default function App() {
   const [selectedTimeExportMembers, setSelectedTimeExportMembers] = useState<string[]>([]);
   const [selectedTimeExportSubteam, setSelectedTimeExportSubteam] = useState<Subteam | 'All'>('All');
   const [timeEntriesToPrint, setTimeEntriesToPrint] = useState<TimeEntry[] | null>(null);
+  const [timeExportPaperSize, setTimeExportPaperSize] = useState<'letter' | 'a4' | 'legal'>('letter');
+  const [timeExportShowCover, setTimeExportShowCover] = useState<boolean>(true);
+  const [timeExportShowTOC, setTimeExportShowTOC] = useState<boolean>(true);
+  const [timeExportShowPreview, setTimeExportShowPreview] = useState<boolean>(true);
 
   // Outreach PDF Export States
+  const [isOutreachExportModalOpen, setIsOutreachExportModalOpen] = useState(false);
+  const [outreachExportScope, setOutreachExportScope] = useState<'all' | 'filtered'>('all');
+  const [outreachExportStartDate, setOutreachExportStartDate] = useState<string>('');
+  const [outreachExportEndDate, setOutreachExportEndDate] = useState<string>('');
   const [outreachEventsToPrint, setOutreachEventsToPrint] = useState<OutreachEvent[] | null>(null);
   const [outreachPrintSubtitle, setOutreachPrintSubtitle] = useState<string>('');
+  const [outreachExportPaperSize, setOutreachExportPaperSize] = useState<'letter' | 'a4' | 'legal'>('letter');
+  const [outreachExportShowCover, setOutreachExportShowCover] = useState<boolean>(true);
+  const [outreachExportShowTOC, setOutreachExportShowTOC] = useState<boolean>(true);
+  const [outreachExportShowPreview, setOutreachExportShowPreview] = useState<boolean>(true);
 
   // Gamification dashboard selectors
   const [gamificationTab, setGamificationTab] = useState<'profile' | 'badges' | 'quests' | 'leaderboard' | 'subteamRanks'>('profile');
@@ -1681,6 +1667,57 @@ export default function App() {
   useEffect(() => {
     ledgerTransactionsRef.current = ledgerTransactions;
   }, [ledgerTransactions]);
+
+  // Directory approvals and credentials actions
+  const handleApproveUser = async (userId: string) => {
+    const acc = accounts.find(a => a.id === userId);
+    if (!acc) return;
+    try {
+      const updatedUser = { ...acc, status: 'Approved' } as UserAccount;
+      await setDoc(doc(db, 'users', acc.id), updatedUser);
+      sendEmailNotification(
+        acc.schoolEmail,
+        `[FTC #6567] Access Request APPROVED: Welcome to the Team!`,
+        `Hi ${acc.name},
+
+Your access request to the FTC #6567 Workspace has been APPROVED by the Mentors/Captains.
+
+You can now log in using your registered school email and the password (or school ID) you established during registration.
+
+Best of luck on the build season! Go RoboRaiders!
+
+Best regards,
+FTC #6567 Captains & Mentors`
+      );
+      showToast(`Access APPROVED for ${acc.name}!`, 'success');
+    } catch (e: any) {
+      showToast(`Approval failed: ${e.message}`, 'danger');
+    }
+  };
+
+  const handleRejectUser = async (userId: string) => {
+    const acc = accounts.find(a => a.id === userId);
+    if (!acc) return;
+    try {
+      const updatedUser = { ...acc, status: 'Rejected' } as UserAccount;
+      await setDoc(doc(db, 'users', acc.id), updatedUser);
+      showToast(`Access REJECTED for ${acc.name}.`, 'danger');
+    } catch (e: any) {
+      showToast(`Rejection failed: ${e.message}`, 'danger');
+    }
+  };
+
+  const handleUpdateLeadership = async (userId: string, leadership: 'None' | 'Captain' | 'Subteam leader') => {
+    const acc = accounts.find(a => a.id === userId);
+    if (!acc) return;
+    try {
+      const updatedUser = { ...acc, leadership } as UserAccount;
+      await setDoc(doc(db, 'users', acc.id), updatedUser);
+      showToast(`Updated leadership for ${acc.name} to ${leadership}.`, 'success');
+    } catch (err: any) {
+      showToast(`Failed to update leadership status: ${err.message}`, 'danger');
+    }
+  };
 
   // Compute discovered ranks per guild based on approved users to gamify the ladder discoveries
   const guildDiscoveries = React.useMemo(() => {
@@ -3313,9 +3350,7 @@ FTC #6567 Captains & Mentors`
     const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
     setOutreachEventsToPrint(sorted);
     setOutreachPrintSubtitle(subtitle);
-    setTimeout(() => {
-      window.print();
-    }, 150);
+    setIsOutreachExportModalOpen(true);
   };
 
   const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -5575,41 +5610,49 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
             </div>
 
+            {/* CARD 3: TEAM DIRECTORY - Available for ALL verified members */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-indigo-500/30 group">
+              <div>
+                <div className="flex items-center gap-3.5 mb-4">
+                  <div className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 dark:text-slate-100 font-display">
+                      Roster &amp; Approvals Directory
+                    </h3>
+                    <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-450 uppercase tracking-widest mt-0.5">
+                      Secure Team Management Directory
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                  Browse the comprehensive registered team directory, search primary/secondary subteam focuses, analyze performance level badges, and review real-time member approvals.
+                </p>
+
+                {/* Quick Stats */}
+                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800/80 flex items-center justify-between text-xs font-mono">
+                  <span className="text-slate-500">Authorized Team Members:</span>
+                  <strong className="text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded font-bold">
+                    {accounts.length} Profiles
+                  </strong>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setCurrentView('approvals')}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
+                >
+                  <span>Open Member Directory</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
             {/* ONLY MENTORS/CAPTAINS CAN VIEW ROSTER MANAGEMENT & EMAIL COMMUNICATIONS */}
             {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
               <>
-                {/* CARD 3: TEAM DIRECTORY */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-indigo-550/30 group">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2.5">
-                      <div className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 p-2.5 rounded-lg">
-                        <Users className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
-                          Roster &amp; Subteam Approvals
-                        </h4>
-                        <p className="text-[9px] font-mono text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mt-0.5">
-                          Secure Team Management Directory
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
-                      Audit registered roster accounts, primary and secondary subteam declarations, and authorize pending student logins.
-                    </p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex justify-between items-center text-xs font-mono">
-                    <span className="text-[10px] text-slate-400">Roster Count: {accounts.length} Profiles</span>
-                    <button
-                      onClick={() => setIsApprovalsOpen(true)}
-                      className="text-indigo-600 dark:text-indigo-400 font-extrabold hover:underline uppercase text-[10px] tracking-wider flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>Manage Directory</span>
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
                 {/* CARD 4: EMAIL OUTBOX SIMULATOR */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-indigo-550/30 group">
                   <div>
@@ -5781,6 +5824,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
           accounts={accounts}
           tasks={kanbanTasks}
           onUpdateTasks={saveKanbanTasksToLocalStorage}
+          formatSubteamLabel={formatSubteamLabel}
+        />
+      )}
+
+      {/* MEMBER DIRECTORY & SECURITY APPROVALS HUB VIEW */}
+      {currentView === 'approvals' && (
+        <MemberDirectory
+          currentUser={currentUser}
+          accounts={accounts}
+          entries={entries}
+          timeEntries={timeEntries}
+          kanbanTasks={kanbanTasks}
+          outreachEvents={outreachEvents}
+          xpAdjustments={xpAdjustments}
+          onBack={() => setCurrentView('landing')}
+          onApproveUser={handleApproveUser}
+          onRejectUser={handleRejectUser}
+          onUpdateLeadership={handleUpdateLeadership}
+          onStartEditProfile={handleStartEditProfile}
           formatSubteamLabel={formatSubteamLabel}
         />
       )}
@@ -8405,14 +8467,12 @@ FTC #6567 Captains & Mentors`
                     className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-950 dark:text-white"
                   >
                     <option value="ALL">All Event Channels</option>
-                    <option value="signup">Space Registration Info (+50 XP)</option>
-                    <option value="lab_hours">Lab Timesheet Checkins (35 XP/hr)</option>
+                    <option value="lab_hours">Lab Timesheet Checkins (10 XP/hr)</option>
                     <option value="journal_submit">Engineering Journal Created (+50 XP)</option>
                     <option value="journal_quality">Documentation Quality Bonus (+0-100 XP)</option>
                     <option value="journal_image">Rich Illustration Uploads (+15 XP/img)</option>
                     <option value="journal_approve">Mentor Editorial Approval (+120 XP)</option>
-                    <option value="kanban_task">Kanban Ticket Completion (+100 XP)</option>
-                    <option value="outreach">Outreach Event Participation (+150 XP)</option>
+                    <option value="outreach">Outreach Event Participation (+50 XP)</option>
                     <option value="manual_adjustment">Manual Mentor/Admin Ad-Hoc Adjustments</option>
                   </select>
                 </div>
@@ -8917,7 +8977,7 @@ FTC #6567 Captains & Mentors`
         )}
       </AnimatePresence>
 
-      {/* Time Card PDF Export Modal */}
+      {/* Time Card PDF Export Modal with Advanced Live Previews */}
       <AnimatePresence>
         {isTimeExportModalOpen && (
           <motion.div
@@ -8932,95 +8992,99 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+              className={`relative w-full ${timeExportShowPreview ? 'max-w-6xl' : 'max-w-xl'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-brand" />
+                  <FileText className="w-4 h-4 text-cyan-400" />
                   <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
-                    Export Time Cards to PDF
+                    Export Time Cards to PDF Scribe Sheets
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsTimeExportModalOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-none outline-none"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Body */}
-              <div className="p-5 flex flex-col gap-4 text-slate-850 dark:text-slate-100 overflow-y-auto max-h-[75vh]">
-                <p className="text-xs leading-normal font-medium text-slate-600 dark:text-slate-400">
-                  Generate print-ready official time sheet reports. Compile lab hours, shifts, and contribution narratives for FTC judge binders.
-                </p>
+              {/* Split Parent Pane */}
+              <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+                
+                {/* LEFT CONTEXT: FILTERS & DOCUMENT FORM SETTINGS */}
+                <div className="w-full md:w-[380px] p-5 border-r border-slate-200 dark:border-slate-850 overflow-y-auto flex flex-col justify-between h-full bg-slate-50/50 dark:bg-slate-950/20 shrink-0">
+                  <div className="flex flex-col gap-4">
+                    <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
+                      Generate print-ready official timesheet logs. Define scope alignments, toggle index page inclusions, and choose paper sizes.
+                    </p>
 
-                {/* Scope Selection */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                    Select Report Target Scope
-                  </span>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTimeExportScope('all')}
-                      className={`px-3 py-2.5 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
-                        timeExportScope === 'all'
-                          ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
-                          : 'border-slate-200 dark:border-slate-850 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-940 text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      <Users className="w-4 h-4" />
-                      <span>Entire Team</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTimeExportScope('members')}
-                      className={`px-3 py-2.5 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
-                        timeExportScope === 'members'
-                          ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
-                          : 'border-slate-200 dark:border-slate-850 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-940 text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Select Members</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTimeExportScope('subteam')}
-                      className={`px-3 py-2.5 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
-                        timeExportScope === 'subteam'
-                          ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
-                          : 'border-slate-200 dark:border-slate-850 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-940 text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      <Layers className="w-4 h-4" />
-                      <span>Subteam Area</span>
-                    </button>
-                  </div>
-                </div>
+                    {/* Scope Selection */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        Report Target Scope
+                      </span>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTimeExportScope('all')}
+                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                            timeExportScope === 'all'
+                              ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-455'
+                          }`}
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                          <span>Entire Team</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTimeExportScope('members')}
+                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                            timeExportScope === 'members'
+                              ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-455'
+                          }`}
+                        >
+                          <User className="w-3.5 h-3.5" />
+                          <span>Select Members</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTimeExportScope('subteam')}
+                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                            timeExportScope === 'subteam'
+                              ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-605 dark:text-slate-400'
+                          }`}
+                        >
+                          <Layers className="w-3.5 h-3.5" />
+                          <span>Subteam Area</span>
+                        </button>
+                      </div>
+                    </div>
 
-                {/* Subteam selection options */}
-                {timeExportScope === 'subteam' && (
-                  <div className="bg-slate-50 dark:bg-slate-950/30 p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-1.5 animate-fade-in text-xs">
-                    <label className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                      Choose Subteam Focus Area
-                    </label>
-                    <select
-                      value={selectedTimeExportSubteam}
-                      onChange={(e) => setSelectedTimeExportSubteam(e.target.value as Subteam | 'All')}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono cursor-pointer"
-                    >
-                      <option value="All">All Focus Areas</option>
-                      {ATTENDANCE_SUBTEAMS.map((sub) => (
-                        <option key={sub} value={sub}>{sub}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                    {/* Subteam selection options */}
+                    {timeExportScope === 'subteam' && (
+                      <div className="bg-slate-50 dark:bg-slate-950/30 p-3 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-1.5 animate-fade-in text-xs">
+                        <label className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                          Choose Subteam Focus Area
+                        </label>
+                        <select
+                          value={selectedTimeExportSubteam}
+                          onChange={(e) => setSelectedTimeExportSubteam(e.target.value as Subteam | 'All')}
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-cyan-600 font-mono cursor-pointer"
+                        >
+                          <option value="All">All Focus Areas</option>
+                          {ATTENDANCE_SUBTEAMS.map((sub) => (
+                            <option key={sub} value={sub}>{sub}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                 {/* Member selection checklist options */}
                 {timeExportScope === 'members' && (
@@ -9131,8 +9195,113 @@ FTC #6567 Captains & Mentors`
                   </p>
                 </div>
               </div>
+            </div>
 
-              {/* Action buttons */}
+            {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
+            {timeExportShowPreview && (
+              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 dark:bg-slate-950/70 select-none pb-12">
+                <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-2 sticky top-0 bg-slate-100 dark:bg-slate-900 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10">
+                  <div className="flex items-center gap-1.5">
+                    <LayoutTemplate className="w-4 h-4 text-cyan-500 animate-[pulse_3s_infinite]" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
+                      Live Timesheets Format: <span className="text-cyan-600 dark:text-cyan-400 underline">LETTER</span>
+                    </span>
+                  </div>
+                  <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
+                    SCALED PREVIEW
+                  </span>
+                </div>
+
+                {(() => {
+                  let matchingEntries: TimeEntry[] = [];
+                  if (timeExportScope === 'all') {
+                    matchingEntries = timeEntries;
+                  } else if (timeExportScope === 'members') {
+                    matchingEntries = timeEntries.filter(t => selectedTimeExportMembers.includes(t.userEmail));
+                  } else if (timeExportScope === 'subteam') {
+                    matchingEntries = timeEntries.filter(t => selectedTimeExportSubteam === 'All' || t.subteam === selectedTimeExportSubteam);
+                  }
+
+                  if (matchingEntries.length === 0) {
+                    return (
+                      <div className="my-12 text-center p-8 border border-dashed border-slate-300 dark:border-slate-850 rounded bg-white dark:bg-slate-900 max-w-sm text-slate-400">
+                        <AlertTriangle className="w-8 h-8 text-cyan-500 mx-auto mb-2" />
+                        <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Matched</p>
+                        <p className="text-[10px] mt-1 leading-normal italic">Modify your Scope & Profile options on the left to inspect visual time sheets.</p>
+                      </div>
+                    );
+                  }
+
+                  const totalHr = matchingEntries.reduce((sum, e) => sum + e.durationHours, 0);
+
+                  return (
+                    <div className="flex flex-col gap-6 w-full max-w-md items-center py-2 animate-fade-in">
+                      <div className="bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-lg aspect-[8.5/11] w-[380px] p-5 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative">
+                        <div className="border border-slate-900/10 dark:border-slate-100/5 flex-grow p-3.5 flex flex-col justify-between min-h-0 text-[10px]">
+                          <div>
+                            <div className="border-b border-slate-950 pb-2 mb-3 flex justify-between items-start">
+                              <div>
+                                <span className="text-[7px] font-mono font-black border border-slate-950 px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 uppercase tracking-wide">
+                                  FTC TIME ROSTER
+                                </span>
+                                <h4 className="text-[10px] font-extrabold uppercase mt-1 leading-tight max-w-[160px] truncate font-sans">
+                                  {timeExportScope === 'all' && 'Team Time Report'}
+                                  {timeExportScope === 'members' && `${matchingEntries[0]?.userName || 'Selected Members'} Sheet`}
+                                  {timeExportScope === 'subteam' && `${selectedTimeExportSubteam} Subteam`}
+                                </h4>
+                              </div>
+                              <div className="text-right text-[7px] font-mono leading-tight text-slate-500">
+                                <div><strong>RECORDS:</strong> {matchingEntries.length} items</div>
+                                <div><strong>TIME:</strong> {totalHr.toFixed(2)} hrs</div>
+                                <div><strong>DIV:</strong> FTC #6567</div>
+                              </div>
+                            </div>
+
+                            <div className="overflow-hidden min-h-0">
+                              <table className="w-full text-left text-[8px] font-sans border-collapse mt-1">
+                                <thead>
+                                  <tr className="border-b border-slate-955 text-[7px] uppercase font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-905">
+                                    <th className="py-1 px-0.5">Date</th>
+                                    <th className="py-1 px-0.5">Member</th>
+                                    <th className="py-1 px-0.5 text-right">Hrs</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {matchingEntries.slice(0, 5).map((e) => (
+                                    <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800/55">
+                                      <td className="py-1.5 px-0.5 font-mono text-[7px]">{e.date}</td>
+                                      <td className="py-1.5 px-0.5 font-bold truncate max-w-[80px]">{e.userName}</td>
+                                      <td className="py-1.5 px-0.5 text-right font-mono font-bold text-slate-955 dark:text-slate-200">{e.durationHours.toFixed(1)} h</td>
+                                    </tr>
+                                  ))}
+                                  {matchingEntries.length > 5 && (
+                                    <tr>
+                                      <td colSpan={3} className="py-1.5 text-center text-slate-400 italic font-mono text-[7px]">
+                                        + {matchingEntries.length - 5} additional logged records below...
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          <div className="border-t border-dashed border-slate-300 dark:border-slate-850 pt-2 flex justify-end text-[6.5px] font-mono text-slate-505">
+                            <span className="border-b border-slate-900/30 w-32 pb-0.5 text-right uppercase">
+                              {timeExportScope === 'members' ? 'MEMBER SIGNATURE' : 'MENTOR VERIFIER'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+          </div>
+
+          {/* Action buttons */}
               <div className="bg-slate-50 dark:bg-slate-950 p-4 border-t border-slate-105 dark:border-slate-850 flex justify-end gap-2 text-xs shrink-0">
                 <button
                   type="button"
@@ -9170,7 +9339,7 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+              className={`relative w-full ${exportShowPreview ? 'max-w-6xl' : 'max-w-lg'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -9184,136 +9353,409 @@ FTC #6567 Captains & Mentors`
                 <button
                   type="button"
                   onClick={() => setIsExportModalOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Body */}
-              <div className="p-5 flex flex-col gap-4 text-slate-850 dark:text-slate-100">
-                <p className="text-xs leading-normal font-medium text-slate-600 dark:text-slate-400">
-                  Compile engineering logs into structured, high-density print pages optimized for judge binder reviews.
-                </p>
+              {/* Grid split-container when showPreview is enabled */}
+              <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40 dark:bg-slate-950/20">
+                
+                {/* CONFIGURATION COLUMN */}
+                <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900">
+                  <div className="flex flex-col gap-4">
+                    <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
+                      Compile engineering logs into high-fidelity structured print pages optimized for notebook presentation binder reviews.
+                    </p>
 
-                {/* Scope Selection */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                    Export Range
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
+                    {/* Scope Selection */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-505 uppercase tracking-wider">
+                        Export Range
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExportScope('all')}
+                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                            exportScope === 'all'
+                              ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          <Layers className="w-4 h-4" />
+                          <span>All Journals ({entries.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExportScope('filtered')}
+                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                            exportScope === 'filtered'
+                              ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          <Settings className="w-4 h-4" />
+                          <span>Targeted Set</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filters for Targeted Set */}
+                    <AnimatePresence>
+                      {exportScope === 'filtered' && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden space-y-3 bg-slate-50 dark:bg-slate-950/30 p-3 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col"
+                        >
+                          {/* Subteam select */}
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                              Subteam Category
+                            </label>
+                            <select
+                              value={exportSubteam}
+                              onChange={(e) => setExportSubteam(e.target.value as Subteam | 'All')}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
+                            >
+                              <option value="All">All Subteams</option>
+                              {SUBTEAM_LIST.map((sub) => (
+                                <option key={sub} value={sub}>{formatSubteamLabel(sub)}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Status select */}
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                              Review Status
+                            </label>
+                            <select
+                              value={exportStatus}
+                              onChange={(e) => setExportStatus(e.target.value)}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
+                            >
+                              <option value="All">All Statuses</option>
+                              <option value="Draft">Draft</option>
+                              <option value="Pending Review">Pending Review</option>
+                              <option value="Approved">Approved</option>
+                              <option value="Needs Revision">Needs Revision</option>
+                            </select>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Paper Sizing Formats */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-505 uppercase tracking-wider">
+                        Paper Dimensions Format
+                      </span>
+                      <div className="grid grid-cols-3 gap-1 tracking-tight">
+                        {(['letter', 'a4', 'legal'] as const).map((sz) => (
+                          <button
+                            key={sz}
+                            type="button"
+                            onClick={() => setExportPaperSize(sz)}
+                            className={`py-1.5 px-1 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                              exportPaperSize === sz
+                                ? 'border-amber-500 bg-amber-500/5 dark:bg-amber-600/10 text-amber-600 dark:text-amber-400 font-extrabold'
+                                : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            <span className="uppercase text-[9px] tracking-wide">{sz}</span>
+                            <span className="text-[8px] font-mono font-normal block opacity-75">
+                              {sz === 'letter' ? '8.5" × 11"' : sz === 'a4' ? '210×297mm' : '8.5" × 14"'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Document Contents Elements (TOC, Cover, etc) */}
+                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/20 border border-slate-150 dark:border-slate-805">
+                      <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">
+                        Select Notebook Sheets
+                      </span>
+                      
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                        <input
+                          type="checkbox"
+                          checked={exportShowCover}
+                          onChange={(e) => setExportShowCover(e.target.checked)}
+                          className="rounded border-slate-300 text-brand focus:ring-brand"
+                        />
+                        <span>Include Cover Title Banner</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                        <input
+                          type="checkbox"
+                          checked={exportShowTOC}
+                          onChange={(e) => setExportShowTOC(e.target.checked)}
+                          className="rounded border-slate-300 text-brand focus:ring-brand"
+                        />
+                        <span>Include Table of Contents</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none border-t border-slate-250 dark:border-slate-800 pt-2.5 mt-0.5">
+                        <input
+                          type="checkbox"
+                          checked={exportShowPreview}
+                          onChange={(e) => setExportShowPreview(e.target.checked)}
+                          className="rounded border-slate-300 text-brand focus:ring-brand"
+                        />
+                        <span className="font-bold flex items-center gap-1">Live Page Preview Frame <Sparkles className="w-3 h-3 text-amber-500" /></span>
+                      </label>
+                    </div>
+
+                    {/* Dynamic counter info */}
+                    <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded border border-slate-200 dark:border-slate-800 flex flex-col gap-1.5 text-slate-800 dark:text-slate-200">
+                      <div className="flex justify-between items-center text-xs font-mono">
+                        <span className="text-slate-400 dark:text-slate-500 uppercase font-black tracking-wider text-[9px]">Calculated Pages:</span>
+                        <span className="font-extrabold text-brand dark:text-red-405">
+                          {(() => {
+                            const filteredCount = exportScope === 'all' 
+                              ? entries.length 
+                              : entries.filter(e => {
+                                  const subteamMatch = exportSubteam === 'All' || e.subteam === exportSubteam;
+                                  const statusMatch = exportStatus === 'All' || e.status === exportStatus;
+                                  return subteamMatch && statusMatch;
+                                }).length;
+                            const totalPrntPages = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + filteredCount;
+                            return `${totalPrntPages} Dynamic Sheet${totalPrntPages !== 1 ? 's' : ''}`;
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions inside column */}
+                  <div className="pt-4 mt-4 border-t border-slate-105 dark:border-slate-800 flex justify-end gap-2 text-xs shrink-0">
                     <button
                       type="button"
-                      onClick={() => setExportScope('all')}
-                      className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                        exportScope === 'all'
-                          ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
-                          : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
-                      }`}
+                      onClick={() => setIsExportModalOpen(false)}
+                      className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
                     >
-                      <Layers className="w-4 h-4" />
-                      <span>All Journals ({entries.length})</span>
+                      Close
                     </button>
                     <button
                       type="button"
-                      onClick={() => setExportScope('filtered')}
-                      className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                        exportScope === 'filtered'
-                          ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
-                          : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
-                      }`}
+                      onClick={handlePrintPDF}
+                      className="px-4 py-1.5 rounded text-[11px] font-bold font-mono uppercase tracking-wider bg-brand hover:bg-brand-hover text-white transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
                     >
-                      <Settings className="w-4 h-4" />
-                      <span>Targeted Set</span>
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print PDF</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Filters for Targeted Set */}
-                <AnimatePresence>
-                  {exportScope === 'filtered' && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden space-y-3 bg-slate-50 dark:bg-slate-950/30 p-3 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col"
-                    >
-                      {/* Subteam select */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                          Subteam Category
-                        </label>
-                        <select
-                          value={exportSubteam}
-                          onChange={(e) => setExportSubteam(e.target.value as Subteam | 'All')}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
-                        >
-                          <option value="All">All Subteams</option>
-                          {SUBTEAM_LIST.map((sub) => (
-                            <option key={sub} value={sub}>{formatSubteamLabel(sub)}</option>
-                          ))}
-                        </select>
+                {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
+                {exportShowPreview ? (
+                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 dark:bg-slate-950/40 select-none pb-12">
+                    <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-2 sticky top-0 bg-slate-100 dark:bg-slate-900/90 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <LayoutTemplate className="w-4 h-4 text-amber-500 animate-[pulse_3s_infinite]" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
+                          Live Scribe Sheets Format: <span className="text-amber-550 dark:text-amber-400 underline uppercase">{exportPaperSize}</span>
+                        </span>
                       </div>
+                      <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
+                        SCALED PREVIEW
+                      </span>
+                    </div>
 
-                      {/* Status select */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                          Workflow Review Status
-                        </label>
-                        <select
-                          value={exportStatus}
-                          onChange={(e) => setExportStatus(e.target.value)}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
-                        >
-                          <option value="All">All Statuses</option>
-                          <option value="Draft">Draft</option>
-                          <option value="Pending Review">Pending Review</option>
-                          <option value="Approved">Approved</option>
-                          <option value="Needs Revision">Needs Revision</option>
-                        </select>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                    {(() => {
+                      // Filter and sort preview
+                      let prefiltered: JournalEntry[] = [];
+                      if (exportScope === 'all') {
+                        prefiltered = [...entries];
+                      } else {
+                        prefiltered = entries.filter(e => {
+                          const subteamMatch = exportSubteam === 'All' || e.subteam === exportSubteam;
+                          const statusMatch = exportStatus === 'All' || e.status === exportStatus;
+                          return subteamMatch && statusMatch;
+                        });
+                      }
+                      const sortedPreview = [...prefiltered].sort((a, b) => {
+                        const teamA = (a.subteam || '').toUpperCase();
+                        const teamB = (b.subteam || '').toUpperCase();
+                        if (teamA !== teamB) return teamA.localeCompare(teamB);
+                        return (a.date || '').localeCompare(b.date || '');
+                      });
 
-                {/* Scope Live counter and disclaimer */}
-                <div className="bg-slate-100 dark:bg-slate-850/50 p-3 rounded-md border border-slate-200 dark:border-slate-800 flex flex-col gap-1 text-slate-800 dark:text-slate-200">
-                  <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-slate-500 dark:text-slate-450 uppercase font-black tracking-wider text-[9px]">Compiled Journals:</span>
-                    <span className="font-extrabold text-brand dark:text-red-400">
-                      {exportScope === 'all' 
-                        ? entries.length 
-                        : entries.filter(e => {
-                            const subteamMatch = exportSubteam === 'All' || e.subteam === exportSubteam;
-                            const statusMatch = exportStatus === 'All' || e.status === exportStatus;
-                            return subteamMatch && statusMatch;
-                          }).length
-                      } Records
-                    </span>
+                      const totalPages = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + sortedPreview.length;
+                      let currentPageNum = 1;
+
+                      if (totalPages === 0) {
+                        return (
+                          <div className="my-12 text-center p-8 border border-dashed border-slate-300 dark:border-slate-800 rounded bg-white dark:bg-slate-900 max-w-sm text-slate-400">
+                            <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                            <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Selected</p>
+                            <p className="text-[10px] mt-1 leading-normal italic">Modify your Targeted filters above to see visual compiled journal sheets.</p>
+                          </div>
+                        );
+                      }
+
+                      // Dynamic classes
+                      const aspectClass = exportPaperSize === 'letter' ? 'aspect-[8.5/11]' : exportPaperSize === 'a4' ? 'aspect-[210/297]' : 'aspect-[8.5/14]';
+
+                      return (
+                        <div className="flex flex-col gap-8 w-full max-w-md items-center shadow-inner py-4">
+                          
+                          {/* 1. COVER PAGE PREVIEW */}
+                          {exportShowCover && (() => {
+                            const thisPage = currentPageNum++;
+                            return (
+                              <div className="flex flex-col items-center gap-1 w-full">
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md ${aspectClass} w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative`}>
+                                  <div className="border border-slate-900/30 dark:border-slate-100/10 flex-1 p-4 flex flex-col justify-between">
+                                    <div className="text-center my-auto py-8">
+                                      <div className="w-12 h-12 mb-4 border-2 border-slate-950 dark:border-slate-100 flex items-center justify-center rounded-full mx-auto">
+                                        <span className="font-extrabold text-sm tracking-tighter">RR</span>
+                                      </div>
+                                      <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none text-slate-950 dark:text-slate-100">
+                                        RoboRaiders Team Portal
+                                      </h3>
+                                      <p className="text-[7px] font-mono uppercase tracking-widest text-slate-500 mt-1">
+                                        Official Engineering Notebook
+                                      </p>
+                                      
+                                      <div className="w-12 h-0.5 bg-slate-950 dark:bg-slate-100 my-3 mx-auto"></div>
+                                      
+                                      <p className="text-[9px] font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                                        FIRST Tech Challenge Team #6567
+                                      </p>
+                                    </div>
+                                    <div className="border-t border-dashed border-slate-350 dark:border-slate-800 pt-3 flex justify-between items-end text-[7px] font-mono text-slate-500 leading-none">
+                                      <div>
+                                        <p>TYPE: Compiled Ledger</p>
+                                        <p className="mt-0.5">PAPER: {exportPaperSize.toUpperCase()}</p>
+                                      </div>
+                                      <div className="text-right">
+                                        <p>RECORDS: {sortedPreview.length} Ent.</p>
+                                        <p className="mt-0.5">STATUS: Verified</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* 2. TOC PAGE PREVIEW */}
+                          {exportShowTOC && (() => {
+                            const thisPage = currentPageNum++;
+                            const startingPageIndex = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + 1;
+                            return (
+                              <div className="flex flex-col items-center gap-1 w-full">
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (TABLE OF CONTENTS)</span>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md ${aspectClass} w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-100 overflow-hidden relative`}>
+                                  <div className="border-b border-slate-950 dark:border-white pb-1.5 mb-3 flex justify-between items-baseline">
+                                    <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-white">Table of Contents</h4>
+                                    <span className="text-[7.5px] font-mono text-slate-450 uppercase tracking-wider">FTC #6567 Binder</span>
+                                  </div>
+                                  
+                                  <div className="flex-1 overflow-hidden space-y-2">
+                                    <div className="grid grid-cols-12 text-[7px] font-mono font-extrabold border-b border-slate-400 text-slate-500 pb-1">
+                                      <span className="col-span-3">REF ID</span>
+                                      <span className="col-span-3">DATE</span>
+                                      <span className="col-span-4">SUBTEAM</span>
+                                      <span className="col-span-2 text-right">PAGE</span>
+                                    </div>
+                                    <div className="divide-y divide-slate-100 dark:divide-slate-800 flex flex-col gap-1.5 pt-1 overflow-hidden">
+                                      {sortedPreview.slice(0, 10).map((entry, idx) => (
+                                        <div key={entry.id} className="grid grid-cols-12 text-[7px] font-sans text-slate-800 dark:text-slate-200 pt-1">
+                                          <span className="col-span-3 font-mono font-bold text-slate-950 dark:text-slate-100 truncate">{getEntryReferenceCode(entry, entries)}</span>
+                                          <span className="col-span-3 font-mono text-slate-500">{entry.date}</span>
+                                          <span className="col-span-4 font-mono uppercase truncate text-slate-600 dark:text-slate-300">{entry.subteam}</span>
+                                          <span className="col-span-2 text-right font-mono font-bold text-amber-600 dark:text-amber-400">{idx + startingPageIndex}</span>
+                                        </div>
+                                      ))}
+                                      {sortedPreview.length > 10 && (
+                                        <p className="text-[6.5px] font-mono italic text-slate-550 pt-1 text-center font-bold">
+                                          ... and {sortedPreview.length - 10} more sheets listed in index ...
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="mt-auto pt-2 border-t border-slate-100 dark:border-slate-800 text-center text-[6px] font-mono text-slate-400">
+                                    FTC #6567 ROBOAID LEDGER
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* 3. LOG ENTRIES PREVIEWS */}
+                          {sortedPreview.map((entry, idx) => {
+                            const thisPage = currentPageNum++;
+                            return (
+                              <div key={entry.id} className="flex flex-col items-center gap-1 w-full">
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} ({entry.subteam} LOG)</span>
+                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md ${aspectClass} w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-200 overflow-hidden relative`}>
+                                  
+                                  {/* Header */}
+                                  <div className="border-b-2 border-slate-950 dark:border-slate-200 pb-1 flex justify-between items-start text-[7.5px] font-mono text-slate-700 dark:text-slate-200 shrink-0">
+                                    <div className="flex flex-col">
+                                      <span className="font-sans font-black uppercase text-[8px] text-slate-950 dark:text-white truncate max-w-[150px] leading-tight">
+                                        {formatSubteamLabel(entry.subteam)} Log
+                                      </span>
+                                      <span className="text-[6.5px] font-bold text-slate-400 leading-none mt-0.5">Author: {entry.author.split('(')[0]}</span>
+                                    </div>
+                                    <div className="text-right text-[6.5px] font-bold whitespace-nowrap leading-none space-y-0.5">
+                                      <div>{getEntryReferenceCode(entry, entries)}</div>
+                                      <div>{entry.date}</div>
+                                    </div>
+                                  </div>
+
+                                  {/* Log Content mock-up */}
+                                  <div className="flex-1 mt-2.5 overflow-hidden flex flex-col gap-2 text-[7px] text-slate-950 dark:text-slate-100 font-sans pr-1">
+                                    <div className="border border-slate-200 dark:border-slate-800 rounded p-1.5 bg-slate-50/50 dark:bg-slate-950/20">
+                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 dark:border-slate-800 pb-0.5 mb-1 leading-none">What We Planned</strong>
+                                      <p className="line-clamp-2 italic text-slate-700 dark:text-slate-355">{entry.planned}</p>
+                                    </div>
+
+                                    <div className="border border-slate-200 dark:border-slate-800 rounded p-1.5 bg-slate-50/50 dark:bg-slate-950/20">
+                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 dark:border-slate-800 pb-0.5 mb-1 leading-none">What We Accomplished</strong>
+                                      <p className="line-clamp-3 leading-normal text-slate-800 dark:text-slate-100">{entry.accomplished}</p>
+                                    </div>
+
+                                    <div className="border border-slate-200 dark:border-slate-800 rounded p-1.5 bg-slate-50/50 dark:bg-slate-950/20">
+                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 dark:border-slate-800 pb-0.5 mb-1 leading-none">Problems and Solutions</strong>
+                                      <p className="line-clamp-2 leading-tight text-slate-800 dark:text-slate-100">{entry.problemsAndSolutions[0] || 'No core blockers faced.'}</p>
+                                    </div>
+
+                                    {entry.images && entry.images.length > 0 && (
+                                      <div className="border border-slate-200 dark:border-slate-800 rounded p-1 flex items-center justify-between bg-emerald-500/5 mt-0.5 text-[6.5px] leading-none shrink-0 text-emerald-600 dark:text-emerald-400">
+                                        <div className="flex items-center gap-1">
+                                          <span className="p-0.5 bg-emerald-100 dark:bg-emerald-900 rounded font-mono font-bold uppercase">MEDIA</span>
+                                          <span className="font-medium italic">Includes {entry.images.length} high-fidelity schematic uploads</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
-                  <p className="text-[9px] text-slate-400 font-mono dark:text-slate-500 leading-normal">
-                    * Browser print dialog will appear. Please choose "Save as PDF" to generate files. Each record starts automatically on a unique page.
-                  </p>
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="bg-slate-50 dark:bg-slate-950 p-4 border-t border-slate-105 dark:border-slate-850 flex justify-end gap-2 text-xs shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsExportModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded text-xs font-bold font-mono uppercase bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePrintPDF}
-                  className="px-4 py-1.5 rounded text-xs font-bold font-mono uppercase tracking-wider bg-brand hover:bg-brand-hover text-white transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Generate & Print PDF</span>
-                </button>
+                ) : (
+                  <div className="flex-1 bg-slate-50 dark:bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                    <LayoutTemplate className="w-12 h-12 text-slate-300 dark:text-slate-800 mb-3" />
+                    <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500">Preview Closed</p>
+                    <p className="text-[10px] mt-1 italic max-w-xs leading-normal">
+                      Enable the "Live Page Preview Frame" switch in the configuration column on the left to see sheets dynamic sizing and alignment in real-time.
+                    </p>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
@@ -9433,85 +9875,112 @@ FTC #6567 Captains & Mentors`
       {entriesToPrint && entriesToPrint.length > 0 && (
         <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
           
-          {/* TITLE PAGE */}
-          <div 
-            className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
-            style={{ pageBreakAfter: 'always', minHeight: '240mm' }}
-          >
-            <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
-              <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
-                <span className="font-extrabold text-2xl tracking-tighter">RR</span>
-              </div>
-              <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-950 mb-2">
-                RoboRaiders Team Portal
-              </h1>
-              <p className="text-sm font-mono uppercase tracking-widest text-slate-600 mb-8">
-                Official Engineering Notebook
-              </p>
-              
-              <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
-              
-              <p className="text-base font-extrabold text-slate-800 uppercase tracking-wide">
-                FIRST Tech Challenge Team #6567
-              </p>
-            </div>
+          {/* Dynamic page sizing for print based on paper format selection */}
+          <style dangerouslySetInnerHTML={{__html: `
+            @media print {
+              @page { 
+                size: ${exportPaperSize === 'letter' ? '8.5in 11in' : exportPaperSize === 'a4' ? '210mm 297mm' : '8.5in 14in'};
+                margin: 15mm !important;
+              }
+              body {
+                background: white !important;
+                color: black !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              .print-only {
+                display: block !important;
+              }
+            }
+          `}} />
 
-            <div className="mt-auto border-t-2 border-slate-950 pt-6">
-              <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-705">
-                <div>
-                  <p><strong>DOCUMENT TYPE:</strong> Compiled Ledger</p>
-                  <p><strong>EXPORTED ON:</strong> {new Date().toISOString().split('T')[0]}</p>
+          {/* TITLE PAGE */}
+          {exportShowCover && (
+            <div 
+              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+              style={{ pageBreakAfter: 'always', minHeight: exportPaperSize === 'legal' ? '300mm' : '240mm' }}
+            >
+              <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
+                <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
+                  <span className="font-extrabold text-2xl tracking-tighter">RR</span>
                 </div>
-                <div className="text-right">
-                  <p><strong>RECORDS CLASSIFIED:</strong> {entriesToPrint.length} Entries</p>
-                  <p><strong>STATUS:</strong> Verified Team Records</p>
+                <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-950 mb-2">
+                  RoboRaiders Team Portal
+                </h1>
+                <p className="text-sm font-mono uppercase tracking-widest text-slate-600 mb-8">
+                  Official Engineering Notebook
+                </p>
+                
+                <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
+                
+                <p className="text-base font-extrabold text-slate-800 uppercase tracking-wide">
+                  FIRST Tech Challenge Team #6567
+                </p>
+              </div>
+
+              <div className="mt-auto border-t-2 border-slate-950 pt-6">
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-705">
+                  <div>
+                    <p><strong>DOCUMENT TYPE:</strong> Compiled Ledger</p>
+                    <p><strong>EXPORTED ON:</strong> {new Date().toISOString().split('T')[0]}</p>
+                    <p><strong>PAPER SIZE:</strong> {exportPaperSize.toUpperCase()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p><strong>RECORDS CLASSIFIED:</strong> {entriesToPrint.length} Entries</p>
+                    <p><strong>STATUS:</strong> Verified Team Records</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* TABLE OF CONTENTS */}
-          <div 
-            className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
-            style={{ pageBreakAfter: 'always', minHeight: '240mm' }}
-          >
-            <div className="border-b-4 border-slate-950 pb-4 mb-6">
-              <h2 className="text-2xl font-black uppercase tracking-wider text-slate-950 font-display">
-                Table of Contents
-              </h2>
-              <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
-                FTC #6567 Compiled Notebook Binder
-              </p>
-            </div>
+          {exportShowTOC && (
+            <div 
+              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+              style={{ pageBreakAfter: 'always', minHeight: exportPaperSize === 'legal' ? '300mm' : '240mm' }}
+            >
+              <div className="border-b-4 border-slate-950 pb-4 mb-6">
+                <h2 className="text-2xl font-black uppercase tracking-wider text-slate-950 font-display">
+                  Table of Contents
+                </h2>
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                  FTC #6567 Compiled Notebook Binder
+                </p>
+              </div>
 
-            <div className="flex-1 mt-4">
-              <table className="w-full text-left text-xs text-slate-800">
-                <thead>
-                  <tr className="border-b-2 border-slate-950 font-mono font-bold text-slate-500 uppercase text-[10px]">
-                    <th className="py-2 pr-4 w-1/6">REF ID</th>
-                    <th className="py-2 pr-4 w-1/6">DATE</th>
-                    <th className="py-2 pr-4 w-1/4">AUTHOR</th>
-                    <th className="py-2 pr-4 w-1/4">SUBTEAM CATEGORY</th>
-                    <th className="py-2 text-right w-1/12">PAGE</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {entriesToPrint.map((entry, idx) => (
-                    <tr key={entry.id} className="align-top">
-                      <td className="py-3 pr-4 font-mono font-bold text-slate-950">{getEntryReferenceCode(entry, entries)}</td>
-                      <td className="py-3 pr-4 font-mono">{entry.date}</td>
-                      <td className="py-3 pr-4 font-semibold text-slate-900">{entry.author}</td>
-                      <td className="py-3 pr-4 text-slate-700 font-mono text-[10px] uppercase">{entry.subteam}</td>
-                      <td className="py-3 text-right font-mono text-slate-500 font-bold">{idx + 3}</td>
+              <div className="flex-1 mt-4">
+                <table className="w-full text-left text-xs text-slate-800">
+                  <thead>
+                    <tr className="border-b-2 border-slate-950 font-mono font-bold text-slate-500 uppercase text-[10px]">
+                      <th className="py-2 pr-4 w-1/6">REF ID</th>
+                      <th className="py-2 pr-4 w-1/6">DATE</th>
+                      <th className="py-2 pr-4 w-1/4">AUTHOR</th>
+                      <th className="py-2 pr-4 w-1/4">SUBTEAM CATEGORY</th>
+                      <th className="py-2 text-right w-1/12">PAGE</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {entriesToPrint.map((entry, idx) => {
+                      const startingPageIndex = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + 1;
+                      return (
+                        <tr key={entry.id} className="align-top">
+                          <td className="py-3 pr-4 font-mono font-bold text-slate-950">{getEntryReferenceCode(entry, entries)}</td>
+                          <td className="py-3 pr-4 font-mono">{entry.date}</td>
+                          <td className="py-3 pr-4 font-semibold text-slate-900">{entry.author}</td>
+                          <td className="py-3 pr-4 text-slate-750 font-mono text-[10px] uppercase">{entry.subteam}</td>
+                          <td className="py-3 text-right font-mono text-slate-500 font-bold">{idx + startingPageIndex}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-            <div className="mt-auto border-t border-slate-300 pt-4 text-center text-[10px] font-mono text-slate-400">
+              <div className="mt-auto border-t border-slate-300 pt-4 text-center text-[10px] font-mono text-slate-400">
+              </div>
             </div>
-          </div>
+          )}
 
           {entriesToPrint.map((entry, index) => {
             return (

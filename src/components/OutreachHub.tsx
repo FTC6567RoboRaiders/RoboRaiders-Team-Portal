@@ -19,7 +19,8 @@ import {
   ArrowRight,
   Info,
   Printer,
-  FileText
+  FileText,
+  ChevronLeft
 } from 'lucide-react';
 import { OutreachEvent, OutreachImage, UserAccount } from '../types';
 import { compressAndResizeImage } from '../utils/image';
@@ -30,6 +31,7 @@ interface OutreachHubProps {
   events: OutreachEvent[];
   onUpdateEvents: (newEvents: OutreachEvent[]) => void;
   onPrintPDF?: (events: OutreachEvent[], subtitle: string) => void;
+  onBack?: () => void;
 }
 
 export default function OutreachHub({ 
@@ -37,7 +39,8 @@ export default function OutreachHub({
   accounts, 
   events, 
   onUpdateEvents,
-  onPrintPDF
+  onPrintPDF,
+  onBack
 }: OutreachHubProps) {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -360,6 +363,16 @@ export default function OutreachHub({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start xl:self-center">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="bg-slate-200 hover:bg-slate-350 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5 cursor-pointer border border-slate-300 dark:border-slate-700"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back to Hub</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               setExportScope('all');
