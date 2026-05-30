@@ -4236,39 +4236,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </span>
               </div>
 
-              {/* USER XP & RANK PROGRESSION PLATE */}
-              {currentUser && (() => {
-                const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
-                const { stats } = gameResult;
-                return (
-                  <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-950/40 border border-slate-800 p-2.5 rounded-lg max-w-md">
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center font-mono font-black text-cyan-400 text-xs">
-                        {stats.level}
-                      </div>
-                      <div className="text-left">
-                        <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 leading-none">Rank Info</div>
-                        <div className="text-xs font-black text-cyan-400 font-display mt-0.5 max-w-[150px] truncate" title={stats.levelName}>
-                          {stats.levelName}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex-1 flex flex-col gap-1 w-full sm:border-l sm:border-slate-800 sm:pl-3">
-                      <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 leading-none">
-                        <span>XP PROGRESSION</span>
-                        <span><strong>{stats.xpIntoLevel}</strong> / {stats.xpForNextLevel} XP</span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-955 border border-slate-800 rounded-full overflow-hidden p-0.5 relative">
-                        <div 
-                          className="h-full bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-full transition-all duration-500" 
-                          style={{ width: `${stats.percentToNextLevel}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
             
             <div className="bg-slate-955/40 border border-slate-800 p-4 rounded-xl text-center flex flex-col gap-1 shrink-0 z-10 w-full md:w-auto">
@@ -5719,7 +5686,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </div>
 
                 {/* CARD 5: DATABASE BACKUP & SEASON TRANSITION */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-red-500/25 group md:col-span-2">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-blue-500/25 group md:col-span-2">
                   <div>
                     <div className="flex items-center gap-3 mb-2.5">
                       <div className="bg-red-500/10 text-red-600 dark:text-red-400 p-2.5 rounded-lg">
