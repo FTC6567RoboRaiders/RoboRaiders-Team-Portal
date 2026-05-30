@@ -73,6 +73,20 @@ import { motion, AnimatePresence } from 'motion/react';
 import RoboraidersLogo from './components/RoboraidersLogo';
 import { computeUserGamification, calculateJournalQualityScore } from './utils/gamification';
 import { SUBTEAM_GUILDS, getSubteamStatsAndRank } from './data/subteamRanks';
+
+export interface XPAuditLogEntry {
+  id: string;
+  userName: string;
+  userEmail: string;
+  userId: string;
+  type: 'signup' | 'lab_hours' | 'journal_submit' | 'journal_quality' | 'journal_approve' | 'journal_image' | 'kanban_task' | 'outreach' | 'manual_adjustment';
+  amount: number;
+  description: string;
+  timestamp: number;
+  details?: string;
+  subteam?: string;
+}
+
 import KanbanBoard from './components/KanbanBoard';
 import { DEFAULT_KANBAN_TASKS } from './data/kanbanDemo';
 import OutreachHub from './components/OutreachHub';
@@ -1160,14 +1174,29 @@ export default function App() {
   const [previousLevel, setPreviousLevel] = useState<number | null>(null);
   const [levelUpData, setLevelUpData] = useState<{ level: number; levelName: string } | null>(null);
 
+  const handleDismissLevelUp = () => {
+    if (levelUpData && currentUser) {
+      localStorage.setItem(`ftc_acknowledged_level_${currentUser.id}`, levelUpData.level.toString());
+    }
+    setLevelUpData(null);
+  };
+
   // Monitor level and trigger a celebratory pop-up on Rank gains
   useEffect(() => {
     if (currentUser) {
       const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
       const currentLevel = gameResult.stats.level;
       
+      const ackKey = `ftc_acknowledged_level_${currentUser.id}`;
+      const storedAck = localStorage.getItem(ackKey);
+      if (storedAck === null) {
+        localStorage.setItem(ackKey, currentLevel.toString());
+      }
+      
+      const acknowledgedLevel = Number(localStorage.getItem(ackKey) || currentLevel);
+
       if (previousLevel !== null) {
-        if (currentLevel > previousLevel) {
+        if (currentLevel > previousLevel && currentLevel > acknowledgedLevel) {
           // Trigger glorious Rank Level Up Modal/Celebration
           setLevelUpData({
             level: currentLevel,
@@ -1277,6 +1306,14 @@ export default function App() {
   const [isProcessingTransition, setIsProcessingTransition] = useState(false);
   const [transitionProgress, setTransitionProgress] = useState<{current: number, total: number, collection: string} | null>(null);
 
+
+  // XP Audit Log State for Mentors
+  const [isAuditLogOpen, setIsAuditLogOpen] = useState(false);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditUserFilter, setAuditUserFilter] = useState('ALL');
+  const [auditTypeFilter, setAuditTypeFilter] = useState('ALL');
+  const [auditSort, setAuditSort] = useState<'newest' | 'oldest' | 'highest' | 'lowest'>('newest');
+
   // Settings Modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsName, setSettingsName] = useState('');
@@ -1327,19 +1364,190 @@ export default function App() {
     setDoc(doc(db, 'dispatchedEmails', newEmail.id), newEmail).catch(err => {
       handleFirestoreError(err, OperationType.WRITE, `dispatchedEmails/${newEmail.id}`);
     });
-
-    // Path A: Robust, automatic delivery trigger via device mail client
-    try {
-      const mailtoUrl = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      showToast('Opening native mail client to dispatch pre-filled notification...', 'info');
-      // Set short timeout to let current synchronous dispatch flow/render complete first
-      setTimeout(() => {
-        window.location.href = mailtoUrl;
-      }, 500);
-    } catch (mailErr) {
-      console.warn("Could not auto-trigger local mail client:", mailErr);
-    }
   };
+
+  const getXPAuditLogs = (): XPAuditLogEntry[] => {
+    const logs: XPAuditLogEntry[] = [];
+
+    accounts.forEach(user => {
+      const email = user.schoolEmail.toLowerCase();
+      
+      // Filter journals matching user
+      const userJournals = entries.filter(e => 
+        e.author.toLowerCase().includes(email) || 
+        e.author.toLowerCase().includes(user.name.toLowerCase())
+      );
+      
+      // Filter time logs
+      const userHours = timeEntries.filter(t => 
+        t.userEmail.toLowerCase() === email
+      );
+
+      // 1. Initial Space Registration
+      logs.push({
+        id: `signup-${user.id}`,
+        userName: user.name,
+        userEmail: user.schoolEmail,
+        userId: user.id,
+        type: 'signup',
+        amount: 50,
+        description: 'Initial space signup bonus',
+        timestamp: user.createdAt || Date.now() - 1000 * 60 * 60 * 24,
+        details: 'Awarded automatically on profile configuration within the FTC #6567 systems.',
+        subteam: user.primarySubteam
+      });
+
+      // 2. Lab hours log
+      userHours.forEach(t => {
+        const amt = Math.floor(t.durationHours * 35);
+        if (amt > 0) {
+          logs.push({
+            id: `hours-${t.id}`,
+            userName: user.name,
+            userEmail: user.schoolEmail,
+            userId: user.id,
+            type: 'lab_hours',
+            amount: amt,
+            description: `Logged Lab Attendance`,
+            timestamp: t.createdAt || new Date(t.date).getTime(),
+            details: `Shift date: ${t.date} (${t.startTime} to ${t.endTime}). Completed duration: ${t.durationHours} hrs. Tasks: "${t.taskDescription}"`,
+            subteam: t.subteam
+          });
+        }
+      });
+
+      // 3. Journal entries rewards
+      userJournals.forEach(j => {
+        const dateTimestamp = j.createdAt || new Date(j.date).getTime();
+
+        // 3.1. Raw journal log
+        logs.push({
+          id: `journal-sub-${j.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'journal_submit',
+          amount: 50,
+          description: 'Published Engineering Journal Log',
+          timestamp: dateTimestamp,
+          details: `Reference Code: ${getEntryReferenceCode(j, entries)}. Title: "${j.title || 'Untitled'}"`,
+          subteam: j.subteam
+        });
+
+        // 3.2. Technical depth / quality
+        const qScore = calculateJournalQualityScore(j);
+        if (qScore > 0) {
+          logs.push({
+            id: `journal-qual-${j.id}`,
+            userName: user.name,
+            userEmail: user.schoolEmail,
+            userId: user.id,
+            type: 'journal_quality',
+            amount: qScore,
+            description: `Journal Documentation Quality Score`,
+            timestamp: dateTimestamp,
+            details: `Achieved ${qScore}% Quality Index dynamically evaluating language/planning fields. Title: "${j.title || 'Untitled'}"`,
+            subteam: j.subteam
+          });
+        }
+
+        // 3.3. Attached visual proof
+        const imagesCount = j.images?.length || 0;
+        if (imagesCount > 0) {
+          logs.push({
+            id: `journal-img-${j.id}`,
+            userName: user.name,
+            userEmail: user.schoolEmail,
+            userId: user.id,
+            type: 'journal_image',
+            amount: imagesCount * 15,
+            description: `Media Documentation Upload Reward`,
+            timestamp: dateTimestamp,
+            details: `Uploaded ${imagesCount} system photograph(s)/schematic(s) inside journal entry: "${j.title || 'Untitled'}" (+15 XP per image)`,
+            subteam: j.subteam
+          });
+        }
+
+        // 3.4. Vetted approved journal
+        if (j.status === 'Approved') {
+          logs.push({
+            id: `journal-appr-${j.id}`,
+            userName: user.name,
+            userEmail: user.schoolEmail,
+            userId: user.id,
+            type: 'journal_approve',
+            amount: 120,
+            description: 'Mentor Log Verification Approval Bonus',
+            timestamp: j.approvedAt || dateTimestamp,
+            details: `Vetted, audited, and approved by Mentor/Captain: ${j.approvedBy || j.reviewedBy || 'Team Coach'}. Title: "${j.title || 'Untitled'}"`,
+            subteam: j.subteam
+          });
+        }
+      });
+
+      // 4. Finished Kanban Tickets
+      const completedTasks = (kanbanTasks || []).filter(k => 
+        k.column === 'done' && 
+        k.assignedTo.toLowerCase() === user.name.toLowerCase()
+      );
+      completedTasks.forEach(task => {
+        logs.push({
+          id: `kanban-${task.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'kanban_task',
+          amount: 100,
+          description: `Completed Kanban Ticket`,
+          timestamp: task.updatedAt || task.createdAt || Date.now(),
+          details: `Ticket context: "${task.title}". Priority: ${task.priority}. Description: ${task.description || 'N/A'}`,
+          subteam: task.subteam
+        });
+      });
+
+      // 5. Outreach Programs Participated
+      const participatedOutreach = (outreachEvents || []).filter(ev => 
+        ev.participants?.some(p => 
+          p.toLowerCase() === user.name.toLowerCase() || 
+          p.toLowerCase() === user.schoolEmail.toLowerCase()
+        )
+      );
+      participatedOutreach.forEach(ev => {
+        logs.push({
+          id: `outreach-part-${ev.id}-${user.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'outreach',
+          amount: 150,
+          description: `Participated in Outreach Event`,
+          timestamp: ev.createdAt || new Date(ev.date).getTime(),
+          details: `Special Program Event: "${ev.title}" at ${ev.location || 'FTC arena'}. Logged ${ev.hoursLogged} outreach hours. Reached ${ev.reachedChildren || 0} students.`
+        });
+      });
+
+      // 6. Manual Adjustments page
+      const userAdjustments = (xpAdjustments || []).filter(adj => 
+        adj.userId === user.id || adj.userEmail.toLowerCase() === email
+      );
+      userAdjustments.forEach(adj => {
+        logs.push({
+          id: `adjust-${adj.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'manual_adjustment',
+          amount: adj.amount,
+          description: `XP adjustment: ${adj.reason}`,
+          timestamp: adj.createdAt || Date.now(),
+          details: `Granted/audited by Coach ${adj.awardedBy} (${adj.awardedByEmail}).`
+        });
+      });
+    });
+
+    return logs;
+  };
+
 
   // Create New Author profile modal state
   const [isCreateProfileOpen, setIsCreateProfileOpen] = useState(false);
@@ -2763,6 +2971,25 @@ Best regards,
 FTC #6567 Robotics Log System`
         );
       });
+
+      // Also send confirmation email to the submitting user to confirm receipt
+      const authorEmail = currentUser?.schoolEmail || accounts.find(a => a.name.toLowerCase() === formAuthor.trim().toLowerCase())?.schoolEmail;
+      if (authorEmail) {
+        sendEmailNotification(
+          authorEmail,
+          `[FTC #6567] Journal Entry Received: Awaiting Review`,
+          `Hello ${formAuthor.trim()},
+
+Your journal entry for subteam "${formSubteam}" (dated ${formDate}) has been successfully received by the RoboRaiders system. 
+
+It has been submitted for pending mentor review and will be audited and approved soon by a team mentor or captain.
+
+Thank you for your engineering documentation contribution!
+
+Best regards,
+FTC #6567 Robotics Log System`
+        );
+      }
     }
 
     resetForm();
@@ -5418,6 +5645,38 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   </div>
                 </div>
 
+                {/* CARD 4.5: XP AUDIT LOG */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-amber-500/30 group">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2.5">
+                      <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 p-2.5 rounded-lg">
+                        <Scroll className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                          XP Audit Ledger
+                        </h4>
+                        <p className="text-[9px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest leading-none mt-0.5">
+                          TEAM-WIDE CONTEXTUAL XP AUDITING
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
+                      Audit real-time dynamic sources of earned XP for all students (e.g. timesheets, journal quality metrics, outreach programs, and manual adjustments).
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex justify-between items-center text-xs font-mono">
+                    <span className="text-[10px] text-slate-400">XP Events: {getXPAuditLogs().length} Logs</span>
+                    <button
+                      onClick={() => setIsAuditLogOpen(true)}
+                      className="text-amber-605 dark:text-amber-450 font-extrabold hover:underline uppercase text-[10px] tracking-wider flex items-center gap-1 cursor-pointer font-sans"
+                    >
+                      <span>Open Audit Ledger</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
                 {/* CARD 5: DATABASE BACKUP & SEASON TRANSITION */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-red-500/25 group md:col-span-2">
                   <div>
@@ -8063,6 +8322,316 @@ FTC #6567 Captains & Mentors`
         )}
       </AnimatePresence>
 
+      {/* Mentor-Only XP Audit Log Ledger Modal */}
+      <AnimatePresence>
+        {isAuditLogOpen && currentUser && (currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex flex-col items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md no-print"
+            onClick={() => setIsAuditLogOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: 'spring', duration: 0.4 }}
+              className="w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col max-h-[90vh] shadow-2xl relative animate-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="bg-amber-100 dark:bg-amber-950/50 p-2.5 rounded-lg text-amber-655 dark:text-amber-400">
+                    <Scroll className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold text-slate-850 dark:text-slate-100 uppercase tracking-widest font-display">
+                      FTC #6567 XP Auditing Ledger Scribe
+                    </h2>
+                    <p className="text-[10px] text-slate-450 dark:text-slate-400 font-mono mt-0.5 uppercase tracking-wide">
+                      Real-Time Verifiable Gamification Traceability Console
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsAuditLogOpen(false)}
+                  className="p-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-705 text-slate-500 dark:text-slate-450 transition-colors cursor-pointer"
+                  title="Close auditing log"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Filtering Controls */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-805/80 shrink-0 text-xs text-slate-850 dark:text-slate-100">
+                {/* Search Bar */}
+                <div className="flex flex-col gap-1 p-0.5">
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Search Records</span>
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={auditSearch}
+                      onChange={(e) => setAuditSearch(e.target.value)}
+                      placeholder="Search member, tasks..."
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded pl-8 pr-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 font-medium text-slate-950 dark:text-white text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Member selector */}
+                <div className="flex flex-col gap-1 p-0.5">
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Filter Student</span>
+                  <select
+                    value={auditUserFilter}
+                    onChange={(e) => setAuditUserFilter(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-805 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-950 dark:text-white"
+                  >
+                    <option value="ALL">All Team Members</option>
+                    {accounts.filter(a => a.status === 'Approved').sort((a,b) => a.name.localeCompare(b.name)).map(acc => (
+                      <option key={acc.id} value={acc.id}>{acc.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* XP type selector */}
+                <div className="flex flex-col gap-1 p-0.5">
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Action Type</span>
+                  <select
+                    value={auditTypeFilter}
+                    onChange={(e) => setAuditTypeFilter(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-950 dark:text-white"
+                  >
+                    <option value="ALL">All Event Channels</option>
+                    <option value="signup">Space Registration Info (+50 XP)</option>
+                    <option value="lab_hours">Lab Timesheet Checkins (35 XP/hr)</option>
+                    <option value="journal_submit">Engineering Journal Created (+50 XP)</option>
+                    <option value="journal_quality">Documentation Quality Bonus (+0-100 XP)</option>
+                    <option value="journal_image">Rich Illustration Uploads (+15 XP/img)</option>
+                    <option value="journal_approve">Mentor Editorial Approval (+120 XP)</option>
+                    <option value="kanban_task">Kanban Ticket Completion (+100 XP)</option>
+                    <option value="outreach">Outreach Event Participation (+150 XP)</option>
+                    <option value="manual_adjustment">Manual Mentor/Admin Ad-Hoc Adjustments</option>
+                  </select>
+                </div>
+
+                {/* Sort selector */}
+                <div className="flex flex-col gap-1 p-0.5">
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Ledger Ordering</span>
+                  <select
+                    value={auditSort}
+                    onChange={(e) => setAuditSort(e.target.value as any)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-955 dark:text-white"
+                  >
+                    <option value="newest">Timestamp: Newest Action First</option>
+                    <option value="oldest">Timestamp: Oldest Action First</option>
+                    <option value="highest">Rewards: Largest XP Gain First</option>
+                    <option value="lowest">Rewards: Lowest XP Gain First</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Stats Banner */}
+              {(() => {
+                const rawLogs = getXPAuditLogs();
+                const filteredLogs = rawLogs.filter(log => {
+                  const term = auditSearch.toLowerCase().trim();
+                  if (term) {
+                    const matchName = log.userName.toLowerCase().includes(term);
+                    const matchEmail = log.userEmail.toLowerCase().includes(term);
+                    const matchDesc = log.description.toLowerCase().includes(term);
+                    const matchDetails = (log.details || '').toLowerCase().includes(term);
+                    if (!matchName && !matchEmail && !matchDesc && !matchDetails) return false;
+                  }
+                  if (auditUserFilter !== 'ALL' && log.userId !== auditUserFilter) return false;
+                  if (auditTypeFilter !== 'ALL' && log.type !== auditTypeFilter) return false;
+                  return true;
+                });
+
+                const totalXP = filteredLogs.reduce((sum, l) => sum + l.amount, 0);
+                const uniqueStudents = Array.from(new Set(filteredLogs.map(l => l.userId))).length;
+                const totalHoursXP = filteredLogs.filter(l => l.type === 'lab_hours').reduce((sum, l) => sum + l.amount, 0);
+                const totalJournalXP = filteredLogs.filter(l => ['journal_submit', 'journal_quality', 'journal_image', 'journal_approve'].includes(l.type)).reduce((sum, l) => sum + l.amount, 0);
+
+                // Sort logs
+                const sortedLogs = [...filteredLogs].sort((a, b) => {
+                  if (auditSort === 'newest') return b.timestamp - a.timestamp;
+                  if (auditSort === 'oldest') return a.timestamp - b.timestamp;
+                  if (auditSort === 'highest') return b.amount - a.amount;
+                  if (auditSort === 'lowest') return a.amount - b.amount;
+                  return b.timestamp - a.timestamp;
+                });
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 shrink-0 text-slate-900 dark:text-white">
+                      <div className="bg-gradient-to-r from-amber-500/10 to-amber-600/5 dark:from-amber-500/10 dark:to-transparent border border-amber-500/15 rounded-lg p-3 text-center">
+                        <span className="text-[9.5px] font-mono text-slate-450 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Audit Scope Net XP</span>
+                        <strong className="text-base font-black text-amber-505 dark:text-amber-400 font-display leading-none">{totalXP.toLocaleString()} XP</strong>
+                        <span className="text-[8.5px] font-mono text-slate-400 dark:text-slate-500 block mt-1">across filtered logs</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-md border border-slate-150 dark:border-slate-805/85 text-center">
+                        <span className="text-[9.5px] font-mono text-slate-450 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Match Records</span>
+                        <strong className="text-base font-black text-slate-800 dark:text-slate-105 font-display leading-none">{filteredLogs.length} events</strong>
+                        <span className="text-[8.5px] font-mono text-slate-400 dark:text-slate-500 block mt-1">{uniqueStudents} unique students</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-955 p-2.5 rounded-md border border-slate-150 dark:border-slate-805/85 text-center">
+                        <span className="text-[9.5px] font-mono text-slate-450 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Lab Attendance XP</span>
+                        <strong className="text-base font-black text-slate-800 dark:text-slate-105 font-display leading-none">{totalHoursXP.toLocaleString()} XP</strong>
+                        <span className="text-[8.5px] font-mono text-slate-400 dark:text-slate-500 block mt-1">from active laboratory timesheets</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-955 p-2.5 rounded-md border border-slate-150 dark:border-slate-805/85 text-center">
+                        <span className="text-[9.5px] font-mono text-slate-455 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Documentation XP</span>
+                        <strong className="text-base font-black text-slate-800 dark:text-slate-105 font-display leading-none">{totalJournalXP.toLocaleString()} XP</strong>
+                        <span className="text-[8.5px] font-mono text-slate-400 dark:text-slate-500 block mt-1">from notebooks, approvals &amp; uploads</span>
+                      </div>
+                    </div>
+
+                    {/* Ledger Body */}
+                    <div className="flex-1 overflow-y-auto border border-slate-150 dark:border-slate-800 rounded-lg bg-slate-50/50 dark:bg-slate-950/20 pr-1 divide-y divide-slate-150 dark:divide-slate-800">
+                      {sortedLogs.length === 0 ? (
+                        <div className="py-12 text-center text-slate-400 dark:text-slate-550 font-medium font-sans">
+                          🛑 No matching XP transactions exist in the database with the active filters.
+                        </div>
+                      ) : (
+                        sortedLogs.map((log) => {
+                          // Icon selector
+                          let ActionIcon = Scroll;
+                          let typeColor = 'bg-slate-500/10 text-slate-650';
+                          let typeLabel = 'System';
+                          
+                          switch(log.type) {
+                            case 'signup':
+                              ActionIcon = Sparkles;
+                              typeColor = 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400';
+                              typeLabel = 'Space Register';
+                              break;
+                            case 'lab_hours':
+                              ActionIcon = Clock;
+                              typeColor = 'bg-cyan-500/10 text-cyan-650 dark:text-cyan-400';
+                              typeLabel = 'Lab Attendance';
+                              break;
+                            case 'journal_submit':
+                              ActionIcon = BookOpen;
+                              typeColor = 'bg-blue-500/10 text-blue-650 dark:text-blue-400';
+                              typeLabel = 'Journal Logged';
+                              break;
+                            case 'journal_quality':
+                              ActionIcon = Award;
+                              typeColor = 'bg-purple-500/10 text-purple-650 dark:text-purple-400';
+                              typeLabel = 'Documentation Quality';
+                              break;
+                            case 'journal_image':
+                              ActionIcon = FileUp;
+                              typeColor = 'bg-teal-500/10 text-teal-650 dark:text-teal-400';
+                              typeLabel = 'Fidelity Uploads';
+                              break;
+                            case 'journal_approve':
+                              ActionIcon = CheckCircle2;
+                              typeColor = 'bg-emerald-500/10 text-emerald-650 dark:text-emerald-400';
+                              typeLabel = 'Lead Peer Approved';
+                              break;
+                            case 'kanban_task':
+                              ActionIcon = Briefcase;
+                              typeColor = 'bg-orange-500/10 text-orange-650 dark:text-orange-400';
+                              typeLabel = 'Kanban Ticket';
+                              break;
+                            case 'outreach':
+                              ActionIcon = Globe;
+                              typeColor = 'bg-rose-500/10 text-rose-650 dark:text-rose-450';
+                              typeLabel = 'Outreach Event';
+                              break;
+                            case 'manual_adjustment':
+                              ActionIcon = AlertTriangle;
+                              typeColor = 'bg-amber-500/10 text-amber-650 dark:text-amber-450';
+                              typeLabel = 'Coach Adjust';
+                              break;
+                          }
+
+                          return (
+                            <div 
+                              key={log.id} 
+                              className="p-4 flex flex-col sm:flex-row hover:bg-slate-100/40 dark:hover:bg-slate-900/30 justify-between items-start sm:items-center gap-3 transition-colors text-xs text-slate-800 dark:text-slate-350"
+                            >
+                              <div className="flex gap-3 items-start">
+                                <div className={`${typeColor} p-2 rounded-lg shrink-0 mt-0.5`}>
+                                  <ActionIcon className="w-4 h-4" />
+                                </div>
+                                <div className="space-y-0.5 max-w-xl">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <strong className="font-extrabold text-slate-900 dark:text-slate-100 text-[12px]">{log.userName}</strong>
+                                    <span className="font-mono text-[9px] text-slate-400 truncate max-w-[150px]">{log.userEmail}</span>
+                                    <span className={`px-1.5 py-0.5 rounded font-mono text-[8px] font-bold uppercase ${typeColor}`}>
+                                      {typeLabel}
+                                    </span>
+                                  </div>
+                                  <p className="font-extrabold text-slate-850 dark:text-slate-200 text-xs mt-1">
+                                    {log.description}
+                                  </p>
+                                  {log.details && (
+                                    <p className="font-sans leading-relaxed text-slate-600 dark:text-slate-400 mt-1 italic pr-2 text-[11px]">
+                                      {log.details}
+                                    </p>
+                                  )}
+                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-1">
+                                    <Calendar className="w-3 h-3" />
+                                    <span>{new Date(log.timestamp).toLocaleString()}</span>
+                                    {log.subteam && (
+                                      <>
+                                        <span>•</span>
+                                        <span className="font-bold text-slate-500">{log.subteam} Subteam</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex sm:flex-col items-end shrink-0 gap-2 self-stretch sm:self-center justify-between sm:justify-center border-t sm:border-t-0 border-slate-150 pt-2 sm:pt-0">
+                                <span className={`text-[12px] font-black font-mono tracking-tight px-2 py-0.5 rounded-sm ${
+                                  log.amount >= 0 
+                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/10 dark:text-emerald-400 border border-emerald-500/20' 
+                                    : 'bg-rose-50 text-rose-700 dark:bg-rose-900/10 dark:text-rose-450 border border-rose-500/20'
+                                }`}>
+                                  {log.amount >= 0 ? `+${log.amount}` : log.amount} XP
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Action commands */}
+              <div className="mt-5 border-t border-slate-100 dark:border-slate-800 pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0 text-slate-905 dark:text-slate-100">
+                <p className="text-[10px] font-mono text-slate-400 max-w-md">
+                  Disclaimer: This auditing page evaluates ledger transactions from all system subsystems. Values are derived dynamically and updated securely as work is authorized.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider rounded cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Ledger</span>
+                  </button>
+                  <button
+                    onClick={() => setIsAuditLogOpen(false)}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-6 rounded text-xs transition-all uppercase tracking-wider cursor-pointer"
+                  >
+                    Close Ledger
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Mentor-Only Season Transition & Backups Modal */}
       <AnimatePresence>
         {isBackupTransitionOpen && currentUser && (
@@ -8759,7 +9328,7 @@ FTC #6567 Captains & Mentors`
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
-            onClick={() => setLevelUpData(null)}
+            onClick={handleDismissLevelUp}
           >
             <motion.div
               initial={{ scale: 0.9, y: 50, opacity: 0 }}
@@ -8850,7 +9419,7 @@ FTC #6567 Captains & Mentors`
               {/* Close / Claim button */}
               <button
                 type="button"
-                onClick={() => setLevelUpData(null)}
+                onClick={handleDismissLevelUp}
                 className="mt-6 w-full max-w-xs py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-extrabold text-[11px] sm:text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20 active:scale-[0.98] cursor-pointer"
               >
                 Acknowledge Achievement!
