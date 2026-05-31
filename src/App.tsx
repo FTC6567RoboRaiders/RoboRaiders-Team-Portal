@@ -2319,7 +2319,27 @@ FTC Team #6567 IT Administration`
         exportedAt: new Date().toISOString(),
         exportedBy: currentUser?.schoolEmail || 'System Administrator',
         team: 'FTC #6567 (RoboRaiders)',
-        season: '2026-2027'
+        season: '2026-2027',
+        counts: {
+          totalUsers: accounts.length,
+          totalJournalEntries: entries.length,
+          totalTimeEntries: timeEntries.length,
+          totalKanbanTasks: kanbanTasks.length,
+          totalOutreachEvents: outreachEvents.length,
+          totalXpAdjustments: xpAdjustments.length,
+          totalDispatchedEmails: dispatchedEmails.length,
+          totalLedgerTransactions: ledgerTransactions.length
+        },
+        summaries: {
+          totalXpDistributedAcrossTeam: accounts.reduce((sum, acc) => {
+            try {
+              return sum + computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments).stats.xp;
+            } catch (e) {
+              return sum;
+            }
+          }, 0),
+          cumulativeHoursLoggedAcrossTeam: timeEntries.reduce((sum, te) => sum + te.durationHours, 0)
+        }
       },
       users: accounts,
       journalEntries: entries,
@@ -2328,7 +2348,52 @@ FTC Team #6567 IT Administration`
       outreachEvents: outreachEvents,
       xpAdjustments: xpAdjustments,
       dispatchedEmails: dispatchedEmails,
-      ledgerTransactions: ledgerTransactions
+      ledgerTransactions: ledgerTransactions,
+      computedTeamGamificationSnapshot: accounts.map(acc => {
+        try {
+          const game = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+          return {
+            userId: acc.id,
+            userName: acc.name,
+            userEmail: acc.schoolEmail,
+            primarySubteam: acc.primarySubteam,
+            secondarySubteam: acc.secondarySubteam,
+            role: acc.role,
+            status: acc.status,
+            leadership: acc.leadership || 'None',
+            xpStats: {
+              totalXp: game.stats.xp,
+              currentLevel: game.stats.level,
+              levelName: game.stats.levelName,
+              xpIntoLevel: game.stats.xpIntoLevel,
+              xpForNextLevel: game.stats.xpForNextLevel,
+              percentToNextLevel: game.stats.percentToNextLevel,
+              badgesUnlockedCount: game.stats.badgesUnlocked,
+              totalHoursLogged: game.stats.totalHours,
+              totalJournalsWritten: game.stats.totalJournals,
+              subteamHoursBreakdown: game.stats.subteamHours
+            },
+            unlockedBadgeIds: game.badges.filter(b => b.unlocked).map(b => b.id),
+            unlockedBadgeNames: game.badges.filter(b => b.unlocked).map(b => b.name),
+            completedQuestIds: game.quests.filter(q => q.unlocked).map(q => q.id),
+            questsProgress: game.quests.map(q => ({
+              questId: q.id,
+              questName: q.name,
+              currentCount: q.currentCount,
+              targetCount: q.targetCount,
+              isUnlocked: q.unlocked,
+              xpReward: q.xpReward
+            }))
+          };
+        } catch (e) {
+          return {
+            userId: acc.id,
+            userName: acc.name,
+            userEmail: acc.schoolEmail,
+            error: "Failed to compute gamification during backup generation"
+          };
+        }
+      })
     };
 
     const jsonStr = JSON.stringify(backupData, null, 2);
