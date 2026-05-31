@@ -307,40 +307,34 @@ RoboRaiders FTC #6567 Log Engine
                 </div>
                 
                 {gmailAccessToken ? (
-                  <button
-                    onClick={() => {
-                      if (setGmailAccessToken && setConnectedGmail) {
-                        setGmailAccessToken(null);
-                        setConnectedGmail(null);
-                      }
-                    }}
-                    className="text-[9px] font-bold uppercase tracking-wider px-3 py-1.5 rounded bg-rose-100 hover:bg-rose-205 dark:bg-rose-950/50 dark:hover:bg-rose-909/60 text-rose-605 dark:text-rose-400 cursor-pointer transition-all"
-                  >
-                    Disconnect
-                  </button>
+                  <div className="text-[9px] font-bold uppercase tracking-wider px-3 py-1.5 rounded bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                    Connected Forever
+                  </div>
                 ) : (
                   <button
-                    onClick={async () => {
-                      try {
-                        const { getAuth, GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
-                        const auth = getAuth();
-                        const provider = new GoogleAuthProvider();
-                        provider.addScope('https://www.googleapis.com/auth/gmail.send');
-                        const result = await signInWithPopup(auth, provider);
-                        const credential = GoogleAuthProvider.credentialFromResult(result);
-                        const token = credential?.accessToken;
-                        if (token && setGmailAccessToken && setConnectedGmail) {
-                          setGmailAccessToken(token);
-                          setConnectedGmail(result.user.email);
-                        }
-                      } catch (err: any) {
-                        alert(`Gmail authorization failed: ${err.message}`);
-                      }
+                    onClick={() => {
+                      fetch('/api/email/status')
+                        .then(res => res.json())
+                        .then(data => {
+                          if (data.configured) {
+                            if (setGmailAccessToken && setConnectedGmail) {
+                              setGmailAccessToken('server-configured');
+                              setConnectedGmail(data.user);
+                            }
+                            alert('SMTP Connection Confirmed!');
+                          } else {
+                            alert('SMTP not yet configured in ENV. Set SMTP_USER and SMTP_PASS on the backend.');
+                          }
+                        })
+                        .catch(err => {
+                          console.error("SMTP status check failed:", err);
+                          alert('Failed to connect to server');
+                        });
                     }}
                     className="text-[9.5px] font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
                   >
                     <Send className="w-3 h-3" />
-                    <span>Connect Gmail</span>
+                    <span>Refresh Server Connection</span>
                   </button>
                 )}
               </div>

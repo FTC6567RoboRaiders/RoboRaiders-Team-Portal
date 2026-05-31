@@ -8793,9 +8793,28 @@ FTC #6567 Captains & Mentors`
                           Connected Forever
                         </div>
                       ) : (
-                        <div className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
-                          Configure ENV
-                        </div>
+                        <button
+                          onClick={() => {
+                            fetch('/api/email/status')
+                              .then(res => res.json())
+                              .then(data => {
+                                if (data.configured) {
+                                  setGmailAccessToken('server-configured');
+                                  setConnectedGmail(data.user);
+                                  showToast('SMTP Connection Confirmed!', 'success');
+                                } else {
+                                  showToast('SMTP not yet configured in ENV', 'danger');
+                                }
+                              })
+                              .catch(err => {
+                                console.error("SMTP status check failed:", err);
+                                showToast('Failed to connect to server', 'danger');
+                              });
+                          }}
+                          className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 text-white cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
+                        >
+                          <span>Refresh Connection</span>
+                        </button>
                       )}
                     </div>
                     <p className="text-[9px] text-slate-500 dark:text-slate-405 leading-normal">
