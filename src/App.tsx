@@ -1392,6 +1392,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot_password'>('login');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginSchoolId, setLoginSchoolId] = useState('');
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   // Password reset states
   const [resetEmail, setResetEmail] = useState('');
@@ -2355,20 +2356,19 @@ FTC #6567 Captains & Mentors`
     const typedCredential = loginSchoolId.trim();
     const defaultPassword = typedCredential + "_ftc_auth";
 
+    setIsSigningIn(true);
     try {
       let userCredential;
+      const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
+      const isCustomFirst = matchedLocalAcc ? matchedLocalAcc.hasCustomPassword : null;
       
-      // 1. Try logging in with the direct custom password first
       try {
-        userCredential = await signInWithEmailAndPassword(auth, emailToFind, typedCredential);
+        userCredential = await signInWithEmailAndPassword(auth, emailToFind, isCustomFirst ? typedCredential : defaultPassword);
       } catch (authErr1: any) {
-        // 2. Try logging in with the default schoolId suffix password
         try {
-          userCredential = await signInWithEmailAndPassword(auth, emailToFind, defaultPassword);
+          userCredential = await signInWithEmailAndPassword(auth, emailToFind, isCustomFirst ? defaultPassword : typedCredential);
         } catch (authErr2: any) {
-          // 3. Fallback: If both fail, check if user has a pre-mapped sandbox profile and needs automatic Firebase Auth creation
           if (authErr2.code === 'auth/user-not-found' || authErr2.code === 'auth/invalid-credential' || authErr1.code === 'auth/invalid-credential') {
-            const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
             if (matchedLocalAcc && matchedLocalAcc.schoolId === typedCredential) {
               try {
                 userCredential = await createUserWithEmailAndPassword(auth, emailToFind, defaultPassword);
@@ -2400,7 +2400,6 @@ FTC #6567 Captains & Mentors`
       const docRef = doc(db, 'users', userUid);
       let docSnap = await getDoc(docRef);
       if (!docSnap.exists()) {
-        const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
         if (matchedLocalAcc) {
           const newDoc = {
             ...matchedLocalAcc,
@@ -2443,6 +2442,8 @@ FTC #6567 Captains & Mentors`
       }
     } catch (e: any) {
       showToast(`Login failed: ${e.message}`, 'danger');
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
@@ -4102,9 +4103,19 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
               <button
                 type="submit"
-                className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                disabled={isSigningIn}
+                className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-wait"
               >
-                <LogIn className="w-3.5 h-3.5" /> <span>Sign In to System</span>
+                {isSigningIn ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Signing In...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-3.5 h-3.5" /> <span>Sign In to System</span>
+                  </>
+                )}
               </button>
 
               <div className="relative flex py-2 items-center">
