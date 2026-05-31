@@ -30,10 +30,6 @@ interface BatchEmailProcessorProps {
   onClearNotifications: (ids: string[]) => void;
   onBack: () => void;
   isDark: boolean;
-  gmailAccessToken?: string | null;
-  connectedGmail?: string | null;
-  setGmailAccessToken?: (token: string | null) => void;
-  setConnectedGmail?: (email: string | null) => void;
 }
 
 export default function BatchEmailProcessor({
@@ -44,11 +40,7 @@ export default function BatchEmailProcessor({
   onSendEmail,
   onClearNotifications,
   onBack,
-  isDark,
-  gmailAccessToken,
-  connectedGmail,
-  setGmailAccessToken,
-  setConnectedGmail
+  isDark
 }: BatchEmailProcessorProps) {
   // State for alert type filters
   const [filterType, setFilterType] = useState<'all' | 'journal' | 'task'>('all');
@@ -288,58 +280,6 @@ RoboRaiders FTC #6567 Log Engine
           {/* LEFT PANEL: CONFIGURATION & GENERATOR */}
           <div className="lg:col-span-5 flex flex-col gap-6">
 
-            {/* GMAIL API CONNECTION BOX */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-xl p-5 shadow-sm">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-2">
-                <Mail className="w-4 h-4 text-emerald-500" />
-                <span>Gmail Transmitter Status</span>
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed font-sans">
-                Connect your team Google account with one click to route all robotics portal communications directly through your Gmail.
-              </p>
-              
-              <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-lg border border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${gmailAccessToken ? 'bg-emerald-500' : 'bg-amber-550'}`} />
-                  <span className="font-mono text-[10.5px] font-bold text-slate-700 dark:text-slate-350">
-                    {gmailAccessToken ? `Active: ${connectedGmail}` : 'Simulation Mode'}
-                  </span>
-                </div>
-                
-                {gmailAccessToken ? (
-                  <div className="text-[9px] font-bold uppercase tracking-wider px-3 py-1.5 rounded bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
-                    Connected Forever
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      fetch('/api/email/status')
-                        .then(res => res.json())
-                        .then(data => {
-                          if (data.configured) {
-                            if (setGmailAccessToken && setConnectedGmail) {
-                              setGmailAccessToken('server-configured');
-                              setConnectedGmail(data.user);
-                            }
-                            alert('SMTP Connection Confirmed!');
-                          } else {
-                            alert('SMTP not yet configured in ENV. Set SMTP_USER and SMTP_PASS on the backend.');
-                          }
-                        })
-                        .catch(err => {
-                          console.error("SMTP status check failed:", err);
-                          alert('Failed to connect to server');
-                        });
-                    }}
-                    className="text-[9.5px] font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
-                  >
-                    <Send className="w-3 h-3" />
-                    <span>Refresh Server Connection</span>
-                  </button>
-                )}
-              </div>
-            </div>
-            
             {/* CONSOLIDATION CONTROLS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-xl p-5 shadow-sm">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-3">

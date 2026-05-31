@@ -406,22 +406,6 @@ export default function App() {
     return null;
   });
 
-  const [gmailAccessToken, setGmailAccessToken] = useState<string | null>(null);
-  const [connectedGmail, setConnectedGmail] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Check if the backend has SMTP configured
-    fetch('/api/email/status')
-      .then(res => res.json())
-      .then(data => {
-        if (data.configured) {
-          setGmailAccessToken('server-configured'); // True-ish value
-          setConnectedGmail(data.user);
-        }
-      })
-      .catch(err => console.error("SMTP status check failed:", err));
-  }, []);
-
   // New States for views and time tracking
   const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'email_processor'>('landing');
 
@@ -1565,7 +1549,7 @@ export default function App() {
   const sendEmailNotification = (to: string, subject: string, body: string) => {
     const newEmail: DispatchedEmail = {
       id: `email-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      from: connectedGmail || 'system-auth@roboriders-6567.edu',
+      from: 'system-auth@roboriders-6567.edu',
       to,
       subject,
       body,
@@ -1576,17 +1560,13 @@ export default function App() {
       handleFirestoreError(err, OperationType.WRITE, `dispatchedEmails/${newEmail.id}`);
     });
 
-    if (gmailAccessToken) {
-      sendGmailEmail(to, subject, body)
-        .then(() => {
-          showToast(`Real email dispatched successfully to ${to} via Internal SMTP!`, 'success');
-        })
-        .catch((err) => {
-          showToast(`SMTP sending failed: ${err.message}`, 'danger');
-        });
-    } else {
-      showToast(`Email simulated & logged in outbox. Connect System Email under Outbox to trigger real delivery!`, 'info');
-    }
+    sendGmailEmail(to, subject, body)
+      .then(() => {
+        showToast(`Instant email dispatched successfully to ${to} via SMTP!`, 'success');
+      })
+      .catch((err) => {
+        showToast(`Email queued in outbox. (SMTP error: ${err.message})`, 'info');
+      });
   };
 
   const getXPAuditLogs = (): XPAuditLogEntry[] => {
@@ -6669,10 +6649,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
           onClearNotifications={clearPendingNotifications}
           onBack={() => setCurrentView('landing')}
           isDark={isDark}
-          gmailAccessToken={gmailAccessToken}
-          connectedGmail={connectedGmail}
-          setGmailAccessToken={setGmailAccessToken}
-          setConnectedGmail={setConnectedGmail}
         />
       )}
 
