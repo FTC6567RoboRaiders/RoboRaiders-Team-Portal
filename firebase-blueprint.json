@@ -131,6 +131,21 @@
       },
       "required": ["id", "userId", "userName", "userEmail", "amount", "reason", "awardedBy", "awardedByEmail", "createdAt"]
     },
+    "PendingSystemNotification": {
+      "title": "Pending System Notification",
+      "description": "A buffered notification of a task update or journal entry awaiting consolidated digest processing.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["journal", "task"] },
+        "title": { "type": "string" },
+        "details": { "type": "string" },
+        "authorName": { "type": "string" },
+        "subteam": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "type", "title", "details", "authorName", "subteam", "createdAt"]
+    },
     "LedgerTransaction": {
       "title": "Ledger Transaction",
       "description": "A financial transaction tracking spending or budget allocations for the team.",
@@ -162,6 +177,24 @@
         "outreach_seeded": { "type": "boolean" },
         "ledger_seeded": { "type": "boolean" }
       }
+    },
+    "TriggerMail": {
+      "title": "Trigger Mail",
+      "description": "An email document queued for delivery by the Firebase Trigger Email (firestore-send-email) extension.",
+      "type": "object",
+      "properties": {
+        "to": { "type": "string" },
+        "message": {
+          "type": "object",
+          "properties": {
+            "subject": { "type": "string" },
+            "text": { "type": "string" },
+            "html": { "type": "string" }
+          },
+          "required": ["subject", "text", "html"]
+        }
+      },
+      "required": ["to", "message"]
     }
   },
   "firestore": {
@@ -200,6 +233,14 @@
     "xpAdjustments/{adjId}": {
       "schema": "XPAdjustment",
       "description": "Manual XP increments or deductions issued by mentors/captains."
+    },
+    "pendingNotifications/{notifId}": {
+      "schema": "PendingSystemNotification",
+      "description": "Queued notification alerts that are waiting to be processed in mentor digests."
+    },
+    "mail/{mailId}": {
+      "schema": "TriggerMail",
+      "description": "Email queue processed by the Firebase Trigger Email from Firestore extension."
     }
   }
 }

@@ -144,6 +144,27 @@ service cloud.firestore {
         && data.createdAt is number;
     }
 
+    function isValidPendingNotification(data) {
+      return data.keys().hasAll(['id', 'type', 'title', 'details', 'authorName', 'subteam', 'createdAt'])
+        && data.keys().size() == 7
+        && data.id is string
+        && data.type in ['journal', 'task']
+        && data.title is string && data.title.size() <= 1000
+        && data.details is string && data.details.size() <= 10000
+        && data.authorName is string && data.authorName.size() <= 100
+        && data.subteam is string
+        && data.createdAt is number;
+    }
+
+    function isValidTriggerMail(data) {
+      return data.keys().hasAll(['to', 'message'])
+        && (data.to is string || data.to is list)
+        && data.message.keys().hasAll(['subject', 'text', 'html'])
+        && data.message.subject is string
+        && data.message.text is string
+        && data.message.html is string;
+    }
+
     // Collection Rules
     
     // 1. Users
@@ -235,6 +256,22 @@ service cloud.firestore {
     match /systemSettings/{settingId} {
       allow read: if isSignedIn();
       allow create, update: if isApprovedUser();
+      allow delete: if isMentorOrCaptain();
+    }
+
+    // 10. Pending Notifications
+    match /pendingNotifications/{notifId} {
+      allow read: if isSignedIn();
+      allow create: if isApprovedUser() && isValidPendingNotification(request.resource.data);
+      allow update: if isApprovedUser() && isValidPendingNotification(request.resource.data);
+      allow delete: if isMentorOrCaptain();
+    }
+
+    // 11. Trigger Mail Queue
+    match /mail/{mailId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidTriggerMail(request.resource.data);
+      allow update: if isApprovedUser() && isValidTriggerMail(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
   }

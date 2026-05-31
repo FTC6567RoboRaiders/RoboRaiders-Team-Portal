@@ -52,7 +52,7 @@ import {
   Scroll,
   DollarSign
 } from 'lucide-react';
-import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction } from './types';
+import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, PendingSystemNotification } from './types';
 import { compressAndResizeImage } from './utils/image';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { 
@@ -102,6 +102,7 @@ import StudentHandbook from './components/StudentHandbook';
 import TimePicker from './components/TimePicker';
 import GeneralLedger from './components/GeneralLedger';
 import MemberDirectory from './components/MemberDirectory';
+import BatchEmailProcessor from './components/BatchEmailProcessor';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -403,7 +404,7 @@ export default function App() {
   });
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'email_processor'>('landing');
 
   // Outreach events state
   const [outreachEvents, setOutreachEvents] = useState<OutreachEvent[]>(() => {
@@ -440,6 +441,48 @@ export default function App() {
   });
 
   const saveKanbanTasksToLocalStorage = (newTasks: KanbanTask[]) => {
+    // Detect changes to queue notifications for mentors batching
+    if (kanbanTasks.length > 0) {
+      if (newTasks.length > kanbanTasks.length) {
+        // New task added
+        const added = newTasks.find(nt => !kanbanTasks.some(ot => ot.id === nt.id));
+        if (added) {
+          queueNotification(
+            'task', 
+            `New Kanban Task: "${added.title}"`,
+            `Created task assigned to ${added.assignedTo} under subteam "${added.subteam}".\nPriority: ${added.priority}\nDescription: ${added.description}`,
+            added.updatedBy || currentUser?.name || 'Team member',
+            added.subteam
+          );
+        }
+      } else if (newTasks.length === kanbanTasks.length) {
+        // Task updated or moved
+        newTasks.forEach(nt => {
+          const ot = kanbanTasks.find(o => o.id === nt.id);
+          if (ot) {
+            const columnChanged = ot.column !== nt.column;
+            const assigneeChanged = ot.assignedTo !== nt.assignedTo;
+            const descChanged = ot.description !== nt.description || ot.title !== nt.title;
+            
+            if (columnChanged || assigneeChanged || descChanged) {
+              let detail = '';
+              if (columnChanged) detail += `📊 Moved column from [${ot.column.toUpperCase()}] to [${nt.column.toUpperCase()}]\n`;
+              if (assigneeChanged) detail += `👤 Assigned from "${ot.assignedTo}" to "${nt.assignedTo}"\n`;
+              if (descChanged) detail += `📝 Revised description/title: "${nt.title}"\n`;
+              
+              queueNotification(
+                'task',
+                `Kanban Task Updated: "${nt.title}"`,
+                detail + `Priority: ${nt.priority}\nSubteam: ${nt.subteam}`,
+                nt.updatedBy || currentUser?.name || 'Team member',
+                nt.subteam
+              );
+            }
+          }
+        });
+      }
+    }
+
     localStorage.setItem('ftc_kanban_tasks', JSON.stringify(newTasks));
     setKanbanTasks(newTasks);
     syncKanbanTasksToFirestore(newTasks).catch(console.error);
@@ -1306,6 +1349,7 @@ export default function App() {
 
   // Approvals Modal state for Mentor/Captain
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Season Transition and Backups state (Mentor-Only option)
   const [isBackupTransitionOpen, setIsBackupTransitionOpen] = useState(false);
@@ -1354,6 +1398,66 @@ export default function App() {
     return [];
   });
 
+  const [pendingNotifications, setPendingNotifications] = useState<PendingSystemNotification[]>(() => {
+    const stored = localStorage.getItem('ftc_pending_notifications');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsub = onSnapshot(collection(db, 'pendingNotifications'), (snapshot) => {
+      const list: PendingSystemNotification[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as PendingSystemNotification);
+      });
+      const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
+      setPendingNotifications(sorted);
+      localStorage.setItem('ftc_pending_notifications', JSON.stringify(sorted));
+    }, (error) => {
+      console.error("Global pendingNotifications subscription error:", error);
+    });
+    return () => unsub();
+  }, [currentUser]);
+
+  const queueNotification = async (type: 'journal' | 'task', title: string, details: string, authorName: string, subteam: Subteam) => {
+    const newNotif: PendingSystemNotification = {
+      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      type,
+      title,
+      details,
+      authorName,
+      subteam,
+      createdAt: Date.now()
+    };
+    try {
+      await setDoc(doc(db, 'pendingNotifications', newNotif.id), newNotif);
+    } catch (e) {
+      setPendingNotifications(prev => [newNotif, ...prev]);
+      localStorage.setItem('ftc_pending_notifications', JSON.stringify([newNotif, ...pendingNotifications]));
+    }
+  };
+
+  const clearPendingNotifications = async (ids: string[]) => {
+    for (const id of ids) {
+      try {
+        await deleteDoc(doc(db, 'pendingNotifications', id));
+      } catch (err) {
+        console.error("Failed to delete notification ID:", id, err);
+      }
+    }
+    const remaining = pendingNotifications.filter(n => !ids.includes(n.id));
+    setPendingNotifications(remaining);
+    localStorage.setItem('ftc_pending_notifications', JSON.stringify(remaining));
+  };
+
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'dispatchedEmails'), (snapshot) => {
       const list: DispatchedEmail[] = [];
@@ -1381,6 +1485,40 @@ export default function App() {
     setDispatchedEmails(prev => [newEmail, ...prev]);
     setDoc(doc(db, 'dispatchedEmails', newEmail.id), newEmail).catch(err => {
       handleFirestoreError(err, OperationType.WRITE, `dispatchedEmails/${newEmail.id}`);
+    });
+
+    // Write to the 'mail' collection for the "Trigger Email from Firestore" (firestore-send-email) extension
+    const triggerEmailId = `mail-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const triggerMailDoc = {
+      to,
+      message: {
+        subject,
+        text: body,
+        html: body.split('\n').join('<br>')
+      }
+    };
+    setDoc(doc(db, 'mail', triggerEmailId), triggerMailDoc).catch(err => {
+      console.error("Firebase Trigger Email Extension (mail table) write error:", err);
+    });
+
+    // Trigger backend server API to send actual email via Resend
+    fetch('/api/send-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ to, subject, body })
+    })
+    .then(async (res) => {
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Error dispatching actual email via backend API:", data.error || res.statusText);
+      } else {
+        console.log("Email dispatch successfully sent through backend proxy:", data);
+      }
+    })
+    .catch((err) => {
+      console.error("Failed to connect to backend email dispatch API:", err);
     });
   };
 
@@ -4014,74 +4152,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
               <LogOut className="w-3.5 h-3.5" /> <span>Log Out / Cancel</span>
             </button>
           </div>
-
-          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 w-full text-center">
-            <p className="text-[9px] text-indigo-700 dark:text-indigo-400 font-mono leading-relaxed bg-indigo-50/40 dark:bg-indigo-950/15 p-2.5 rounded border border-indigo-150 dark:border-indigo-900/50">
-              💡 <strong>Tester Guideline</strong>: To approve this request, click "Log Out / Cancel" and sign in as <strong>System Admin</strong> (admin@school.edu / Password: admin) or <strong>testMentor</strong> (mentor@school.edu / Password: admin123). Go to the "Team Approvals" menu in the header and approve this account.
-            </p>
-          </div>
-        </div>
-
-        {/* Simulated System Mail Logs at the bottom of pending screen */}
-        <div className="w-full max-w-md mt-6 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 shadow-xl flex flex-col">
-          <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-800 pb-2">
-            <h3 className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-1.5 leading-none">
-              <Mail className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              <span>Simulated Outbox Logs ({dispatchedEmails.length})</span>
-            </h3>
-            {dispatchedEmails.length > 0 && (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const emailDocs = dispatchedEmails.map(e => deleteDoc(doc(db, 'dispatchedEmails', e.id)));
-                    await Promise.all(emailDocs);
-                    setDispatchedEmails([]);
-                    showToast('Purged entire public simulated email database.', 'success');
-                  } catch (err: any) {
-                    showToast(`Clear failed: ${err.message}`, 'danger');
-                  }
-                }}
-                className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-705 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
-              >
-                Clear Outbox
-              </button>
-            )}
-          </div>
-
-          {dispatchedEmails.length === 0 ? (
-            <div className="bg-slate-50 dark:bg-slate-850/50 border border-slate-200/60 dark:border-slate-800/40 rounded p-4 text-center text-slate-450 dark:text-slate-450 font-mono text-[10px] leading-relaxed">
-              📬 Outgoing team notifications will log here in real-time (e.g. registration request alerts or password reset verification codes).
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1">
-              {dispatchedEmails.map((email) => (
-                <div 
-                  key={email.id}
-                  className="bg-slate-950 text-slate-250 border border-slate-800/80 rounded p-3 text-[10px] font-mono leading-relaxed pb-2.5"
-                >
-                  <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400">
-                    <div className="flex justify-between items-center text-[9px]">
-                      <div><span className="text-purple-405 font-bold">FROM:</span> {email.from}</div>
-                      <span>{new Date(email.timestamp).toLocaleTimeString()}</span>
-                    </div>
-                    <div><span className="text-emerald-405 font-bold">TO:</span> <strong className="text-emerald-350">{email.to}</strong></div>
-                    <div className="text-slate-100 font-bold mt-1 text-[10.5px] border-l-2 border-brand pl-1.5 select-all">{email.subject}</div>
-                  </div>
-                  <div className="whitespace-pre-wrap text-slate-300 font-sans text-[11px] leading-relaxed pl-0.5 select-all mb-2.5">{email.body}</div>
-                  <button
-                    onClick={() => {
-                      window.open(`mailto:${email.to}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`);
-                    }}
-                    className="w-full bg-brand/10 hover:bg-brand/20 text-brand-hover dark:text-emerald-350 border border-brand/25 dark:border-emerald-500/25 rounded py-1 px-2 text-[9px] font-bold tracking-wider uppercase flex items-center justify-center gap-1 cursor-pointer transition-all"
-                  >
-                    <Send className="w-2.5 h-2.5" />
-                    <span>Send Real Email via Mail Client</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
       </div>
@@ -4119,6 +4189,97 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
   const isUserAdminOrMentor = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu';
   const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
+
+  const sidebarLinks: {
+    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'email_processor';
+    label: string;
+    sublabel: string;
+    icon: any;
+    badge: number | string | null;
+    badgeColor?: string;
+    color: string;
+  }[] = [
+    {
+      id: 'landing',
+      label: 'Portal Hub',
+      sublabel: 'Home & Arena',
+      icon: Grid,
+      badge: null,
+      color: 'text-rose-500'
+    },
+    {
+      id: 'journal',
+      label: 'Notebook Logs',
+      sublabel: 'Engineering entries',
+      icon: BookOpen,
+      badge: entries.filter(e => e.status === 'Pending Review' && canUserApproveEntry(currentUser, e)).length || null,
+      badgeColor: 'bg-amber-500',
+      color: 'text-cyan-400'
+    },
+    {
+      id: 'time_entry',
+      label: 'Time Card',
+      sublabel: activeSession ? '⚡ CLOCKED IN' : 'Punch attendance',
+      icon: Clock,
+      badge: activeSession ? 'ON' : null,
+      badgeColor: 'bg-emerald-500 animate-pulse',
+      color: 'text-emerald-400'
+    },
+    {
+      id: 'kanban',
+      label: 'Kanban Board',
+      sublabel: 'Task cards',
+      icon: Layers,
+      badge: kanbanTasks.filter(t => t.assignedTo?.toLowerCase() === currentUser?.schoolEmail.toLowerCase() && t.status !== 'Completed').length || null,
+      badgeColor: 'bg-indigo-500',
+      color: 'text-indigo-400'
+    },
+    {
+      id: 'outreach',
+      label: 'Outreach Logs',
+      sublabel: 'Community impact',
+      icon: Users,
+      badge: null,
+      color: 'text-purple-400'
+    },
+    {
+      id: 'handbook',
+      label: 'Student Handbook',
+      sublabel: 'Docs & guides',
+      icon: FileText,
+      badge: null,
+      color: 'text-amber-400'
+    },
+    {
+      id: 'finance',
+      label: 'General Ledger',
+      sublabel: 'Championship ledger',
+      icon: DollarSign,
+      badge: null,
+      color: 'text-teal-400'
+    }
+  ];
+
+  if (isUserAdminOrMentor) {
+    sidebarLinks.push({
+      id: 'approvals',
+      label: 'Roster & Approvals',
+      sublabel: 'Approvals & database',
+      icon: ShieldCheck,
+      badge: accounts.filter(a => a.status === 'Pending').length || null,
+      badgeColor: 'bg-red-500',
+      color: 'text-red-400'
+    });
+    sidebarLinks.push({
+      id: 'email_processor',
+      label: 'Batch Alerts',
+      sublabel: 'Alert consolidator',
+      icon: Mail,
+      badge: pendingNotifications.length || null,
+      badgeColor: 'bg-indigo-600',
+      color: 'text-indigo-400'
+    });
+  }
 
   return (
     <div className={`min-h-screen flex flex-col font-sans border-t-8 transition-colors duration-200 border-brand ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="main-root">
@@ -4305,6 +4466,162 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
         </div>
       )}
+
+      {/* WORKSPACE SIDEBAR + VIEW CONTENT WRAPPER */}
+      <div className="flex-1 flex flex-col md:flex-row min-h-0 relative overflow-hidden" id="workspace-layout-wrapper">
+        
+        {/* RESPONSIVE MOBILE HORIZONTAL TAB STRIP */}
+        <div className="md:hidden flex overflow-x-auto gap-2 p-2 bg-slate-900 border-b border-slate-800 shrink-0 no-print" id="workspace-mobile-nav">
+          {sidebarLinks.map((link) => {
+            const LinkIcon = link.icon;
+            const isActive = currentView === link.id;
+            return (
+              <button
+                key={link.id}
+                type="button"
+                onClick={() => {
+                  setCurrentView(link.id);
+                  showToast(`Switched view to ${link.label}`, 'info');
+                }}
+                className={`py-2 px-3 text-xs font-bold font-sans tracking-wide rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap outline-none border-none cursor-pointer ${
+                  isActive 
+                    ? 'bg-brand text-white shadow-md shadow-brand/20' 
+                    : 'bg-slate-850 hover:bg-slate-850 text-slate-350 hover:text-white'
+                }`}
+              >
+                <LinkIcon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : link.color}`} />
+                <span>{link.label}</span>
+                {link.badge !== null && (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full text-white font-black font-mono leading-none ${link.badgeColor || 'bg-brand'}`}>
+                    {link.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* SIDEBAR NAVIGATION PANEL (DESKTOP) */}
+        <aside 
+          className={`hidden md:flex flex-col shrink-0 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-r border-slate-250 dark:border-slate-800 transition-all duration-300 no-print select-none ${
+            isSidebarCollapsed ? 'w-20' : 'w-72'
+          }`}
+          id="workspace-sidebar"
+        >
+          {/* TOP HEADER CONTROLS (COLLAPSER AT THE TOP) */}
+          <div className={`p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-950/20 flex items-center justify-between gap-2 ${
+            isSidebarCollapsed ? 'justify-center p-3' : ''
+          }`}>
+            {!isSidebarCollapsed && (
+              <div className="flex items-center gap-2 font-mono text-[10px] text-slate-500 dark:text-slate-400 font-extrabold tracking-widest leading-none">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span>ROBORAIDERS OS</span>
+              </div>
+            )}
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              type="button"
+              className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg cursor-pointer transition-all border-none bg-transparent outline-none flex items-center justify-center shadow-xs"
+              title={isSidebarCollapsed ? "Expand Sidebar Panel" : "Collapse Sidebar Panel"}
+              id="workspace-sidebar-toggle-top"
+            >
+              <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${isSidebarCollapsed ? '' : 'rotate-180'}`} />
+            </button>
+          </div>
+
+          {/* USER CARD PROFILE PREVIEW */}
+          <div className={`p-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/45 flex flex-col gap-3.5 transition-all ${
+            isSidebarCollapsed ? 'items-center p-3' : ''
+          }`}>
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 bg-gradient-to-br from-cyan-500 to-indigo-600 rounded-xl flex items-center justify-center font-extrabold text-white text-base shadow-md shrink-0">
+                {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : '👤'}
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-[13.5px] font-extrabold text-slate-900 dark:text-slate-50 truncate leading-none tracking-tight">{currentUser?.name}</h4>
+                  <span className="text-[9.5px] font-mono text-indigo-600 dark:text-indigo-400 font-black block mt-1.5 uppercase tracking-wider truncate">
+                    {currentUser?.role === 'mentor' ? 'Coach / Mentor' : currentUser?.role === 'captain' ? 'Captain' : currentUser?.role === 'mentor_captain' ? 'Mentor / Captain' : 'Team Member'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* GAMIFIED PROGRESS TRACKER */}
+            {!isSidebarCollapsed && userGamification && (
+              <div className="mt-1 bg-slate-100 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
+                <div className="flex justify-between items-center text-[10px] font-mono text-slate-600 dark:text-slate-400 leading-none">
+                  <span className="font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-wider">LEVEL {userGamification.stats.level}</span>
+                  <span className="font-extrabold text-slate-800 dark:text-slate-200">{userGamification.stats.xp} / {userGamification.stats.xp + userGamification.stats.xpForNextLevel} XP</span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2.5 border border-slate-205 dark:border-slate-850">
+                  <div className="bg-gradient-to-r from-cyan-400 to-indigo-500 h-full transition-all duration-500" style={{ width: `${userGamification.stats.percentToNextLevel}%` }} />
+                </div>
+                <div className="text-[8.5px] text-slate-500 dark:text-slate-500 text-center uppercase tracking-widest font-mono font-bold mt-2">
+                  {userGamification.stats.percentToNextLevel}% to Level {userGamification.stats.level + 1}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* LIST OF SHORTCUT LINKS */}
+          <nav className="flex-1 py-4 px-3 space-y-1.5 overflow-y-auto" id="workspace-sidebar-nav">
+            {sidebarLinks.map((link) => {
+              const LinkIcon = link.icon;
+              const isActive = currentView === link.id;
+
+              return (
+                <button
+                  key={link.id}
+                  type="button"
+                  onClick={() => {
+                    setCurrentView(link.id);
+                    showToast(`Switched view to ${link.label}`, 'info');
+                  }}
+                  title={isSidebarCollapsed ? `${link.label} — ${link.sublabel}` : undefined}
+                  className={`w-full py-3 px-3.5 rounded-xl flex items-center transition-all ${
+                    isSidebarCollapsed ? 'justify-center py-3.5 px-0' : 'gap-3.5'
+                  } outline-none border-none text-left cursor-pointer ${
+                    isActive 
+                      ? 'bg-brand text-white shadow-md shadow-brand/15 font-bold border-l-4 border-brand-hover scale-[1.02]' 
+                      : 'text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
+                  }`}
+                >
+                  <LinkIcon className={`w-[18px] h-[18px] shrink-0 transition-colors ${isActive ? 'text-white' : link.color}`} />
+                  
+                  {!isSidebarCollapsed && (
+                    <div className="min-w-0 flex-1 flex flex-col">
+                      <span className="text-[12.5px] leading-tight font-extrabold uppercase tracking-wide">{link.label}</span>
+                      <span className={`text-[9.5px] font-mono leading-none mt-1 truncate uppercase tracking-normal ${
+                        isActive ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'
+                      }`}>
+                        {link.sublabel}
+                      </span>
+                    </div>
+                  )}
+
+                  {link.badge !== null && (
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full text-white font-mono font-black shrink-0 leading-none ${
+                      isSidebarCollapsed ? 'absolute translate-x-4 -translate-y-2.5 scale-90' : ''
+                    } ${link.badgeColor || 'bg-brand'}`}>
+                      {link.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* LOWER STATUS FOOTER */}
+          {!isSidebarCollapsed && (
+            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-100/30 dark:bg-slate-950/20 flex items-center justify-center font-mono text-[8.5px] text-slate-400 dark:text-slate-500 font-bold tracking-widest leading-none">
+              <span>ACTIVE SYNCHRONOUS CLOUD</span>
+            </div>
+          )}
+        </aside>
+
+        {/* WORKSPACE SCREEN CONTENT PANEL */}
+        <div className="flex-1 overflow-y-auto relative flex flex-col min-h-0" id="workspace-content-pane">
 
       {/* LANDING PAGE HUB */}
       {currentView === 'landing' && (
@@ -5904,6 +6221,20 @@ ${entry.planNextTime || '_No carry-over specified._'}
           onUpdateLeadership={handleUpdateLeadership}
           onStartEditProfile={handleStartEditProfile}
           formatSubteamLabel={formatSubteamLabel}
+        />
+      )}
+
+      {/* BATCH EMAIL PROCESSOR VIEW */}
+      {currentView === 'email_processor' && (
+        <BatchEmailProcessor
+          currentUser={currentUser}
+          accounts={accounts}
+          pendingNotifications={pendingNotifications}
+          dispatchedEmails={dispatchedEmails}
+          onSendEmail={sendEmailNotification}
+          onClearNotifications={clearPendingNotifications}
+          onBack={() => setCurrentView('landing')}
+          isDark={isDark}
         />
       )}
 
@@ -10325,6 +10656,9 @@ FTC #6567 Captains & Mentors`
           </motion.div>
         )}
       </AnimatePresence>
+
+        </div> {/* closing WORKSPACE SCREEN CONTENT PANEL */}
+      </div> {/* closing WORKSPACE SIDEBAR + VIEW CONTENT WRAPPER */}
 
       {/* Dynamic Batch Print Container - ONLY printed, completely invisible on screen, styles strictly adjusted for print */}
       {entriesToPrint && entriesToPrint.length > 0 && (

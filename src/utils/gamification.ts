@@ -166,12 +166,14 @@ export const computeUserGamification = (
   
   // Filter for user-specific logs
   const userJournals = entries.filter(e => 
-    e.author.toLowerCase().includes(email) || 
-    e.author.toLowerCase().includes(user.name.toLowerCase())
+    (e.author.toLowerCase().includes(email) || 
+     e.author.toLowerCase().includes(user.name.toLowerCase())) &&
+    (!user.createdAt || e.createdAt >= user.createdAt)
   );
   
   const userHours = timeEntries.filter(t => 
-    t.userEmail.toLowerCase() === email
+    t.userEmail.toLowerCase() === email &&
+    (!user.createdAt || t.createdAt >= user.createdAt)
   );
 
   // Subteam stats
@@ -206,13 +208,15 @@ export const computeUserGamification = (
     ev.participants?.some(p => 
       p.toLowerCase() === user.name.toLowerCase() || 
       p.toLowerCase() === user.schoolEmail.toLowerCase()
-    )
+    ) &&
+    (!user.createdAt || ev.createdAt >= user.createdAt)
   );
   const outreachXp = participatedOutreach.length * 50;
 
   // Manual adjustments from Mentors/Admins
   const userAdjustments = (xpAdjustments || []).filter(adj => 
-    (adj.userId === user.id || adj.userEmail.toLowerCase() === email) && !isSignupBonus(adj.reason)
+    ((adj.userId === user.id || adj.userEmail.toLowerCase() === email) && !isSignupBonus(adj.reason)) &&
+    (!user.createdAt || adj.createdAt >= user.createdAt)
   );
   const manualXp = userAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
 
