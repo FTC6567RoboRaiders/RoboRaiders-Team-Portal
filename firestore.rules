@@ -156,15 +156,6 @@ service cloud.firestore {
         && data.createdAt is number;
     }
 
-    function isValidTriggerMail(data) {
-      return data.keys().hasAll(['to', 'message'])
-        && (data.to is string || data.to is list)
-        && data.message.keys().hasAll(['subject', 'text', 'html'])
-        && data.message.subject is string
-        && data.message.text is string
-        && data.message.html is string;
-    }
-
     // Collection Rules
     
     // 1. Users
@@ -264,14 +255,6 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isApprovedUser() && isValidPendingNotification(request.resource.data);
       allow update: if isApprovedUser() && isValidPendingNotification(request.resource.data);
-      allow delete: if isMentorOrCaptain();
-    }
-
-    // 11. Trigger Mail Queue
-    match /mail/{mailId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidTriggerMail(request.resource.data);
-      allow update: if isApprovedUser() && isValidTriggerMail(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
   }

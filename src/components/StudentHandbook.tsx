@@ -24,19 +24,44 @@ interface StudentHandbookProps {
   currentUser: any;
   showToast: (msg: string, type: 'success' | 'danger' | 'info' | 'warning') => void;
   onBack: () => void;
+  initialChapterIndex?: number;
+  initialSectionId?: string;
 }
 
-export default function StudentHandbook({ currentUser, showToast, onBack }: StudentHandbookProps) {
-  const [activeChapterIndex, setActiveChapterIndex] = useState<number>(0);
-  const [activeSectionId, setActiveSectionId] = useState<string>('');
+export default function StudentHandbook({ 
+  currentUser, 
+  showToast, 
+  onBack,
+  initialChapterIndex,
+  initialSectionId
+}: StudentHandbookProps) {
+  const [activeChapterIndex, setActiveChapterIndex] = useState<number>(initialChapterIndex ?? 0);
+  const [activeSectionId, setActiveSectionId] = useState<string>(initialSectionId ?? '');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const activeChapter = HANDBOOK_CHAPTERS[activeChapterIndex] || HANDBOOK_CHAPTERS[0];
 
+  // Sync state if initial props change
+  React.useEffect(() => {
+    if (initialChapterIndex !== undefined) {
+      setActiveChapterIndex(initialChapterIndex);
+    }
+  }, [initialChapterIndex]);
+
+  React.useEffect(() => {
+    if (initialSectionId !== undefined) {
+      setActiveSectionId(initialSectionId);
+    }
+  }, [initialSectionId]);
+
   // Set first section active when active chapter shifts if not already set
   React.useEffect(() => {
     if (activeChapter && activeChapter.sections.length > 0) {
-      setActiveSectionId(activeChapter.sections[0].id);
+      if (initialSectionId && activeChapter.sections.some(s => s.id === initialSectionId)) {
+        setActiveSectionId(initialSectionId);
+      } else {
+        setActiveSectionId(activeChapter.sections[0].id);
+      }
     }
   }, [activeChapterIndex]);
 
