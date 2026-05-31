@@ -75,6 +75,18 @@ export default function BatchEmailProcessor({
       .map(a => a.schoolEmail);
   });
 
+  // Custom Test Email State
+  const [testEmailRecipient, setTestEmailRecipient] = useState<string>('');
+  const [testEmailBody, setTestEmailBody] = useState<string>('');
+
+  const handleTestEmailDispatch = () => {
+    if (!testEmailRecipient || !testEmailBody.trim()) return;
+    onSendEmail(testEmailRecipient, '[FTC #6567] Direct Alert / Test', testEmailBody);
+    alert(`Test email appended to outbox for ${testEmailRecipient}`);
+    setTestEmailBody('');
+    setTestEmailRecipient('');
+  };
+
   // Filtered notifications
   const filteredNotifications = useMemo(() => {
     return pendingNotifications.filter(notif => {
@@ -410,6 +422,62 @@ RoboRaiders FTC #6567 Log Engine
                     <Send className="w-4 h-4" />
                     <span>Dispatch Consolidated Digest ({generatedDigest.checkedItems.length} Alerts)</span>
                   </button>
+                </div>
+              </div>
+            </div>
+
+            {/* TEST EMAIL TOOL */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-xl p-5 shadow-sm">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-3">
+                <Send className="w-4 h-4 text-cyan-500" />
+                <span>Custom / Test Email</span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+                Send a quick test email or custom alert directly to a selected team member.
+              </p>
+              
+              <div className="space-y-3">
+                <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-605 dark:text-slate-400 tracking-wider mb-1.5">
+                      Recipient
+                    </label>
+                    <input
+                      type="email"
+                      list="team-emails"
+                      value={testEmailRecipient}
+                      onChange={(e) => setTestEmailRecipient(e.target.value)}
+                      placeholder="Type any email or select..."
+                      className="w-full text-xs font-sans px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-slate-900 dark:text-slate-100"
+                    />
+                    <datalist id="team-emails">
+                      {accounts.map(acc => (
+                        <option key={acc.id} value={acc.schoolEmail}>{acc.name} ({acc.role})</option>
+                      ))}
+                    </datalist>
+                </div>
+
+                <div>
+                   <label className="block text-[10px] font-black uppercase text-slate-605 dark:text-slate-400 tracking-wider mb-1">
+                      Message
+                    </label>
+                    <textarea 
+                       rows={2} 
+                       className="w-full text-xs font-sans px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                       value={testEmailBody}
+                       onChange={e => setTestEmailBody(e.target.value)}
+                       placeholder="Enter test message payload..."
+                    />
+                </div>
+
+                <div className="pt-2">
+                   <button
+                     onClick={handleTestEmailDispatch}
+                     disabled={!testEmailRecipient || !testEmailBody.trim()}
+                     className="w-full py-2.5 px-4 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow flex items-center justify-center gap-2"
+                   >
+                     <Mail className="w-4 h-4" />
+                     <span>Send Test Payload</span>
+                   </button>
                 </div>
               </div>
             </div>

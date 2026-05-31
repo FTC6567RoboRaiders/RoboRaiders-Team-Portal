@@ -409,6 +409,19 @@ export default function App() {
   const [gmailAccessToken, setGmailAccessToken] = useState<string | null>(null);
   const [connectedGmail, setConnectedGmail] = useState<string | null>(null);
 
+  useEffect(() => {
+    // Check if the backend has SMTP configured
+    fetch('/api/email/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.configured) {
+          setGmailAccessToken('server-configured'); // True-ish value
+          setConnectedGmail(data.user);
+        }
+      })
+      .catch(err => console.error("SMTP status check failed:", err));
+  }, []);
+
   // New States for views and time tracking
   const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'email_processor'>('landing');
 
@@ -1272,7 +1285,7 @@ export default function App() {
             }
           }
         } catch (err) {
-          console.error("onAuthStateChanged Profile Fetch Error", err);
+          console.warn("onAuthStateChanged Profile Sync Delayed (client offline or unavailable)", err);
         }
       } else {
         setCurrentUser(null);
@@ -1528,38 +1541,18 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const sendGmailEmail = async (to: string, subject: string, body: string, token: string) => {
+  const sendGmailEmail = async (to: string, subject: string, body: string) => {
     try {
-      const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
-      const emailLines = [
-        `To: ${to}`,
-        `Subject: ${utf8Subject}`,
-        'MIME-Version: 1.0',
-        'Content-Type: text/html; charset=utf-8',
-        'Content-Transfer-Encoding: 7bit',
-        '',
-        body.split('\n').join('<br>')
-      ];
-      const emailString = emailLines.join('\r\n');
-      const base64SafeMessage = btoa(unescape(encodeURIComponent(emailString)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-
-      const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      const response = await fetch('/api/email/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          raw: base64SafeMessage
-        })
+        body: JSON.stringify({ to, subject, body })
       });
-
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to send email via Gmail API");
+        throw new Error(data.error || "Failed to send email via Server");
       }
       return data;
     } catch (error: any) {
@@ -1583,15 +1576,15 @@ export default function App() {
     });
 
     if (gmailAccessToken) {
-      sendGmailEmail(to, subject, body, gmailAccessToken)
+      sendGmailEmail(to, subject, body)
         .then(() => {
-          showToast(`Real email dispatched successfully to ${to} via Gmail!`, 'success');
+          showToast(`Real email dispatched successfully to ${to} via Internal SMTP!`, 'success');
         })
         .catch((err) => {
-          showToast(`Gmail sending failed: ${err.message}`, 'danger');
+          showToast(`SMTP sending failed: ${err.message}`, 'danger');
         });
     } else {
-      showToast(`Email simulated & logged in outbox. Connect Gmail under Outbox to trigger real delivery!`, 'info');
+      showToast(`Email simulated & logged in outbox. Connect System Email under Outbox to trigger real delivery!`, 'info');
     }
   };
 
@@ -8791,53 +8784,24 @@ FTC #6567 Captains & Mentors`
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${gmailAccessToken ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
                         <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-350">
-                          {gmailAccessToken ? `Gmail Connected: ${connectedGmail}` : 'Gmail Transmitter: Simulated'}
+                          {gmailAccessToken ? `SMTP Connected: ${connectedGmail}` : 'SMTP Transmitter: Simulated'}
                         </span>
                       </div>
                       
                       {gmailAccessToken ? (
-                        <button
-                          onClick={() => {
-                            setGmailAccessToken(null);
-                            setConnectedGmail(null);
-                            showToast('Gmail account disconnected.', 'info');
-                          }}
-                          className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-100 hover:bg-rose-205 dark:bg-rose-950/40 dark:hover:bg-rose-955/70 text-rose-600 dark:text-rose-400 cursor-pointer transition-all"
-                        >
-                          Disconnect
-                        </button>
+                        <div className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                          Connected Forever
+                        </div>
                       ) : (
-                        <button
-                          onClick={async () => {
-                            const provider = new GoogleAuthProvider();
-                            provider.addScope('https://www.googleapis.com/auth/gmail.send');
-                            try {
-                              const result = await signInWithPopup(auth, provider);
-                              const credential = GoogleAuthProvider.credentialFromResult(result);
-                              const token = credential?.accessToken;
-                              if (token) {
-                                setGmailAccessToken(token);
-                                setConnectedGmail(result.user.email);
-                                showToast(`Gmail authenticated for ${result.user.email}!`, 'success');
-                              } else {
-                                showToast('Failed to acquire gmail access token.', 'danger');
-                              }
-                            } catch (err: any) {
-                              console.error(err);
-                              showToast(`Gmail connection aborted: ${err.message}`, 'danger');
-                            }
-                          }}
-                          className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 cursor-pointer transition-all shadow-sm"
-                        >
-                          <Send className="w-2.5 h-2.5" />
-                          <span>Connect Gmail</span>
-                        </button>
+                        <div className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
+                          Configure ENV
+                        </div>
                       )}
                     </div>
                     <p className="text-[9px] text-slate-500 dark:text-slate-405 leading-normal">
                       {gmailAccessToken 
-                        ? 'Digest reports and portal alerts will route directly from your authenticated Gmail address.' 
-                        : 'Connect Gmail securely to trigger real email delivery instead of logging in standard simulated outbox.'}
+                        ? 'Digest reports and portal alerts will route directly from your backend server.' 
+                        : 'Set SMTP_USER and SMTP_PASS environment variables (App Password) on your backend to enable real, permanent delivery instead of the simulated outbox.'}
                     </p>
                   </div>
 
