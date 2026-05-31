@@ -1513,12 +1513,19 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) {
         console.error("Error dispatching actual email via backend API:", data.error || res.statusText);
+        showToast(`Real email dispatch failed: ${data.error || res.statusText}`, 'danger');
       } else {
         console.log("Email dispatch successfully sent through backend proxy:", data);
+        if (data.simulated) {
+          showToast(`Email dispatch simulated. Configure RESEND_API_KEY in the settings to dispatch real emails.`, 'info');
+        } else {
+          showToast(`Real email dispatched successfully to ${to}!`, 'success');
+        }
       }
     })
     .catch((err) => {
       console.error("Failed to connect to backend email dispatch API:", err);
+      showToast('Could not connect to backend email service.', 'danger');
     });
   };
 
