@@ -141,6 +141,19 @@ export const getLevelInfo = (xp: number) => {
   };
 };
 
+export const isSignupBonus = (reason: string | undefined): boolean => {
+  if (!reason) return false;
+  const lower = reason.toLowerCase();
+  return (
+    lower.includes('sign up') ||
+    lower.includes('signup') ||
+    lower.includes('sign-up') ||
+    lower.includes('registration bonus') ||
+    lower.includes('welcome bonus') ||
+    (lower.includes('welcome') && lower.includes('50'))
+  );
+};
+
 export const computeUserGamification = (
   user: UserAccount,
   entries: JournalEntry[],
@@ -199,7 +212,7 @@ export const computeUserGamification = (
 
   // Manual adjustments from Mentors/Admins
   const userAdjustments = (xpAdjustments || []).filter(adj => 
-    adj.userId === user.id || adj.userEmail.toLowerCase() === email
+    (adj.userId === user.id || adj.userEmail.toLowerCase() === email) && !isSignupBonus(adj.reason)
   );
   const manualXp = userAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
 

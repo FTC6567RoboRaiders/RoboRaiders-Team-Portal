@@ -750,9 +750,18 @@ export default function ArenaPortal({
                       </div>
 
                       <div className={`mt-3.5 border-t border-slate-105 dark:border-slate-800 pt-2 flex flex-col gap-1 text-[9px] font-mono transition-all duration-300 ${expandedBadges[badge.id] ? 'opacity-100 translate-y-0' : 'opacity-100'}`}>
-                        <div className="flex justify-between items-center text-slate-400 dark:text-slate-500">
-                          <span className="uppercase">Requirement:</span>
-                          <span className="font-bold truncate max-w-[110px]" title={badge.reqText}>{badge.reqText}</span>
+                        <div className={`flex ${expandedBadges[badge.id] ? 'flex-col gap-1 items-start' : 'justify-between items-center'} text-slate-400 dark:text-slate-500`}>
+                          <span className="uppercase text-[8px] font-black tracking-wider text-slate-450 dark:text-slate-500">Requirement:</span>
+                          <span 
+                            className={`font-bold transition-all duration-300 text-slate-700 dark:text-slate-350 ${
+                              expandedBadges[badge.id] 
+                                ? 'whitespace-normal text-left text-[9.5px] leading-normal bg-slate-100/60 dark:bg-slate-900/40 p-1.5 rounded border border-slate-200/50 dark:border-slate-800/50 w-full mt-0.5' 
+                                : 'truncate max-w-[110px] text-right'
+                            }`} 
+                            title={badge.reqText}
+                          >
+                            {badge.reqText}
+                          </span>
                         </div>
                         <div className="w-full bg-slate-100 dark:bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-800 mt-0.5">
                           <div 
