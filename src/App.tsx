@@ -2378,15 +2378,27 @@ FTC #6567 Captains & Mentors`
 
       const userUid = userCredential.user.uid;
       const docRef = doc(db, 'users', userUid);
-      let docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) {
+      let docSnap;
+      let isOffline = false;
+      try {
+        docSnap = await getDoc(docRef);
+      } catch (getDocErr: any) {
+        console.warn("Error getting user doc during login (possibly offline):", getDocErr);
+        isOffline = true;
+      }
+      
+      if (!isOffline && docSnap && !docSnap.exists()) {
         if (matchedLocalAcc) {
           const newDoc = {
             ...matchedLocalAcc,
             id: userUid
           };
-          await setDoc(docRef, newDoc);
-          docSnap = await getDoc(docRef);
+          try {
+            await setDoc(docRef, newDoc);
+            docSnap = await getDoc(docRef);
+          } catch (e: any) {
+            console.warn("Offline during doc creation", e);
+          }
         } else {
           const defaultName = emailToFind.split('@')[0];
           const isUserAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
@@ -2401,21 +2413,38 @@ FTC #6567 Captains & Mentors`
             status: isUserAdmin ? 'Approved' : 'Pending',
             createdAt: Date.now()
           };
-          await setDoc(docRef, newDoc);
-          docSnap = await getDoc(docRef);
+          try {
+            await setDoc(docRef, newDoc);
+            docSnap = await getDoc(docRef);
+          } catch(e: any) {
+            console.warn("Offline during default doc creation", e);
+          }
         }
       }
 
-      if (docSnap.exists()) {
-        const found = docSnap.data() as UserAccount;
+      if ((docSnap && docSnap.exists()) || isOffline) {
+        const found = (docSnap && docSnap.exists()) ? (docSnap.data() as UserAccount) : (matchedLocalAcc || {
+          id: userUid,
+          name: emailToFind.split('@')[0],
+          schoolEmail: emailToFind,
+          schoolId: 'N/A',
+          primarySubteam: 'Design/Build/Fabrication',
+          secondarySubteam: 'None',
+          role: 'member',
+          status: 'Pending',
+          createdAt: Date.now()
+        } as UserAccount);
+        
         setCurrentUser(found);
         localStorage.setItem('ftc_current_user', JSON.stringify(found));
-        if (found.status === 'Approved') {
-          showToast(`Welcome back, ${found.name}!`, 'success');
+        if (isOffline) {
+           showToast(`Welcome back, ${found.name}! (Offline Mode Activated)`, 'success');
+        } else if (found.status === 'Approved') {
+           showToast(`Welcome back, ${found.name}!`, 'success');
         } else if (found.status === 'Rejected') {
-          showToast('Account Access Request was rejected by Mentors.', 'danger');
+           showToast('Account Access Request was rejected by Mentors.', 'danger');
         } else {
-          showToast('Access pending administrator approval.', 'info');
+           showToast('Access pending administrator approval.', 'info');
         }
       } else {
         showToast('Successfully logged in, but profile document is missing in db.', 'danger');
