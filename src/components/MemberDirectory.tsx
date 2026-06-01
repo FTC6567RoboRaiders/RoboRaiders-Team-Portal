@@ -76,7 +76,7 @@ export default function MemberDirectory({
 
   // Filters
   const filteredRoster = accounts.filter(acc => {
-    if (acc.status !== 'Approved') return false; // shown in separate pending requests section, or rejected
+    if (acc.status === 'Pending') return false; // shown in separate pending requests section
 
     const matchesSearch = acc.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           acc.schoolEmail.toLowerCase().includes(searchQuery.toLowerCase());
@@ -97,7 +97,7 @@ export default function MemberDirectory({
   });
 
   // Pending user accounts awaiting coach approval
-  const pendingRequests = accounts.filter(acc => acc.status === 'Pending' || acc.status === 'Rejected');
+  const pendingRequests = accounts.filter(acc => acc.status === 'Pending');
 
   // Compute itemized XP breakdown audit for a chosen user
   const getUserXpAudit = (user: UserAccount) => {
@@ -291,7 +291,7 @@ export default function MemberDirectory({
             <div className="bg-white dark:bg-slate-900 border border-amber-300/40 dark:border-amber-900/30 rounded-xl p-5 shadow-sm">
               <h3 className="text-sm font-black text-slate-800 dark:text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
-                <span>Pending &amp; Rejected Requests ({pendingRequests.length})</span>
+                <span>Pending Access Approval Requests ({pendingRequests.length})</span>
               </h3>
 
               {pendingRequests.length === 0 ? (
@@ -303,21 +303,13 @@ export default function MemberDirectory({
                   {pendingRequests.map((acc) => (
                     <div 
                       key={acc.id}
-                      className={`border rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors ${
-                        acc.status === 'Rejected' 
-                          ? 'bg-rose-500/5 hover:bg-rose-500/10 border-rose-500/20 dark:border-rose-900/15'
-                          : 'bg-amber-500/5 hover:bg-amber-500/10 border-amber-500/20 dark:border-amber-900/15'
-                      }`}
+                      className="bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 dark:border-amber-900/15 rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-extrabold text-slate-900 dark:text-slate-50 text-sm">{acc.name}</span>
-                          <span className={`font-mono text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${
-                            acc.status === 'Rejected'
-                              ? 'bg-rose-100 dark:bg-rose-955/40 text-rose-800 dark:text-rose-305'
-                              : 'bg-amber-100 dark:bg-amber-955/40 text-amber-800 dark:text-amber-305'
-                          }`}>
-                            {acc.status === 'Rejected' ? 'Access Rejected' : 'Pending Approval'}
+                          <span className="bg-amber-100 dark:bg-amber-955/40 text-amber-800 dark:text-amber-305 font-mono text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
+                            Pending Approval
                           </span>
                         </div>
                         <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono space-y-0.5">
@@ -356,15 +348,13 @@ export default function MemberDirectory({
                           <CheckCircle className="w-3.5 h-3.5" />
                           <span>Approve</span>
                         </button>
-                        {acc.status !== 'Rejected' && (
-                          <button
-                            onClick={() => onRejectUser(acc.id)}
-                            className="bg-rose-600 hover:bg-rose-505 text-white font-extrabold p-2 rounded-md text-[11px] uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all border-0 shadow-sm"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            <span>Reject</span>
-                          </button>
-                        )}
+                        <button
+                          onClick={() => onRejectUser(acc.id)}
+                          className="bg-rose-600 hover:bg-rose-505 text-white font-extrabold p-2 rounded-md text-[11px] uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all border-0 shadow-sm"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Reject</span>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -424,12 +414,10 @@ export default function MemberDirectory({
                 >
                   <option value="All">All Subteams</option>
                   <option value="Design/Build/Fabrication">Design &amp; Build</option>
-                  <option value="Programming">Programming</option>
-                  <option value="Outreach">Outreach</option>
-                  <option value="Business & Media">Business & Media</option>
-                  <option value="Inspire">Inspire</option>
-                  <option value="Strategy">Strategy</option>
-                  <option value="Mentor">Coach / Mentor</option>
+                  <option value="Control/Automation">Control Loop &amp; Code</option>
+                  <option value="Outreach/Inspire">Inspire &amp; Outreach</option>
+                  <option value="Strategy/Scouting">Strategy &amp; Scouting</option>
+                  <option value="FLL Mentorship">FLL Mentoring Core</option>
                   <option value="None">Independent / Unassigned</option>
                 </select>
               </div>

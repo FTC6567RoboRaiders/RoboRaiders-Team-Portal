@@ -164,16 +164,5 @@ export interface LedgerTransaction {
   createdAt: number;
 }
 
-export interface PendingSystemNotification {
-  id: string;
-  type: 'journal' | 'task';
-  title: string;
-  details: string;
-  authorName: string;
-  subteam: Subteam;
-  createdAt: number;
-}
-
-
 
 

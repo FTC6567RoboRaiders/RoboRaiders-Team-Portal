@@ -52,7 +52,7 @@ import {
   Scroll,
   DollarSign
 } from 'lucide-react';
-import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, PendingSystemNotification } from './types';
+import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction } from './types';
 import { compressAndResizeImage } from './utils/image';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { 
@@ -61,9 +61,7 @@ import {
   onAuthStateChanged, 
   signOut,
   updatePassword,
-  sendPasswordResetEmail,
-  GoogleAuthProvider,
-  signInWithPopup
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
   collection, 
@@ -101,11 +99,9 @@ import { jsPDF } from 'jspdf';
 
 import { DEMO_ENTRIES, DEFAULT_TIME_ENTRIES } from './data/journalDemo';
 import StudentHandbook from './components/StudentHandbook';
-import { HANDBOOK_CHAPTERS } from './data/handbookData';
 import TimePicker from './components/TimePicker';
 import GeneralLedger from './components/GeneralLedger';
 import MemberDirectory from './components/MemberDirectory';
-import BatchEmailProcessor from './components/BatchEmailProcessor';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -407,7 +403,7 @@ export default function App() {
   });
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'email_processor'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals'>('landing');
 
   // Outreach events state
   const [outreachEvents, setOutreachEvents] = useState<OutreachEvent[]>(() => {
@@ -444,48 +440,6 @@ export default function App() {
   });
 
   const saveKanbanTasksToLocalStorage = (newTasks: KanbanTask[]) => {
-    // Detect changes to queue notifications for mentors batching
-    if (kanbanTasks.length > 0) {
-      if (newTasks.length > kanbanTasks.length) {
-        // New task added
-        const added = newTasks.find(nt => !kanbanTasks.some(ot => ot.id === nt.id));
-        if (added) {
-          queueNotification(
-            'task', 
-            `New Kanban Task: "${added.title}"`,
-            `Created task assigned to ${added.assignedTo} under subteam "${added.subteam}".\nPriority: ${added.priority}\nDescription: ${added.description}`,
-            added.updatedBy || currentUser?.name || 'Team member',
-            added.subteam
-          );
-        }
-      } else if (newTasks.length === kanbanTasks.length) {
-        // Task updated or moved
-        newTasks.forEach(nt => {
-          const ot = kanbanTasks.find(o => o.id === nt.id);
-          if (ot) {
-            const columnChanged = ot.column !== nt.column;
-            const assigneeChanged = ot.assignedTo !== nt.assignedTo;
-            const descChanged = ot.description !== nt.description || ot.title !== nt.title;
-            
-            if (columnChanged || assigneeChanged || descChanged) {
-              let detail = '';
-              if (columnChanged) detail += `📊 Moved column from [${ot.column.toUpperCase()}] to [${nt.column.toUpperCase()}]\n`;
-              if (assigneeChanged) detail += `👤 Assigned from "${ot.assignedTo}" to "${nt.assignedTo}"\n`;
-              if (descChanged) detail += `📝 Revised description/title: "${nt.title}"\n`;
-              
-              queueNotification(
-                'task',
-                `Kanban Task Updated: "${nt.title}"`,
-                detail + `Priority: ${nt.priority}\nSubteam: ${nt.subteam}`,
-                nt.updatedBy || currentUser?.name || 'Team member',
-                nt.subteam
-              );
-            }
-          }
-        });
-      }
-    }
-
     localStorage.setItem('ftc_kanban_tasks', JSON.stringify(newTasks));
     setKanbanTasks(newTasks);
     syncKanbanTasksToFirestore(newTasks).catch(console.error);
@@ -765,13 +719,9 @@ export default function App() {
                 ...matchedLocalAcc,
                 id: userCredential.user.uid
               });
-            } catch (createErr: any) {
+            } catch (createErr) {
               console.error("Auto create sandbox user error", createErr);
-              if (createErr.code === 'auth/email-already-in-use') {
-                showToast('This account is already registered, but the password or School ID entered is incorrect.', 'danger');
-              } else {
-                showToast('Failed to auto register sandbox user.', 'danger');
-              }
+              showToast('Failed to auto register sandbox user.', 'danger');
               return;
             }
           } else {
@@ -834,35 +784,11 @@ export default function App() {
       // Clear any previous listeners immediately on any auth state transition to avoid unauthenticated listens
       unsubscribeAll.forEach(unsub => unsub());
       unsubscribeAll = [];
-      listenersStartedRef.current = false;
 
       if (authUser) {
         try {
           const userDocRef = doc(db, 'users', authUser.uid);
-          let userSnap;
-          try {
-            userSnap = await getDoc(userDocRef);
-          } catch (getDocErr: any) {
-            console.warn("Firestore getDoc failed (possibly offline). Falling back to cached localStorage user profile:", getDocErr);
-            const stored = localStorage.getItem('ftc_current_user');
-            if (stored) {
-              try {
-                const parsed = JSON.parse(stored);
-                if (parsed && parsed.id === authUser.uid) {
-                  setCurrentUser(parsed);
-                  userSnap = {
-                    exists: () => true,
-                    data: () => parsed
-                  } as any;
-                }
-              } catch (parseErr) {
-                console.error("Cache parse failed:", parseErr);
-              }
-            }
-            if (!userSnap) {
-              throw getDocErr; // Rethrow if no local fallback exists
-            }
-          }
+          let userSnap = await getDoc(userDocRef);
           
           if (!userSnap.exists()) {
             const authEmail = authUser.email?.toLowerCase() || '';
@@ -873,14 +799,7 @@ export default function App() {
                 id: authUser.uid
               };
               await setDoc(userDocRef, newAcc);
-              try {
-                userSnap = await getDoc(userDocRef);
-              } catch (e) {
-                userSnap = {
-                  exists: () => true,
-                  data: () => newAcc
-                } as any;
-              }
+              userSnap = await getDoc(userDocRef);
             } else {
               const defaultName = authUser.displayName || authUser.email?.split('@')[0] || 'Team Member';
               const isUserAdmin = authEmail === 'ftc6567@gmail.com' || authEmail === 'mentor@school.edu' || authEmail === 'admin@school.edu';
@@ -896,14 +815,7 @@ export default function App() {
                 createdAt: Date.now()
               };
               await setDoc(userDocRef, newAcc);
-              try {
-                userSnap = await getDoc(userDocRef);
-              } catch (e) {
-                userSnap = {
-                  exists: () => true,
-                  data: () => newAcc
-                } as any;
-              }
+              userSnap = await getDoc(userDocRef);
             }
           }
 
@@ -915,14 +827,7 @@ export default function App() {
             if (userData.status === 'Approved') {
               // Retrieve seeding configuration first to avoid racing in auto-populating empty DB collections
               const unsubSettings = onSnapshot(doc(db, 'systemSettings', 'seeding'), (docSnap) => {
-                const config = {
-                  journals_seeded: true,
-                  time_seeded: true,
-                  kanban_seeded: true,
-                  outreach_seeded: true,
-                  ledger_seeded: true,
-                  errorFallback: true
-                };
+                const config = docSnap.exists() ? docSnap.data() : {};
                 seedingConfigRef.current = config;
                 setSeedingConfig(config);
 
@@ -1269,7 +1174,7 @@ export default function App() {
             }
           }
         } catch (err) {
-          console.warn("onAuthStateChanged Profile Sync Delayed (client offline or unavailable)", err);
+          console.error("onAuthStateChanged Profile Fetch Error", err);
         }
       } else {
         setCurrentUser(null);
@@ -1376,7 +1281,6 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot_password'>('login');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginSchoolId, setLoginSchoolId] = useState('');
-  const [isSigningIn, setIsSigningIn] = useState(false);
 
   // Password reset states
   const [resetEmail, setResetEmail] = useState('');
@@ -1451,66 +1355,6 @@ export default function App() {
     return [];
   });
 
-  const [pendingNotifications, setPendingNotifications] = useState<PendingSystemNotification[]>(() => {
-    const stored = localStorage.getItem('ftc_pending_notifications');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (parsed && Array.isArray(parsed)) {
-          return parsed;
-        }
-      } catch (e) {}
-    }
-    return [];
-  });
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const unsub = onSnapshot(collection(db, 'pendingNotifications'), (snapshot) => {
-      const list: PendingSystemNotification[] = [];
-      snapshot.forEach(d => {
-        list.push(d.data() as PendingSystemNotification);
-      });
-      const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
-      setPendingNotifications(sorted);
-      localStorage.setItem('ftc_pending_notifications', JSON.stringify(sorted));
-    }, (error) => {
-      console.error("Global pendingNotifications subscription error:", error);
-    });
-    return () => unsub();
-  }, [currentUser]);
-
-  const queueNotification = async (type: 'journal' | 'task', title: string, details: string, authorName: string, subteam: Subteam) => {
-    const newNotif: PendingSystemNotification = {
-      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      type,
-      title,
-      details,
-      authorName,
-      subteam,
-      createdAt: Date.now()
-    };
-    try {
-      await setDoc(doc(db, 'pendingNotifications', newNotif.id), newNotif);
-    } catch (e) {
-      setPendingNotifications(prev => [newNotif, ...prev]);
-      localStorage.setItem('ftc_pending_notifications', JSON.stringify([newNotif, ...pendingNotifications]));
-    }
-  };
-
-  const clearPendingNotifications = async (ids: string[]) => {
-    for (const id of ids) {
-      try {
-        await deleteDoc(doc(db, 'pendingNotifications', id));
-      } catch (err) {
-        console.error("Failed to delete notification ID:", id, err);
-      }
-    }
-    const remaining = pendingNotifications.filter(n => !ids.includes(n.id));
-    setPendingNotifications(remaining);
-    localStorage.setItem('ftc_pending_notifications', JSON.stringify(remaining));
-  };
-
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'dispatchedEmails'), (snapshot) => {
       const list: DispatchedEmail[] = [];
@@ -1526,26 +1370,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const sendGmailEmail = async (to: string, subject: string, body: string) => {
-    try {
-      const response = await fetch('/api/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ to, subject, body })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send email via Server");
-      }
-      return data;
-    } catch (error: any) {
-      console.error("sendGmailEmail error:", error);
-      throw error;
-    }
-  };
-
   const sendEmailNotification = (to: string, subject: string, body: string) => {
     const newEmail: DispatchedEmail = {
       id: `email-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -1559,14 +1383,6 @@ export default function App() {
     setDoc(doc(db, 'dispatchedEmails', newEmail.id), newEmail).catch(err => {
       handleFirestoreError(err, OperationType.WRITE, `dispatchedEmails/${newEmail.id}`);
     });
-
-    sendGmailEmail(to, subject, body)
-      .then(() => {
-        showToast(`Instant email dispatched successfully to ${to} via SMTP!`, 'success');
-      })
-      .catch((err) => {
-        showToast(`Email queued in outbox. (SMTP error: ${err.message})`, 'info');
-      });
   };
 
   const getXPAuditLogs = (): XPAuditLogEntry[] => {
@@ -1844,237 +1660,6 @@ export default function App() {
   const [inspectLeaderboardAccount, setInspectLeaderboardAccount] = useState<UserAccount | null>(null);
   const [activeGuildTab, setActiveGuildTab] = useState<string>('');
 
-  // Global search bar state
-  const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
-  const [isGlobalSearchActive, setIsGlobalSearchActive] = useState<boolean>(false);
-  const [selectedHandbookChapterIndex, setSelectedHandbookChapterIndex] = useState<number | undefined>(undefined);
-  const [selectedHandbookSectionId, setSelectedHandbookSectionId] = useState<string | undefined>(undefined);
-
-  // Global search implementation
-  const getGlobalSearchResults = () => {
-    const query = globalSearchQuery.trim().toLowerCase();
-    if (query.length < 2) return [];
-
-    interface SearchResult {
-      id: string;
-      title: string;
-      subtitle?: string;
-      category: 'Journal' | 'TimeLog' | 'Kanban' | 'Outreach' | 'Ledger' | 'Handbook' | 'Member';
-      subteam?: string;
-      payload: any;
-    }
-
-    const results: SearchResult[] = [];
-
-    // 1. Journal entries
-    entries.forEach(e => {
-      if (
-        (e.title && e.title.toLowerCase().includes(query)) ||
-        (e.content && e.content.toLowerCase().includes(query)) ||
-        (e.shortSummary && e.shortSummary.toLowerCase().includes(query)) ||
-        (e.authorName && e.authorName.toLowerCase().includes(query)) ||
-        (e.subteam && e.subteam.toLowerCase().includes(query))
-      ) {
-        results.push({
-          id: `journal-${e.id}`,
-          title: e.title || 'Untitled Journal Entry',
-          subtitle: `By ${e.authorName} • Subteam: ${e.subteam} • ${e.timestamp || ''}`,
-          category: 'Journal',
-          subteam: e.subteam,
-          payload: e
-        });
-      }
-    });
-
-    // 2. Time Logs
-    timeEntries.forEach(t => {
-      if (
-        (t.activity && t.activity.toLowerCase().includes(query)) ||
-        (t.userName && t.userName.toLowerCase().includes(query)) ||
-        (t.notes && t.notes.toLowerCase().includes(query)) ||
-        (t.subteam && t.subteam.toLowerCase().includes(query))
-      ) {
-        results.push({
-          id: `timelog-${t.id}`,
-          title: `${t.userName} — ${t.activity || 'Lab Contribution'}`,
-          subtitle: `${t.hours.toFixed(1)} hrs • Subteam: ${t.subteam} • ${t.date} ${t.notes ? `• Note: ${t.notes}` : ''}`,
-          category: 'TimeLog',
-          subteam: t.subteam,
-          payload: t
-        });
-      }
-    });
-
-    // 3. Kanban Tasks
-    kanbanTasks.forEach(task => {
-      if (
-        (task.title && task.title.toLowerCase().includes(query)) ||
-        (task.description && task.description.toLowerCase().includes(query)) ||
-        (task.assignedTo && task.assignedTo.toLowerCase().includes(query)) ||
-        (task.subteam && task.subteam.toLowerCase().includes(query))
-      ) {
-        results.push({
-          id: `kanban-${task.id}`,
-          title: task.title || 'Untitled Task',
-          subtitle: `Status: ${task.status} • Assigned: ${task.assignedTo || 'Unassigned'} • Subteam: ${task.subteam || 'None'}`,
-          category: 'Kanban',
-          subteam: task.subteam,
-          payload: task
-        });
-      }
-    });
-
-    // 4. Outreach Events
-    outreachEvents.forEach(event => {
-      if (
-        (event.eventName && event.eventName.toLowerCase().includes(query)) ||
-        (event.location && event.location.toLowerCase().includes(query)) ||
-        (event.description && event.description.toLowerCase().includes(query)) ||
-        (event.subteam && event.subteam.toLowerCase().includes(query))
-      ) {
-        results.push({
-          id: `outreach-${event.id}`,
-          title: event.eventName || 'Untitled Event',
-          subtitle: `${event.date || ''} • Loc: ${event.location || ''} • XP: ${event.hoursClaimed || 0} • ${event.description || ''}`,
-          category: 'Outreach',
-          subteam: event.subteam,
-          payload: event
-        });
-      }
-    });
-
-    // 5. Ledger Transactions
-    ledgerTransactions.forEach(tx => {
-      if (
-        (tx.description && tx.description.toLowerCase().includes(query)) ||
-        (tx.Category && tx.Category.toLowerCase().includes(query)) ||
-        (tx.referenceNumber && tx.referenceNumber.toLowerCase().includes(query)) ||
-        (tx.subteam && tx.subteam.toLowerCase().includes(query))
-      ) {
-        results.push({
-          id: `ledger-${tx.id}`,
-          title: `${tx.description || 'Transaction'} — $${tx.amount.toFixed(2)}`,
-          subtitle: `${tx.type.toUpperCase()} • ${tx.Category} • Ref: ${tx.referenceNumber} • Subteam: ${tx.subteam || 'None'}`,
-          category: 'Ledger',
-          subteam: tx.subteam,
-          payload: tx
-        });
-      }
-    });
-
-    // 6. Handbook (Chapters & Sections)
-    HANDBOOK_CHAPTERS.forEach((ch, chIdx) => {
-      if (ch.title && ch.title.toLowerCase().includes(query)) {
-        results.push({
-          id: `handbook-ch-${ch.id}`,
-          title: ch.title,
-          subtitle: `Chapter ${chIdx + 1} of Student Handbook`,
-          category: 'Handbook',
-          payload: { chapterIndex: chIdx, sectionId: ch.sections[0]?.id }
-        });
-      }
-      ch.sections.forEach(sec => {
-        if (
-          (sec.title && sec.title.toLowerCase().includes(query)) ||
-          (sec.content && sec.content.toLowerCase().includes(query))
-        ) {
-          results.push({
-            id: `handbook-sec-${sec.id}`,
-            title: sec.title,
-            subtitle: `In Chapter ${chIdx + 1} "${ch.title}" • Student Handbook`,
-            category: 'Handbook',
-            payload: { chapterIndex: chIdx, sectionId: sec.id }
-          });
-        }
-      });
-    });
-
-    // 7. Members / Users
-    accounts.forEach(acc => {
-      if (
-        (acc.name && acc.name.toLowerCase().includes(query)) ||
-        (acc.schoolEmail && acc.schoolEmail.toLowerCase().includes(query)) ||
-        (acc.primarySubteam && acc.primarySubteam.toLowerCase().includes(query)) ||
-        (acc.role && acc.role.toLowerCase().includes(query))
-      ) {
-        results.push({
-          id: `member-${acc.schoolEmail}`,
-          title: acc.name,
-          subtitle: `${acc.schoolEmail} • Role: ${acc.role || 'Member'} • Subteam: ${acc.primarySubteam || 'None'}`,
-          category: 'Member',
-          payload: acc
-        });
-      }
-    });
-
-    return results;
-  };
-
-  const handleSearchResultClick = (result: any) => {
-    setIsGlobalSearchActive(false);
-    setGlobalSearchQuery('');
-
-    switch (result.category) {
-      case 'Journal':
-        setCurrentView('journal');
-        setSelectedEntry(result.payload);
-        setActiveTab('archive');
-        showToast(`Opened journal entry: "${result.title}"`, 'success');
-        break;
-      case 'TimeLog':
-        setCurrentView('time_entry');
-        showToast(`Switched to Time Tracking: details for ${result.payload.userName}`, 'success');
-        break;
-      case 'Kanban':
-        setCurrentView('kanban');
-        showToast(`Switched to Kanban Board: "${result.title}"`, 'success');
-        break;
-      case 'Outreach':
-        setCurrentView('outreach');
-        showToast(`Switched to Outreach Logs: "${result.title}"`, 'success');
-        break;
-      case 'Ledger':
-        setCurrentView('finance');
-        showToast(`Switched to General Ledger: "${result.title}"`, 'success');
-        break;
-      case 'Handbook':
-        setSelectedHandbookChapterIndex(result.payload.chapterIndex);
-        setSelectedHandbookSectionId(result.payload.sectionId);
-        setCurrentView('handbook');
-        showToast(`Opened Handbook section: "${result.title}"`, 'success');
-        break;
-      case 'Member':
-        if (isUserAdminOrMentor) {
-          setCurrentView('approvals');
-          showToast(`Switched to Roster: details for ${result.payload.name}`, 'success');
-        } else {
-          showToast(`Member profile: ${result.payload.name} (${result.payload.primarySubteam})`, 'info');
-        }
-        break;
-      default:
-        break;
-    }
-  };
-
-  // Keyboard shortcut listener to focus global search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
-      if (e.key === '/') {
-        e.preventDefault();
-        const searchInput = document.getElementById('global-portal-search-input');
-        if (searchInput) {
-          searchInput.focus();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Seeding configuration across devices to prevent auto-repopulating deleted DB collections
@@ -2314,7 +1899,7 @@ FTC #6567 Captains & Mentors`
 
   const handleLogout = async () => {
     try {
-      await       signOut(auth);
+      await signOut(auth);
       setCurrentUser(null);
       setCurrentView('landing');
       localStorage.removeItem('ftc_current_user');
@@ -2334,19 +1919,20 @@ FTC #6567 Captains & Mentors`
     const typedCredential = loginSchoolId.trim();
     const defaultPassword = typedCredential + "_ftc_auth";
 
-    setIsSigningIn(true);
     try {
       let userCredential;
-      const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
-      const isCustomFirst = matchedLocalAcc ? matchedLocalAcc.hasCustomPassword : null;
       
+      // 1. Try logging in with the direct custom password first
       try {
-        userCredential = await signInWithEmailAndPassword(auth, emailToFind, isCustomFirst ? typedCredential : defaultPassword);
+        userCredential = await signInWithEmailAndPassword(auth, emailToFind, typedCredential);
       } catch (authErr1: any) {
+        // 2. Try logging in with the default schoolId suffix password
         try {
-          userCredential = await signInWithEmailAndPassword(auth, emailToFind, isCustomFirst ? defaultPassword : typedCredential);
+          userCredential = await signInWithEmailAndPassword(auth, emailToFind, defaultPassword);
         } catch (authErr2: any) {
+          // 3. Fallback: If both fail, check if user has a pre-mapped sandbox profile and needs automatic Firebase Auth creation
           if (authErr2.code === 'auth/user-not-found' || authErr2.code === 'auth/invalid-credential' || authErr1.code === 'auth/invalid-credential') {
+            const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
             if (matchedLocalAcc && matchedLocalAcc.schoolId === typedCredential) {
               try {
                 userCredential = await createUserWithEmailAndPassword(auth, emailToFind, defaultPassword);
@@ -2354,13 +1940,9 @@ FTC #6567 Captains & Mentors`
                   ...matchedLocalAcc,
                   id: userCredential.user.uid
                 });
-              } catch (createErr: any) {
+              } catch (createErr) {
                 console.error("auto-creation error", createErr);
-                if (createErr.code === 'auth/email-already-in-use') {
-                  showToast('This account is already registered, but the password or School ID entered is incorrect.', 'danger');
-                } else {
-                  showToast('Credential mismatch or sign-in issue. Please verify your details or register first.', 'danger');
-                }
+                showToast('Credential mismatch or sign-in issue. Please try registering first.', 'danger');
                 return;
               }
             } else {
@@ -2376,27 +1958,16 @@ FTC #6567 Captains & Mentors`
 
       const userUid = userCredential.user.uid;
       const docRef = doc(db, 'users', userUid);
-      let docSnap;
-      let isOffline = false;
-      try {
-        docSnap = await getDoc(docRef);
-      } catch (getDocErr: any) {
-        console.warn("Error getting user doc during login (possibly offline):", getDocErr);
-        isOffline = true;
-      }
-      
-      if (!isOffline && docSnap && !docSnap.exists()) {
+      let docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
         if (matchedLocalAcc) {
           const newDoc = {
             ...matchedLocalAcc,
             id: userUid
           };
-          try {
-            await setDoc(docRef, newDoc);
-            docSnap = await getDoc(docRef);
-          } catch (e: any) {
-            console.warn("Offline during doc creation", e);
-          }
+          await setDoc(docRef, newDoc);
+          docSnap = await getDoc(docRef);
         } else {
           const defaultName = emailToFind.split('@')[0];
           const isUserAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
@@ -2411,46 +1982,27 @@ FTC #6567 Captains & Mentors`
             status: isUserAdmin ? 'Approved' : 'Pending',
             createdAt: Date.now()
           };
-          try {
-            await setDoc(docRef, newDoc);
-            docSnap = await getDoc(docRef);
-          } catch(e: any) {
-            console.warn("Offline during default doc creation", e);
-          }
+          await setDoc(docRef, newDoc);
+          docSnap = await getDoc(docRef);
         }
       }
 
-      if ((docSnap && docSnap.exists()) || isOffline) {
-        const found = (docSnap && docSnap.exists()) ? (docSnap.data() as UserAccount) : (matchedLocalAcc || {
-          id: userUid,
-          name: emailToFind.split('@')[0],
-          schoolEmail: emailToFind,
-          schoolId: 'N/A',
-          primarySubteam: 'Design/Build/Fabrication',
-          secondarySubteam: 'None',
-          role: 'member',
-          status: 'Pending',
-          createdAt: Date.now()
-        } as UserAccount);
-        
+      if (docSnap.exists()) {
+        const found = docSnap.data() as UserAccount;
         setCurrentUser(found);
         localStorage.setItem('ftc_current_user', JSON.stringify(found));
-        if (isOffline) {
-           showToast(`Welcome back, ${found.name}! (Offline Mode Activated)`, 'success');
-        } else if (found.status === 'Approved') {
-           showToast(`Welcome back, ${found.name}!`, 'success');
+        if (found.status === 'Approved') {
+          showToast(`Welcome back, ${found.name}!`, 'success');
         } else if (found.status === 'Rejected') {
-           showToast('Account Access Request was rejected by Mentors.', 'danger');
+          showToast('Account Access Request was rejected by Mentors.', 'danger');
         } else {
-           showToast('Access pending administrator approval.', 'info');
+          showToast('Access pending administrator approval.', 'info');
         }
       } else {
         showToast('Successfully logged in, but profile document is missing in db.', 'danger');
       }
     } catch (e: any) {
       showToast(`Login failed: ${e.message}`, 'danger');
-    } finally {
-      setIsSigningIn(false);
     }
   };
 
@@ -4110,19 +3662,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
               <button
                 type="submit"
-                disabled={isSigningIn}
-                className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-wait"
+                className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
-                {isSigningIn ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Signing In...</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-3.5 h-3.5" /> <span>Sign In to System</span>
-                  </>
-                )}
+                <LogIn className="w-3.5 h-3.5" /> <span>Sign In to System</span>
               </button>
 
               <div className="relative flex py-2 items-center">
@@ -4512,7 +4054,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
   const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
 
   const sidebarLinks: {
-    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'email_processor';
+    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals';
     label: string;
     sublabel: string;
     icon: any;
@@ -4590,15 +4132,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
       badge: accounts.filter(a => a.status === 'Pending').length || null,
       badgeColor: 'bg-red-500',
       color: 'text-red-400'
-    });
-    sidebarLinks.push({
-      id: 'email_processor',
-      label: 'Batch Alerts',
-      sublabel: 'Alert consolidator',
-      icon: Mail,
-      badge: pendingNotifications.length || null,
-      badgeColor: 'bg-indigo-600',
-      color: 'text-indigo-400'
     });
   }
 
@@ -4683,126 +4216,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
       </header>
 
       {/* ACTIVE REAL-ID USER SESSION BANNER */}
-      <div className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2 flex flex-col md:flex-row justify-between items-center gap-4 text-xs no-print shrink-0 transition-all duration-200 relative" id="active-session-banner">
-        
-        {/* GLOBAL SEARCH PORTAL BAR */}
-        <div className="flex-1 w-full md:max-w-md relative no-print">
-          <div className="relative">
-            <Search className="absolute left-3 top-2 w-4 h-4 text-slate-400 dark:text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search everything: journals, tasks, members... (press '/' to focus)"
-              value={globalSearchQuery}
-              onChange={(e) => {
-                setGlobalSearchQuery(e.target.value);
-                setIsGlobalSearchActive(true);
-              }}
-              onFocus={() => setIsGlobalSearchActive(true)}
-              className="w-full pl-9 pr-9 py-1.5 bg-white dark:bg-slate-950 border border-slate-250 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-all shadow-inner"
-              id="global-portal-search-input"
-            />
-            {globalSearchQuery && (
-              <button
-                type="button"
-                onClick={() => {
-                  setGlobalSearchQuery('');
-                  setIsGlobalSearchActive(false);
-                }}
-                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 border-none bg-transparent outline-none cursor-pointer transition-colors"
-                title="Clear Search"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* SEARCH DROPDOWN OVERLAY RESULTS */}
-          {isGlobalSearchActive && globalSearchQuery.trim().length >= 2 && (
-            <>
-              {/* Tap off-canvas layer to close search */}
-              <div 
-                className="fixed inset-0 z-40 cursor-default" 
-                onClick={() => setIsGlobalSearchActive(false)} 
-              />
-              
-              <div className="absolute left-0 right-0 top-full mt-2 z-50 filter drop-shadow-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl max-h-[440px] overflow-y-auto p-4 flex flex-col gap-3 transition-all" id="global-search-results-dropdown">
-                {(() => {
-                  const results = getGlobalSearchResults();
-                  if (results.length === 0) {
-                    return (
-                      <div className="py-8 text-center text-slate-500 dark:text-slate-400">
-                        <p className="font-extrabold text-sm uppercase tracking-wider font-mono">No matches found</p>
-                        <p className="text-[10px] mt-1 text-slate-400">Try searching for keywords like "chassis", "review", "hours", "programming", or member names.</p>
-                      </div>
-                    );
-                  }
-
-                  const categories = [
-                    { id: 'Journal', label: 'Journal Logs', icon: BookOpen, color: 'text-cyan-500 bg-cyan-500/10' },
-                    { id: 'TimeLog', label: 'Lab Hours', icon: Clock, color: 'text-emerald-500 bg-emerald-500/10' },
-                    { id: 'Kanban', label: 'Kanban Tasks', icon: Layers, color: 'text-indigo-500 bg-indigo-500/10' },
-                    { id: 'Outreach', label: 'Outreach Events', icon: Users, color: 'text-purple-500 bg-purple-500/10' },
-                    { id: 'Ledger', label: 'General Ledger', icon: DollarSign, color: 'text-teal-500 bg-teal-500/10' },
-                    { id: 'Handbook', label: 'Student Handbook', icon: FileText, color: 'text-amber-500 bg-amber-500/10' },
-                    { id: 'Member', label: 'Team Members', icon: User, color: 'text-rose-500 bg-rose-500/10' }
-                  ];
-
-                  return (
-                    <div className="flex flex-col gap-4">
-                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2">
-                        <span>{results.length} MATCHES FOUND</span>
-                        <span>SELECT RESULT TO JUMP</span>
-                      </div>
-                      <div className="flex flex-col gap-3.5 divide-y divide-slate-100 dark:divide-slate-800/30">
-                        {categories.map(cat => {
-                          const catResults = results.filter(r => r.category === cat.id);
-                          if (catResults.length === 0) return null;
-                          const CatIcon = cat.icon;
-                          return (
-                            <div key={cat.id} className="pt-3.5 first:pt-0">
-                              <div className="flex items-center gap-2 mb-2 font-sans text-[11px] font-extrabold tracking-wider uppercase text-slate-500 dark:text-slate-400">
-                                <span className={`p-1 rounded ${cat.color}`}>
-                                  <CatIcon className="w-3.5 h-3.5" />
-                                </span>
-                                <span>{cat.label}</span>
-                                <span className="text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.2 rounded-full ml-auto">
-                                  {catResults.length}
-                                </span>
-                              </div>
-                              <div className="space-y-1">
-                                {catResults.map(res => (
-                                  <button
-                                    key={res.id}
-                                    type="button"
-                                    onClick={() => handleSearchResultClick(res)}
-                                    className="w-full text-left p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-850/80 transition-all flex flex-col gap-1 outline-none border border-transparent hover:border-slate-150 dark:hover:border-slate-800/80 group cursor-pointer"
-                                  >
-                                    <div className="text-xs font-bold text-slate-900 dark:text-slate-150 group-hover:text-brand dark:group-hover:text-brand-hover transition-colors flex items-center gap-1.5">
-                                      <span className="flex-1 truncate">{res.title}</span>
-                                      <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transform translate-x-1 group-hover:translate-x-0 transition-all text-brand" />
-                                    </div>
-                                    {res.subtitle && (
-                                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-normal truncate">
-                                        {res.subtitle}
-                                      </p>
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* CONTROLS BUTTONS GROUP */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end shrink-0 text-xs">
+      <div className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2 flex justify-end items-center gap-3 text-xs no-print shrink-0 transition-colors" id="active-session-banner">
+        <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0 justify-end shrink-0 text-xs">
           {currentView !== 'landing' && (
             <button
               onClick={() => setCurrentView('landing')}
@@ -6619,8 +6034,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
           currentUser={currentUser}
           showToast={showToast}
           onBack={() => setCurrentView('landing')}
-          initialChapterIndex={selectedHandbookChapterIndex}
-          initialSectionId={selectedHandbookSectionId}
         />
       )}
 
@@ -6662,20 +6075,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
           onUpdateLeadership={handleUpdateLeadership}
           onStartEditProfile={handleStartEditProfile}
           formatSubteamLabel={formatSubteamLabel}
-        />
-      )}
-
-      {/* BATCH EMAIL PROCESSOR VIEW */}
-      {currentView === 'email_processor' && (
-        <BatchEmailProcessor
-          currentUser={currentUser}
-          accounts={accounts}
-          pendingNotifications={pendingNotifications}
-          dispatchedEmails={dispatchedEmails}
-          onSendEmail={sendEmailNotification}
-          onClearNotifications={clearPendingNotifications}
-          onBack={() => setCurrentView('landing')}
-          isDark={isDark}
         />
       )}
 
@@ -8793,22 +8192,8 @@ FTC #6567 Captains & Mentors`
 
                 {/* Section C: Simulated System Mail Logs */}
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex flex-col gap-2 mb-3 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/60 font-sans">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                        <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-350">
-                           SMTP Transmitter: Ready - System Configured
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-[9px] text-slate-500 dark:text-slate-405 leading-normal">
-                      Digest reports and portal alerts will route directly from your backend server.
-                    </p>
-                  </div>
-
                   <div className="flex items-center justify-between mb-2.5">
-                    <h3 className="text-[11px] font-black text-slate-555 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                    <h3 className="text-[11px] font-black text-slate-550 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 leading-none">
                       <Mail className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                       <span>Simulated Email Dispatch Logs ({dispatchedEmails.length})</span>
                     </h3>

@@ -131,21 +131,6 @@
       },
       "required": ["id", "userId", "userName", "userEmail", "amount", "reason", "awardedBy", "awardedByEmail", "createdAt"]
     },
-    "PendingSystemNotification": {
-      "title": "Pending System Notification",
-      "description": "A buffered notification of a task update or journal entry awaiting consolidated digest processing.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "type": { "type": "string", "enum": ["journal", "task"] },
-        "title": { "type": "string" },
-        "details": { "type": "string" },
-        "authorName": { "type": "string" },
-        "subteam": { "type": "string" },
-        "createdAt": { "type": "number" }
-      },
-      "required": ["id", "type", "title", "details", "authorName", "subteam", "createdAt"]
-    },
     "LedgerTransaction": {
       "title": "Ledger Transaction",
       "description": "A financial transaction tracking spending or budget allocations for the team.",
@@ -215,10 +200,6 @@
     "xpAdjustments/{adjId}": {
       "schema": "XPAdjustment",
       "description": "Manual XP increments or deductions issued by mentors/captains."
-    },
-    "pendingNotifications/{notifId}": {
-      "schema": "PendingSystemNotification",
-      "description": "Queued notification alerts that are waiting to be processed in mentor digests."
     }
   }
 }
