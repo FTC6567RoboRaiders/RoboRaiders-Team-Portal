@@ -2314,10 +2314,8 @@ FTC #6567 Captains & Mentors`
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await       signOut(auth);
       setCurrentUser(null);
-      setGmailAccessToken(null);
-      setConnectedGmail(null);
       setCurrentView('landing');
       localStorage.removeItem('ftc_current_user');
       showToast('Logged out of system successfully.', 'info');
@@ -8798,45 +8796,14 @@ FTC #6567 Captains & Mentors`
                   <div className="flex flex-col gap-2 mb-3 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/60 font-sans">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${gmailAccessToken ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
                         <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-350">
-                          {gmailAccessToken ? `SMTP Connected: ${connectedGmail}` : 'SMTP Transmitter: Simulated'}
+                           SMTP Transmitter: Ready - System Configured
                         </span>
                       </div>
-                      
-                      {gmailAccessToken ? (
-                        <div className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
-                          Connected Forever
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            fetch('/api/email/status')
-                              .then(res => res.json())
-                              .then(data => {
-                                if (data.configured) {
-                                  setGmailAccessToken('server-configured');
-                                  setConnectedGmail(data.user);
-                                  showToast('SMTP Connection Confirmed!', 'success');
-                                } else {
-                                  showToast('SMTP not yet configured in ENV', 'danger');
-                                }
-                              })
-                              .catch(err => {
-                                console.error("SMTP status check failed:", err);
-                                showToast('Failed to connect to server', 'danger');
-                              });
-                          }}
-                          className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-500 text-white cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
-                        >
-                          <span>Refresh Connection</span>
-                        </button>
-                      )}
                     </div>
                     <p className="text-[9px] text-slate-500 dark:text-slate-405 leading-normal">
-                      {gmailAccessToken 
-                        ? 'Digest reports and portal alerts will route directly from your backend server.' 
-                        : 'Set SMTP_USER and SMTP_PASS environment variables (App Password) on your backend to enable real, permanent delivery instead of the simulated outbox.'}
+                      Digest reports and portal alerts will route directly from your backend server.
                     </p>
                   </div>
 
