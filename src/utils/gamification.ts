@@ -590,7 +590,7 @@ export const computeUserGamification = (
   const finalBadges = [...evaluatedBadges, secretBadge];
 
   // Align team members ranks with the defined ranks from spreadsheet
-  const isMentorUser = user.role === 'mentor_captain' || user.role === 'mentor';
+  const isMentorUser = user.role === 'mentor';
   
   // Only mentors can align to Mentoring. Non-mentors align to standard student subteams.
   let userSubteam: string = user.primarySubteam;

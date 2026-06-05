@@ -425,7 +425,7 @@ export const getSubteamStatsAndRank = (
     ? overallXp
     : Math.round(hours * 5 + journalsCount * 12);
 
-  const isMentor = userRole === 'mentor_captain' || userRole === 'mentor';
+  const isMentor = userRole === 'mentor';
   if (subteam === 'Mentoring') {
     if (!isMentor) {
       points = 0;

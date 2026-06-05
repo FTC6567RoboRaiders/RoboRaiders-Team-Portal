@@ -606,7 +606,7 @@ export default function GeneralLedger({
 
                           {/* Action Items */}
                           <td className="py-3 px-4 text-center">
-                            {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain' || tx.createdByEmail === currentUser?.schoolEmail) ? (
+                            {(currentUser?.role === 'mentor' || currentUser?.role === 'captain' || tx.createdByEmail === currentUser?.schoolEmail) ? (
                               <button
                                 onClick={async () => {
                                   if (confirm("Are you absolutely sure you want to permanently delete this team transactional log from cloud storage?")) {

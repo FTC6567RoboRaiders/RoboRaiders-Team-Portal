@@ -61,7 +61,9 @@ import {
   onAuthStateChanged, 
   signOut,
   updatePassword,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { 
   collection, 
@@ -156,7 +158,7 @@ export const canUserApproveEntry = (user: UserAccount | null, entry: JournalEntr
   // Captains and Mentors should be allowed to approve any journal entry regardless of subteam.
   const isMentorOrCaptain = 
     user.role === 'mentor' || 
-    user.role === 'mentor_captain' || 
+     
     user.role === 'captain' ||
     user.primarySubteam === 'Lead/Captain' ||
     user.primarySubteam === 'Mentor';
@@ -267,26 +269,7 @@ export const getEntryReferenceCode = (entry: JournalEntry, allEntries: JournalEn
   return `FTC-${prefix}-${paddedNum}`;
 };
 
-export const DEFAULT_PROFILES: AuthorProfile[] = [
-  {
-    id: 'p-1',
-    name: 'testLeader',
-    schoolEmail: 'testleader@school.edu',
-    schoolId: '123456',
-    primarySubteam: 'Design/Build/Fabrication',
-    secondarySubteam: 'Inspire',
-    tadpoleTag: true
-  },
-  {
-    id: 'p-2',
-    name: 'testStudent',
-    schoolEmail: 'teststudent@school.edu',
-    schoolId: '654321',
-    primarySubteam: 'Programming',
-    secondarySubteam: 'Strategy',
-    tadpoleTag: false
-  }
-];
+export const DEFAULT_PROFILES: AuthorProfile[] = [];
 
 export const getGamifiedIcon = (iconName: string, sizeClass = "w-4 h-4") => {
   switch (iconName) {
@@ -338,52 +321,7 @@ export default function App() {
         }
       } catch (e) {}
     }
-    return [
-      {
-        id: 'a-system-admin',
-        name: 'System Admin',
-        schoolEmail: 'admin@school.edu',
-        schoolId: 'admin',
-        primarySubteam: 'Mentor',
-        secondarySubteam: 'None',
-        role: 'mentor_captain',
-        status: 'Approved',
-        createdAt: Date.now()
-      },
-      {
-        id: 'a-admin',
-        name: 'testMentor',
-        schoolEmail: 'mentor@school.edu',
-        schoolId: 'admin123',
-        primarySubteam: 'Mentor',
-        secondarySubteam: 'None',
-        role: 'mentor_captain',
-        status: 'Approved',
-        createdAt: Date.now()
-      },
-      {
-        id: 'a-member1',
-        name: 'testLeader',
-        schoolEmail: 'testleader@school.edu',
-        schoolId: '123456',
-        primarySubteam: 'Design/Build/Fabrication',
-        secondarySubteam: 'Inspire',
-        role: 'member',
-        status: 'Approved',
-        createdAt: Date.now()
-      },
-      {
-        id: 'a-member2',
-        name: 'testStudent',
-        schoolEmail: 'teststudent@school.edu',
-        schoolId: '654321',
-        primarySubteam: 'Programming',
-        secondarySubteam: 'Strategy',
-        role: 'member',
-        status: 'Approved',
-        createdAt: Date.now()
-      }
-    ];
+    return [];
   });
 
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
@@ -401,6 +339,8 @@ export default function App() {
     }
     return null;
   });
+
+  const isUserAdminOrMentor =  currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu' || currentUser?.schoolEmail === 'ftc6567@gmail.com' || currentUser?.schoolEmail === 'mentor@school.edu';
 
   // New States for views and time tracking
   const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals'>('landing');
@@ -756,7 +696,7 @@ export default function App() {
             schoolId: 'N/A',
             primarySubteam: isUserAdmin ? 'Mentor' : 'Design/Build/Fabrication',
             secondarySubteam: 'None',
-            role: isUserAdmin ? 'mentor_captain' : 'member',
+            role: isUserAdmin ? 'mentor' : 'member',
             status: isUserAdmin ? 'Approved' : 'Pending',
             createdAt: Date.now()
           };
@@ -810,7 +750,7 @@ export default function App() {
                 schoolId: 'N/A',
                 primarySubteam: isUserAdmin ? 'Mentor' : 'Design/Build/Fabrication',
                 secondarySubteam: 'None',
-                role: isUserAdmin ? 'mentor_captain' : 'member',
+                role: isUserAdmin ? 'mentor' : 'member',
                 status: isUserAdmin ? 'Approved' : 'Pending',
                 createdAt: Date.now()
               };
@@ -1301,7 +1241,7 @@ export default function App() {
   const [registerSchoolId, setRegisterSchoolId] = useState('');
   const [registerPrimary, setRegisterPrimary] = useState<'Design/Build/Fabrication' | 'Programming' | 'Outreach' | 'Business & Media' | 'Mentor' | 'Lead/Captain' | 'None'>('Design/Build/Fabrication');
   const [registerSecondary, setRegisterSecondary] = useState<'Inspire' | 'Strategy' | 'None'>('None');
-  const [registerRole, setRegisterRole] = useState<'member' | 'mentor_captain' | 'mentor' | 'captain'>('member');
+  const [registerRole, setRegisterRole] = useState<'member' | 'mentor' | 'captain'>('member');
   const [registerLeadership, setRegisterLeadership] = useState<'None' | 'Captain' | 'Subteam leader'>('None');
 
   // Approvals Modal state for Mentor/Captain
@@ -1543,7 +1483,7 @@ export default function App() {
   const [newProfilePrimary, setNewProfilePrimary] = useState<'Design/Build/Fabrication' | 'Programming' | 'Outreach' | 'Business & Media' | 'Mentor' | 'Lead/Captain' | 'None'>('Design/Build/Fabrication');
   const [newProfileSecondary, setNewProfileSecondary] = useState<'Inspire' | 'Strategy' | 'None'>('None');
   const [newProfileLeadership, setNewProfileLeadership] = useState<'None' | 'Captain' | 'Subteam leader'>('None');
-  const [newProfileRole, setNewProfileRole] = useState<'member' | 'mentor_captain' | 'mentor' | 'captain'>('member');
+  const [newProfileRole, setNewProfileRole] = useState<'member' | 'mentor' | 'captain'>('member');
   const [formDate, setFormDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [formPlanned, setFormPlanned] = useState('');
   const [formAccomplished, setFormAccomplished] = useState('');
@@ -1606,7 +1546,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'form' | 'archive'>('form');
 
   // Derived userRole from the logged-in user profile
-  const userRole: 'author' | 'reviewer' = (currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain') ? 'reviewer' : 'author';
+  const userRole: 'author' | 'reviewer' = isUserAdminOrMentor ? 'reviewer' : 'author';
   const [submissionType, setSubmissionType] = useState<'Draft' | 'Pending Review'>('Pending Review');
   const [reviewNoteInput, setReviewNoteInput] = useState<string>('');
 
@@ -1762,7 +1702,7 @@ FTC #6567 Captains & Mentors`
 
     approvedAccounts.forEach(acc => {
       const email = acc.schoolEmail.toLowerCase();
-      const isMentorUser = acc.role === 'mentor_captain' || acc.role === 'mentor';
+      const isMentorUser =  acc.role === 'mentor';
 
       SUBTEAM_GUILDS.forEach(g => {
         const isM = g.id === 'Mentoring';
@@ -1930,33 +1870,50 @@ FTC #6567 Captains & Mentors`
         try {
           userCredential = await signInWithEmailAndPassword(auth, emailToFind, defaultPassword);
         } catch (authErr2: any) {
-          // 3. Fallback: If both fail, check if user has a pre-mapped sandbox profile and needs automatic Firebase Auth creation
-          if (authErr2.code === 'auth/user-not-found' || authErr2.code === 'auth/invalid-credential' || authErr1.code === 'auth/invalid-credential') {
-            const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
-            if (matchedLocalAcc && matchedLocalAcc.schoolId === typedCredential) {
-              try {
-                userCredential = await createUserWithEmailAndPassword(auth, emailToFind, defaultPassword);
-                await setDoc(doc(db, 'users', userCredential.user.uid), {
-                  ...matchedLocalAcc,
-                  id: userCredential.user.uid
-                });
-              } catch (createErr) {
-                console.error("auto-creation error", createErr);
-                showToast('Credential mismatch or sign-in issue. Please try registering first.', 'danger');
-                return;
-              }
-            } else {
-              showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
-              return;
-            }
-          } else {
-            showToast(`Authentication Error: ${authErr2.message}`, 'danger');
-            return;
-          }
+          showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
+          return;
         }
       }
 
       const userUid = userCredential.user.uid;
+      const docRef = doc(db, 'users', userUid);
+      let docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        showToast('Account not found in roster. Please register a new account.', 'danger');
+        return;
+      }
+
+      const found = docSnap.data() as UserAccount;
+
+      // Auto-correct role for admins!
+      const isUserAdminTest = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
+      if (isUserAdminTest && found.role !== 'mentor') {
+          found.role = 'mentor';
+          found.status = 'Approved';
+          await setDoc(docRef, found);
+      }
+
+      setCurrentUser(found);
+      localStorage.setItem('ftc_current_user', JSON.stringify(found));
+      if (found.status === 'Approved') {
+          showToast(`Welcome back, ${found.name}!`, 'success');
+        } else if (found.status === 'Rejected') {
+          showToast('Account Access Request was rejected by Mentors.', 'danger');
+        } else {
+          showToast('Access pending administrator approval.', 'info');
+        }
+    } catch (e: any) {
+      showToast(`Login failed: ${e.message}`, 'danger');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const userUid = result.user.uid;
+      const emailToFind = result.user.email?.toLowerCase() || '';
+      
       const docRef = doc(db, 'users', userUid);
       let docSnap = await getDoc(docRef);
       if (!docSnap.exists()) {
@@ -1969,7 +1926,7 @@ FTC #6567 Captains & Mentors`
           await setDoc(docRef, newDoc);
           docSnap = await getDoc(docRef);
         } else {
-          const defaultName = emailToFind.split('@')[0];
+          const defaultName = result.user.displayName || emailToFind.split('@')[0];
           const isUserAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
           const newDoc: UserAccount = {
             id: userUid,
@@ -1978,7 +1935,7 @@ FTC #6567 Captains & Mentors`
             schoolId: 'N/A',
             primarySubteam: isUserAdmin ? 'Mentor' : 'Design/Build/Fabrication',
             secondarySubteam: 'None',
-            role: isUserAdmin ? 'mentor_captain' : 'member',
+            role: isUserAdmin ? 'mentor' : 'member',
             status: isUserAdmin ? 'Approved' : 'Pending',
             createdAt: Date.now()
           };
@@ -1989,6 +1946,15 @@ FTC #6567 Captains & Mentors`
 
       if (docSnap.exists()) {
         const found = docSnap.data() as UserAccount;
+        
+        // Auto-correct role for admins!
+        const isUserAdminTest = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
+        if (isUserAdminTest && found.role !== 'mentor') {
+            found.role = 'mentor';
+            found.status = 'Approved';
+            await setDoc(docRef, found);
+        }
+
         setCurrentUser(found);
         localStorage.setItem('ftc_current_user', JSON.stringify(found));
         if (found.status === 'Approved') {
@@ -2001,8 +1967,8 @@ FTC #6567 Captains & Mentors`
       } else {
         showToast('Successfully logged in, but profile document is missing in db.', 'danger');
       }
-    } catch (e: any) {
-      showToast(`Login failed: ${e.message}`, 'danger');
+    } catch (err: any) {
+      showToast(`Google Sign In failed: ${err.message}`, 'danger');
     }
   };
 
@@ -2036,7 +2002,7 @@ FTC #6567 Captains & Mentors`
 
       const shouldAutoApprove = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu' || registerRole === 'mentor';
       const initialStatus = shouldAutoApprove ? 'Approved' : 'Pending';
-      const initialRole = shouldAutoApprove ? 'mentor_captain' : registerRole;
+      const initialRole = shouldAutoApprove ? 'mentor' : registerRole;
 
       const newAcc: UserAccount = {
         id: uid,
@@ -2054,7 +2020,7 @@ FTC #6567 Captains & Mentors`
       await setDoc(doc(db, 'users', uid), newAcc);
       
       // Send email to team mentor/captains
-      const mentorsAndCaptains = accounts.filter(a => a.role === 'mentor_captain' || a.role === 'mentor' || a.role === 'captain');
+      const mentorsAndCaptains = accounts.filter(a => a.role === 'mentor' || a.role === 'captain');
       mentorsAndCaptains.forEach(mc => {
         sendEmailNotification(
           mc.schoolEmail,
@@ -2064,7 +2030,7 @@ FTC #6567 Captains & Mentors`
 A new user has requested database access to the FTC #6567 Workspace:
 • Name: ${newAcc.name}
 • Email: ${newAcc.schoolEmail}
-• Requested Role: ${newAcc.role === 'mentor' ? 'Coach / Mentor' : newAcc.role === 'captain' ? 'Subteam Lead / Captain' : newAcc.role === 'mentor_captain' ? 'Mentor / Captain' : 'Team Member'}
+• Requested Role: ${newAcc.role === 'mentor' ? 'Coach / Mentor' : newAcc.role === 'captain' ? 'Subteam Lead / Captain' :  'Team Member'}
 • Leadership Value: ${newAcc.leadership || 'None'}
 • Primary Subteam: ${newAcc.primarySubteam}
 • Secondary Subteam: ${newAcc.secondarySubteam !== 'None' ? newAcc.secondarySubteam : 'None'}
@@ -2497,7 +2463,7 @@ FTC Team #6567 IT Administration`
         // Find users with status 'Pending'
         accounts.forEach(user => {
           const isMe = currentUser?.id === user.id || currentUser?.schoolEmail === user.schoolEmail;
-          const isMentor = user.role === 'mentor' || user.role === 'mentor_captain';
+          const isMentor = user.role === 'mentor' ;
           if (user.status === 'Pending' && !isMe && !isMentor) {
             deletionsQueue.push({ colName: 'users', docId: user.id });
           }
@@ -2508,7 +2474,7 @@ FTC Team #6567 IT Administration`
         // Clear student accounts altogether
         accounts.forEach(user => {
           const isMe = currentUser?.id === user.id || currentUser?.schoolEmail === user.schoolEmail;
-          const isMentor = user.role === 'mentor' || user.role === 'mentor_captain';
+          const isMentor = user.role === 'mentor' ;
           if (!isMe && !isMentor) {
             deletionsQueue.push({ colName: 'users', docId: user.id });
           }
@@ -3095,7 +3061,7 @@ FTC Team #6567 IT Administration`
     }
 
     if (submissionType === 'Pending Review') {
-      const mentorsAndCaptains = accounts.filter(a => a.role === 'mentor_captain' || a.role === 'mentor' || a.role === 'captain');
+      const mentorsAndCaptains = accounts.filter(a => a.role === 'mentor' || a.role === 'captain');
       mentorsAndCaptains.forEach(mc => {
         sendEmailNotification(
           mc.schoolEmail,
@@ -3667,6 +3633,21 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <LogIn className="w-3.5 h-3.5" /> <span>Sign In to System</span>
               </button>
 
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  <path d="M1 1h22v22H1z" fill="none"/>
+                </svg>
+                <span>Sign In with Google</span>
+              </button>
+
               <div className="relative flex py-2 items-center">
                 <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
                 <span className="flex-shrink mx-3 text-[9px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500">Don't have an account?</span>
@@ -3855,7 +3836,17 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   </label>
                   <select
                     value={registerPrimary}
-                    onChange={(e) => setRegisterPrimary(e.target.value as any)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRegisterPrimary(val as any);
+                      if (val === 'Mentor') {
+                         setRegisterRole('mentor');
+                      } else if (val === 'Lead/Captain') {
+                         setRegisterRole('captain');
+                      } else if (registerRole === 'mentor' || registerRole === 'captain') {
+                         setRegisterRole('member');
+                      }
+                    }}
                     className="w-full bg-slate-50 border border-slate-350 dark:bg-slate-900 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold"
                   >
                     <option value="Design/Build/Fabrication">Design/Build/Fabrication</option>
@@ -3893,6 +3884,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-black"
                 >
                   <option value="member">Student Team Member</option>
+                  <option value="captain">Subteam Lead / Captain</option>
                   <option value="mentor">Coach / Mentor</option>
                 </select>
               </div>
@@ -3980,7 +3972,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
             <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
               <span className="text-slate-400 uppercase tracking-wider text-[9px]">Role Group</span>
-              <span className="font-extrabold text-brand uppercase text-[10px]">{currentUser.role === 'mentor' ? 'Coach / Mentor' : currentUser.role === 'captain' ? 'Subteam Lead / Captain' : currentUser.role === 'mentor_captain' ? 'Mentor / Captain' : 'Team Member'}</span>
+              <span className="font-extrabold text-brand uppercase text-[10px]">{currentUser.role === 'mentor' ? 'Coach / Mentor' : currentUser.role === 'captain' ? 'Subteam Lead / Captain' :  'Team Member'}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
               <span className="text-slate-400 uppercase tracking-wider text-[9px]">Email Address</span>
@@ -4050,7 +4042,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
     );
   }
 
-  const isUserAdminOrMentor = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu';
   const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
 
   const sidebarLinks: {
@@ -4395,7 +4386,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <div className="min-w-0 flex-1">
                   <h4 className="text-[13.5px] font-extrabold text-slate-900 dark:text-slate-50 truncate leading-none tracking-tight">{currentUser?.name}</h4>
                   <span className="text-[9.5px] font-mono text-indigo-600 dark:text-indigo-400 font-black block mt-1.5 uppercase tracking-wider truncate">
-                    {currentUser?.role === 'mentor' ? 'Coach / Mentor' : currentUser?.role === 'captain' ? 'Captain' : currentUser?.role === 'mentor_captain' ? 'Mentor / Captain' : 'Team Member'}
+                    {currentUser?.role === 'mentor' ? 'Coach / Mentor' : currentUser?.role === 'captain' ? 'Captain' :  'Team Member'}
                   </span>
                 </div>
               )}
@@ -4804,7 +4795,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                             {/* Subteam Guild Alignment Badge */}
                             {(() => {
-                              const isMentor = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+                              const isMentor = currentUser.role === 'mentor';
                               let userGuildId = currentUser.primarySubteam;
                               if (isMentor) {
                                 userGuildId = 'Mentoring';
@@ -4870,7 +4861,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                           <span>Next Link: <strong>{(() => {
                                             const nextRankNum = subRankData.currentRank.rank + 1;
                                             const isNextDiscovered = guildDiscoveries[guildObj.id]?.[nextRankNum]?.length > 0;
-                                            const isMentorBypass = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+                                            const isMentorBypass = currentUser.role === 'mentor';
                                             return (isNextDiscovered || isMentorBypass) ? subRankData.nextRank.title : `??? [Level ${nextRankNum} Undiscovered]`;
                                           })()}</strong> in {subRankData.totalNeededForNext} XP</span>
                                         ) : (
@@ -4922,7 +4913,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                           {/* Guild selector row */}
                           {(() => {
-                            const isMentorUser = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+                            const isMentorUser = isUserAdminOrMentor;
                             const defaultGuildId = isMentorUser ? 'Mentoring' : (currentUser.primarySubteam === 'None' || currentUser.primarySubteam === 'Mentor' || (currentUser.primarySubteam as string) === 'Lead/Captain' || currentUser.primarySubteam === 'Mentoring' ? 'Design/Build/Fabrication' : currentUser.primarySubteam);
                             const currentTab = activeGuildTab || defaultGuildId;
                             
@@ -5056,7 +5047,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                             const isUnlocked = subStats.rankIndex >= i;
                                             const discoverers = guildDiscoveries[activeGuild.id]?.[r.rank] || [];
                                             const isTeamDiscovered = discoverers.length > 0;
-                                            const isMentorUser = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor';
+                                            const isMentorUser = isUserAdminOrMentor;
                                             const isSecret = !isUnlocked && !isMentorUser;
 
                                             // Points threshold for this rank
@@ -5451,7 +5442,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 const results = computeUserGamification(inspectLeaderboardAccount, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
                 const { stats, badges } = results;
 
-                const isTargetMentor = inspectLeaderboardAccount.role === 'mentor_captain' || inspectLeaderboardAccount.role === 'mentor';
+                const isTargetMentor =  inspectLeaderboardAccount.role === 'mentor';
                 let targetGuildId: string = inspectLeaderboardAccount.primarySubteam;
                 if (isTargetMentor) {
                   targetGuildId = 'Mentoring';
@@ -5882,7 +5873,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* ONLY MENTORS/CAPTAINS CAN VIEW ROSTER MANAGEMENT & EMAIL COMMUNICATIONS */}
-            {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+            {isUserAdminOrMentor && (
               <>
                 {/* CARD 4: EMAIL OUTBOX SIMULATOR */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-indigo-550/30 group">
@@ -6074,6 +6065,19 @@ ${entry.planNextTime || '_No carry-over specified._'}
           onRejectUser={handleRejectUser}
           onUpdateLeadership={handleUpdateLeadership}
           onStartEditProfile={handleStartEditProfile}
+          onDeleteUser={async (userId, userName) => {
+            if (window.confirm(`Revoke registration and purge ${userName}?`)) {
+              try {
+                await deleteDoc(doc(db, 'users', userId));
+                if (currentUser && currentUser.id === userId) {
+                  handleLogout();
+                }
+                showToast(`Purged user profile ${userName}.`, 'info');
+              } catch (err: any) {
+                showToast(`Deletion failed: ${err.message}`, 'danger');
+              }
+            }
+          }}
           formatSubteamLabel={formatSubteamLabel}
         />
       )}
@@ -6431,7 +6435,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <div className="space-y-3.5 max-h-[580px] overflow-y-auto pr-1">
                   {filteredTimeEntries.map((item) => {
                     const isOwnEntry = currentUser?.schoolEmail === item.userEmail;
-                    const isManager = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain';
+                    const isManager = isUserAdminOrMentor;
                     const canDelete = isOwnEntry || isManager;
                     
                     return (
@@ -6638,7 +6642,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           {currentUser?.name || formAuthor}
                         </div>
                         <div className="text-[8px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider leading-none">
-                          {currentUser?.role === 'mentor' ? 'Coach' : currentUser?.role === 'captain' ? 'Captain' : currentUser?.role === 'mentor_captain' ? 'Mentor / Capt.' : 'Student Member'}
+                          {currentUser?.role === 'mentor' ? 'Coach' : currentUser?.role === 'captain' ? 'Captain' :  'Student Member'}
                         </div>
                       </div>
                     </div>
@@ -7802,7 +7806,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </label>
                     <select
                       value={newProfilePrimary}
-                      onChange={(e) => setNewProfilePrimary(e.target.value as any)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewProfilePrimary(val as any);
+                        if (val === 'Mentor') {
+                           setNewProfileRole('mentor');
+                        } else if (val === 'Lead/Captain') {
+                           setNewProfileRole('captain');
+                        }
+                      }}
                       className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold"
                     >
                       <option value="Design/Build/Fabrication" className="bg-white dark:bg-slate-900 text-slate-850 text-slate-800 dark:text-slate-100">Design/Build/Fabrication</option>
@@ -7839,14 +7851,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <select
                       value={newProfileLeadership}
                       onChange={(e) => setNewProfileLeadership(e.target.value as any)}
-                      disabled={!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain')}
-                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') ? 'cursor-not-allowed opacity-75' : ''}`}
+                      disabled={!isUserAdminOrMentor}
+                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!isUserAdminOrMentor ? 'cursor-not-allowed opacity-75' : ''}`}
                     >
                       <option value="None" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">None</option>
                       <option value="Captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Captain</option>
                       <option value="Subteam leader" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Subteam leader</option>
                     </select>
-                    {!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+                    {!isUserAdminOrMentor && (
                       <span className="text-[9px] text-slate-400 italic">Only mentors/captains can update the leadership role.</span>
                     )}
                   </div>
@@ -7859,15 +7871,18 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <select
                       value={newProfileRole}
                       onChange={(e) => setNewProfileRole(e.target.value as any)}
-                      disabled={!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain')}
-                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') ? 'cursor-not-allowed opacity-75' : ''}`}
+                      disabled={!isUserAdminOrMentor}
+                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!isUserAdminOrMentor ? 'cursor-not-allowed opacity-75' : ''}`}
                     >
                       <option value="member" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Student Team Member</option>
                       <option value="captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Subteam Lead / Captain</option>
                       <option value="mentor" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Coach / Mentor</option>
-                      <option value="mentor_captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Mentor / Captain</option>
+                      {newProfileRole === 'mentor_captain' as any && (
+                         <option value="mentor_captain" className="bg-white dark:bg-slate-900 text-rose-500 font-bold italic">Mentor / Captain (Legacy - Change Me)</option>
+                      )}
+                      
                     </select>
-                    {!(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+                    {!isUserAdminOrMentor && (
                       <span className="text-[9px] text-slate-400 italic">Only mentors/captains can update the account level.</span>
                     )}
                   </div>
@@ -7900,7 +7915,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* Mentor/Captain Accounts Approval Dashboard Modal */}
       <AnimatePresence>
-        {isApprovalsOpen && (currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain') && (
+        {isApprovalsOpen && isUserAdminOrMentor && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -7965,7 +7980,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             <div className="flex items-center gap-2">
                               <span className="font-extrabold text-slate-900 dark:text-slate-100 text-sm">{acc.name}</span>
                               <span className="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">
-                                {acc.role === 'mentor' || acc.role === 'captain' || acc.role === 'mentor_captain' ? 'Mentor Class' : 'Member Class'}
+                                {acc.role === 'mentor' || acc.role === 'captain' ? 'Mentor Class' : 'Member Class'}
                               </span>
                             </div>
                              <div className="text-[11px] text-slate-700 dark:text-slate-350 font-mono mt-1 space-y-0.5">
@@ -7975,7 +7990,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             </div>
                             <div className="mt-2 flex items-center gap-2">
                               <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Leadership:</span>
-                              {currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain' ? (
+                              {isUserAdminOrMentor ? (
                                 <select
                                   value={acc.leadership || 'None'}
                                   onChange={(e) => {
@@ -7999,7 +8014,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                            {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+                            {isUserAdminOrMentor && (
                               <button
                                 onClick={() => handleStartEditProfile(acc.name)}
                                 className="bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-black py-2 px-4 rounded-md text-[11.5px] uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
@@ -8077,14 +8092,14 @@ FTC #6567 Captains & Mentors`
                             <span className="text-slate-500 dark:text-slate-400 font-mono text-[10px]">{acc.schoolEmail}</span>
                           </div>
                           <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 uppercase tracking-wider font-bold">
-                            {acc.role === 'mentor' ? 'Coach / Mentor' : acc.role === 'captain' ? 'Subteam Lead / Captain' : acc.role === 'mentor_captain' ? 'Mentor / Captain' : 'Team Member'}
+                            {acc.role === 'mentor' ? 'Coach / Mentor' : acc.role === 'captain' ? 'Subteam Lead / Captain' :  'Team Member'}
                             <span className="mx-1.5">•</span>
                             Subteam: {formatSubteamLabel(acc.primarySubteam)}
                             {acc.secondarySubteam !== 'None' && ` / ${acc.secondarySubteam}`}
                           </div>
                           <div className="mt-1.5 flex items-center gap-2">
                             <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Leadership:</span>
-                            {currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain' ? (
+                            {isUserAdminOrMentor ? (
                               <select
                                 value={acc.leadership || 'None'}
                                 onChange={async (e) => {
@@ -8119,8 +8134,7 @@ FTC #6567 Captains & Mentors`
                             {acc.status}
                           </span>
 
-                          {acc.id !== 'a-admin' && (
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5">
                               {acc.status !== 'Approved' && (
                                 <button
                                   onClick={async () => {
@@ -8153,7 +8167,29 @@ FTC #6567 Captains & Mentors`
                                 </button>
                               )}
                               
-                              {(currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+                              {isUserAdminOrMentor && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await sendPasswordResetEmail(auth, acc.schoolEmail);
+                                      showToast(`Password reset link sent to ${acc.schoolEmail}.`, 'success');
+                                      sendEmailNotification(
+                                        acc.schoolEmail,
+                                        `[FTC #6567] Password Reset Link Created`,
+                                        `Mentors/Captains requested a password reset for ${acc.name}. You should have received a password reset link by email.`
+                                      );
+                                    } catch (err: any) {
+                                      showToast(`Failed to send password reset: ${err.message}`, 'danger');
+                                    }
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-805 rounded transition-all cursor-pointer"
+                                  title="Send Password Reset Email"
+                                >
+                                  <Mail className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {isUserAdminOrMentor && (
                                 <button
                                   onClick={() => handleStartEditProfile(acc.name)}
                                   className="p-1 text-slate-400 hover:text-brand dark:hover:text-brand hover:bg-slate-100 dark:hover:bg-slate-805 rounded transition-all cursor-pointer"
@@ -8163,27 +8199,28 @@ FTC #6567 Captains & Mentors`
                                 </button>
                               )}
                               
-                              <button
-                                onClick={async () => {
-                                  if (window.confirm(`Revoke registration and purge ${acc.name}?`)) {
-                                    try {
-                                      await deleteDoc(doc(db, 'users', acc.id));
-                                      if (currentUser && currentUser.id === acc.id) {
-                                        handleLogout();
+                              {isUserAdminOrMentor && (
+                                <button
+                                  onClick={async () => {
+                                    if (window.confirm(`Revoke registration and purge ${acc.name}?`)) {
+                                      try {
+                                        await deleteDoc(doc(db, 'users', acc.id));
+                                        if (currentUser && currentUser.id === acc.id) {
+                                          handleLogout();
+                                        }
+                                        showToast(`Purged user profile ${acc.name}.`, 'info');
+                                      } catch (err: any) {
+                                        showToast(`Deletion failed: ${err.message}`, 'danger');
                                       }
-                                      showToast(`Purged user profile ${acc.name}.`, 'info');
-                                    } catch (err: any) {
-                                      showToast(`Deletion failed: ${err.message}`, 'danger');
                                     }
-                                  }
-                                }}
-                                className="p-1 text-slate-400 hover:text-rose-605 dark:hover:text-rose-455 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-all cursor-pointer"
-                                title="Delete Account"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                                  }}
+                                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-1 px-2 rounded text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer"
+                                  title="Delete Account"
+                                >
+                                  <Trash2 className="w-3 h-3" /> Delete
+                                </button>
+                              )}
                             </div>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -8671,7 +8708,7 @@ FTC #6567 Captains & Mentors`
 
       {/* Mentor-Only XP Audit Log Ledger Modal */}
       <AnimatePresence>
-        {isAuditLogOpen && currentUser && (currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain') && (
+        {isAuditLogOpen && currentUser && isUserAdminOrMentor && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

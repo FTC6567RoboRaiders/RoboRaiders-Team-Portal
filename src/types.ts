@@ -60,7 +60,7 @@ export interface UserAccount {
   schoolId: string; // lunch #
   primarySubteam: 'Design/Build/Fabrication' | 'Programming' | 'Outreach' | 'Business & Media' | 'Mentor' | 'Lead/Captain' | 'None'; // Mentors can be any of these
   secondarySubteam: 'Inspire' | 'Strategy' | 'None';
-  role: 'member' | 'mentor_captain' | 'mentor' | 'captain';
+  role: 'member' | 'mentor' | 'captain';
   status: 'Pending' | 'Approved' | 'Rejected';
   createdAt: number;
   leadership?: 'None' | 'Captain' | 'Subteam leader';

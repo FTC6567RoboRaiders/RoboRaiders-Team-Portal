@@ -253,7 +253,7 @@ export default function ArenaPortal({
         {/* Improved Arena Tabs Navigation */}
         <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200/80 dark:border-slate-800/60 font-mono text-[10px] uppercase font-bold shrink-0 flex-wrap gap-1">
           {(() => {
-            const isUserAdminOrMentor = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu';
+            const isUserAdminOrMentor = currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu';
             const tabList = isUserAdminOrMentor 
               ? (['profile', 'subteamRanks', 'badges', 'quests', 'leaderboard', 'xpControl'] as const)
               : (['profile', 'subteamRanks', 'badges', 'quests', 'leaderboard'] as const);
@@ -295,7 +295,7 @@ export default function ArenaPortal({
           
           {/* SCREEN 1: PROFILE SUMMARY */}
           {gamificationTab === 'profile' && (() => {
-            const isMentor = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+            const isMentor = currentUser.role === 'mentor';
             let userGuildId: string = currentUser.primarySubteam;
             if (isMentor) {
               userGuildId = 'Mentoring';
@@ -491,7 +491,7 @@ export default function ArenaPortal({
 
               {/* Guild selector row */}
               {(() => {
-                const isMentorUser = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+                const isMentorUser = currentUser.role === 'mentor';
                 const defaultGuildId: string = isMentorUser ? 'Mentoring' : (currentUser.primarySubteam === 'None' || currentUser.primarySubteam === 'Mentor' || (currentUser.primarySubteam as string) === 'Lead/Captain' || (currentUser.primarySubteam as string) === 'Mentoring' ? 'Design/Build/Fabrication' : currentUser.primarySubteam);
                 const currentTab = activeGuildTab || defaultGuildId;
                 
@@ -623,7 +623,7 @@ export default function ArenaPortal({
                             <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
                               {activeGuild.ranks.map((r, i) => {
                                 const isUnlocked = subStats.rankIndex >= i;
-                                const isMentorUser = currentUser.role === 'mentor_captain' || currentUser.role === 'mentor';
+                                const isMentorUser = currentUser.role === 'mentor';
                                 const isLockedAndSecret = !isUnlocked && !isMentorUser;
                                 
                                 // Handle masking for locked secret level

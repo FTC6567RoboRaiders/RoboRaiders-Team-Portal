@@ -23,7 +23,8 @@ import {
   Printer,
   FileText,
   LayoutTemplate,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from 'lucide-react';
 import { UserAccount, JournalEntry, TimeEntry, KanbanTask, OutreachEvent, XPAdjustment, Subteam } from '../types';
 import { computeUserGamification, calculateJournalQualityScore } from '../utils/gamification';
@@ -41,6 +42,7 @@ interface MemberDirectoryProps {
   onRejectUser: (userId: string) => Promise<void>;
   onUpdateLeadership: (userId: string, leadership: 'None' | 'Captain' | 'Subteam leader') => Promise<void>;
   onStartEditProfile: (userName: string) => void;
+  onDeleteUser: (userId: string, userName: string) => Promise<void>;
   formatSubteamLabel: (subteam: any) => string;
 }
 
@@ -57,6 +59,7 @@ export default function MemberDirectory({
   onRejectUser,
   onUpdateLeadership,
   onStartEditProfile,
+  onDeleteUser,
   formatSubteamLabel
 }: MemberDirectoryProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,7 +75,7 @@ export default function MemberDirectory({
     return accounts.find(a => a.status === 'Approved') || null;
   });
 
-  const isMentorOrCaptain = currentUser?.role === 'mentor' || currentUser?.role === 'mentor_captain' || currentUser?.role === 'captain';
+  const isMentorOrCaptain = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'ftc6567@gmail.com' || currentUser?.schoolEmail === 'admin@school.edu';
 
   // Filters
   const filteredRoster = accounts.filter(acc => {
@@ -85,7 +88,7 @@ export default function MemberDirectory({
     let matchesRole = true;
     if (filterRole !== 'All') {
       if (filterRole === 'mentor') {
-        matchesRole = acc.role === 'mentor' || acc.role === 'mentor_captain';
+        matchesRole = acc.role === 'mentor' ;
       } else if (filterRole === 'captain') {
         matchesRole = acc.role === 'captain';
       } else if (filterRole === 'member') {
@@ -461,17 +464,31 @@ export default function MemberDirectory({
                     >
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <span className="font-extrabold text-slate-900 dark:text-slate-100 text-sm leading-tight hover:underline">
-                            {acc.name}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-slate-900 dark:text-slate-100 text-sm leading-tight hover:underline">
+                              {acc.name}
+                            </span>
+                            {isMentorOrCaptain && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteUser(acc.id, acc.name);
+                                }}
+                                className="p-1 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-slate-300 hover:text-rose-600 dark:text-slate-600 dark:hover:text-rose-400 rounded transition-all cursor-pointer"
+                                title="Delete User"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                           <span className={`font-mono text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${
-                            acc.role === 'mentor' || acc.role === 'mentor_captain'
+                            acc.role === 'mentor' 
                               ? 'bg-purple-100 border-purple-250 text-purple-800 dark:bg-purple-950/40 dark:border-purple-900/40 dark:text-purple-305'
                               : acc.role === 'captain'
                               ? 'bg-amber-100 border-amber-250 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900/40 dark:text-amber-305'
                               : 'bg-indigo-50 border-indigo-250 text-indigo-850 dark:bg-indigo-950/30 dark:border-indigo-900/45 dark:text-indigo-305'
                           }`}>
-                            {acc.role === 'mentor' ? 'Coach' : acc.role === 'mentor_captain' ? 'Mentor/Captain' : acc.role === 'captain' ? 'Leader' : 'Student'}
+                            {acc.role === 'mentor' ? 'Coach' : acc.role === 'captain' ? 'Leader' : 'Student'}
                           </span>
                         </div>
                         
@@ -540,14 +557,16 @@ export default function MemberDirectory({
                         Participant Detail Class
                       </span>
                       {isLeadActionsAvailable && (
-                        <button
-                          onClick={() => onStartEditProfile(selectedUserForAudit.name)}
-                          className="text-slate-500 hover:text-brand dark:hover:text-amber-400 font-bold transition-all text-[11px] uppercase tracking-wider flex items-center gap-1 cursor-pointer border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-950 font-mono"
-                          title="Modify account role, names or registered subteams"
-                        >
-                          <Edit className="w-3 h-3" />
-                          <span>Modify Account</span>
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => onStartEditProfile(selectedUserForAudit.name)}
+                            className="text-slate-500 hover:text-brand dark:hover:text-amber-400 font-bold transition-all text-[11px] uppercase tracking-wider flex items-center gap-1 cursor-pointer border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-950 font-mono"
+                            title="Modify account role, names or registered subteams"
+                          >
+                            <Edit className="w-3 h-3" />
+                            <span>Modify Account</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                     
@@ -746,6 +765,18 @@ export default function MemberDirectory({
                             <option value="Captain">Captain</option>
                             <option value="Subteam leader">Subteam leader</option>
                           </select>
+                        </div>
+
+                        {/* Explicit delete option to make it more obvious to remove/revoke people */}
+                        <div className="flex items-center justify-between border border-rose-100 dark:border-rose-900/30 p-2 rounded bg-rose-50/50 dark:bg-rose-950/20 text-xs mt-1">
+                          <span className="text-rose-600 dark:text-rose-400 font-bold">Revoke Team Access:</span>
+                          <button
+                            onClick={() => onDeleteUser(selectedUserForAudit.id, selectedUserForAudit.name)}
+                            className="bg-rose-600 hover:bg-rose-700 text-white dark:text-slate-50 border-0 rounded px-3 py-1 font-sans font-bold text-[10px] uppercase tracking-wide cursor-pointer transition-colors shadow-sm"
+                            title="Delete this user permanently"
+                          >
+                            Delete Account
+                          </button>
                         </div>
                       </div>
                     </div>
