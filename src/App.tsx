@@ -1866,75 +1866,35 @@ FTC #6567 Captains & Mentors`
     }
     const emailToFind = loginEmail.trim().toLowerCase();
     const typedCredential = loginSchoolId.trim();
+    // Default fallback to old logic if no Auth record
     const defaultPassword = typedCredential + "_ftc_auth";
 
     try {
       let userCredential;
-      
       try {
         userCredential = await signInWithEmailAndPassword(auth, emailToFind, typedCredential);
       } catch (authErr1: any) {
         try {
-          userCredential = await signInWithEmailAndPassword(auth, emailToFind, defaultPassword);
+           userCredential = await signInWithEmailAndPassword(auth, emailToFind, defaultPassword);
         } catch (authErr2: any) {
-          // Fallback: Check if it's a premade account in Firestore that doesn't have an Auth record yet.
-          const q = query(collection(db, 'users'), where('schoolEmail', '==', emailToFind));
-          const qSnap = await getDocs(q);
-          
-          if (!qSnap.empty) {
-            const premadeAcc = qSnap.docs[0].data() as any;
-            if (premadeAcc.schoolId === typedCredential || premadeAcc.schoolId === 'N/A' || !premadeAcc.schoolId) {
-              try {
-                userCredential = await createUserWithEmailAndPassword(auth, emailToFind, defaultPassword);
-              } catch (createErr: any) {
-                if (createErr.code === 'auth/email-already-in-use') {
-                    showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
-                    return;
-                }
-                showToast('Failed to claim premade account: ' + createErr.message, 'danger');
-                return;
-              }
-            } else {
-              showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
-              return;
-            }
-          } else {
-            showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
-            return;
-          }
+           showToast('Incorrect credentials. Please verify your School ID, or Register if you are new.', 'danger');
+           return;
         }
       }
-
-      // Wait a tiny bit for onAuthStateChanged to finish the Firestore user ID migration if needed
-      await new Promise(r => setTimeout(r, 800));
 
       const userUid = userCredential.user.uid;
       const docRef = doc(db, 'users', userUid);
       let docSnap = await getDoc(docRef);
       
-      // Secondary fallback just in case the migration hasn't completed
       if (!docSnap.exists()) {
-         const q = query(collection(db, 'users'), where('schoolEmail', '==', emailToFind));
-         const qSnap = await getDocs(q);
-         if (!qSnap.empty) {
-            const premadeAcc = qSnap.docs[0].data() as any;
-            const oldId = premadeAcc.id;
-            const newAcc = { ...premadeAcc, id: userUid };
-            await setDoc(docRef, newAcc);
-            if (oldId && oldId !== userUid) {
-               await deleteDoc(doc(db, 'users', oldId));
-            }
-            docSnap = await getDoc(docRef);
-         } else {
-            showToast('Account not found in roster. Please register a new account.', 'danger');
-            return;
-         }
+          showToast('Account profile not found. Please ask admin for help.', 'danger');
+          return;
       }
 
       const found = docSnap.data() as any;
 
       // Auto-correct role for admins!
-      const isUserAdminTest = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
+      const isUserAdminTest = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu' || emailToFind === 'schen@school.edu' || emailToFind === 'arivera@school.edu';
       if (isUserAdminTest && found.role !== 'mentor') {
           found.role = 'mentor';
           found.status = 'Approved';
@@ -1970,23 +1930,37 @@ FTC #6567 Captains & Mentors`
     }
 
     const emailToFind = registerEmail.trim().toLowerCase();
-    
-    // Check Firestore first instead of local state
-    const q = query(collection(db, 'users'), where('schoolEmail', '==', emailToFind));
-    const qSnap = await getDocs(q);
-
-    // If it exists but they already have an Auth account, Firebase will throw anyway.
-    
     const password = registerSchoolId.trim() + "_ftc_auth";
 
     try {
+      // 1. Create the Auth user. This signs them in, allowing Firestore reads/writes based on their UID.
       const userCredential = await createUserWithEmailAndPassword(auth, emailToFind, password);
       const uid = userCredential.user.uid;
+
+      // 2. NOW check if they are claiming a premade account
+      const q = query(collection(db, 'users'), where('schoolEmail', '==', emailToFind));
+      const qSnap = await getDocs(q);
 
       if (!qSnap.empty) {
         // PREMADE ACCOUNT FOUND! Adopt it!
         const premade = qSnap.docs[0].data() as any;
-        const newAcc = { ...premade, id: uid, schoolId: registerSchoolId.trim() };
+        
+        // If the premade account was already "Approved" by an admin, that's fine. 
+        // But note: Firestore rule validates creation. To bypass issues, we can just retain its Approval status,
+        // BUT wait, if we create it with "Approved" and they aren't on the list, it will fail.
+        // So we might need to set it to 'Pending' if they aren't on the list, or the rule needs to be fixed.
+        // Actually, if we just set it up, the rule says:
+        // allow create: if ... request.resource.data.status == 'Pending' OR (request.resource.data.status == 'Approved' && email in [...])
+        
+        const isHardcodedAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu' || emailToFind === 'schen@school.edu' || emailToFind === 'arivera@school.edu';
+        
+        const newAcc = { 
+            ...premade, 
+            id: uid, 
+            schoolId: registerSchoolId.trim(),
+            status: isHardcodedAdmin ? 'Approved' : 'Pending'
+        };
+        
         await setDoc(doc(db, 'users', uid), newAcc);
         if (premade.id !== uid) {
           await deleteDoc(doc(db, 'users', premade.id));
@@ -2005,17 +1979,13 @@ FTC #6567 Captains & Mentors`
         setRegisterLeadership('None');
 
         setAuthMode('login');
-        if (newAcc.status === 'Approved') {
-           showToast('Account adopted successfully! You are approved. Please log in.', 'success');
-        } else {
-           showToast('Account adopted successfully! Still pending approval. Please log in.', 'success');
-        }
+        showToast('Account adopted successfully! You are now pending approval (or approved). Please log in.', 'success');
         return;
       }
 
-      const shouldAutoApprove = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu' || registerRole === 'mentor';
-      const initialStatus = shouldAutoApprove ? 'Approved' : 'Pending';
-      const initialRole = shouldAutoApprove ? 'mentor' : registerRole;
+      const isHardcodedAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu' || emailToFind === 'schen@school.edu' || emailToFind === 'arivera@school.edu';
+      const initialStatus = isHardcodedAdmin ? 'Approved' : 'Pending';
+      const initialRole = isHardcodedAdmin ? 'mentor' : registerRole;
 
       const newAcc: any = {
         id: uid,
@@ -2066,7 +2036,7 @@ Thanks!`
       setRegisterLeadership('None');
 
       setAuthMode('login');
-      if (shouldAutoApprove) {
+      if (initialStatus === 'Approved') {
         showToast('Success! Developer/Mentor account registered and approved automatically!', 'success');
       } else {
         showToast('Success! Your request is in the queue to be approved by a mentor/captain.', 'success');
@@ -2649,6 +2619,19 @@ FTC #6567 Captains & Mentors`
   };
 
   const handleRequestReset = async (email: string) => {
+    if (!email) {
+      showToast('Please provide an email to reset.', 'danger');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showToast('Password reset email sent! Check your inbox.', 'success');
+      setAuthMode('login');
+      setResetCodeInput('');
+      setResetEmail('');
+    } catch (e: any) {
+      showToast('Failed to send reset email: ' + e.message, 'danger');
+    }
   };
 
   const handleRefreshStatus = () => {
@@ -2657,18 +2640,94 @@ FTC #6567 Captains & Mentors`
 
   const handleCreateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsCreateProfileOpen(false);
+    if (!newProfileName.trim() || !newProfileEmail.trim()) {
+      showToast('Name and email are required.', 'danger');
+      return;
+    }
+
+    try {
+      if (editingProfileId) {
+        const acc = accounts.find(a => a.id === editingProfileId);
+        if (!acc) return;
+        const updatedAcc = {
+           ...acc,
+           name: newProfileName.trim(),
+           schoolEmail: newProfileEmail.trim(),
+           schoolId: newProfileSchoolId.trim(),
+           primarySubteam: newProfilePrimary,
+           secondarySubteam: newProfileSecondary,
+           role: newProfileRole,
+           leadership: newProfileLeadership
+        } as any;
+        await setDoc(doc(db, 'users', acc.id), updatedAcc);
+        showToast('Profile updated successfully!', 'success');
+      } else {
+        const uid = Date.now().toString() + Math.random().toString().substring(2, 6);
+        const newAcc = {
+           id: uid,
+           name: newProfileName.trim(),
+           schoolEmail: newProfileEmail.trim(),
+           schoolId: newProfileSchoolId.trim() || 'N/A',
+           primarySubteam: newProfilePrimary,
+           secondarySubteam: newProfileSecondary,
+           role: newProfileRole,
+           leadership: newProfileLeadership,
+           status: 'Approved',
+           createdAt: Date.now()
+        } as any;
+        await setDoc(doc(db, 'users', uid), newAcc);
+        
+        // Let's create an auth user if it doesn't exist? No, this is just for creating a profile doc for the roster.
+        // It's up to the user to claim it via Register!
+        
+        showToast('Created profile for the roster! They will be able to claim it when they register.', 'success');
+      }
+    } catch (e: any) {
+        showToast(`Operation failed: ${e.message}`, 'danger');
+    }
+    closeCreateProfileModal();
   };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSettingsOpen(false);
+    if (!currentUser) return;
+    try {
+      const updated = { ...currentUser, name: settingsName, primarySubteam: settingsPrimary, secondarySubteam: settingsSecondary };
+      await setDoc(doc(db, 'users', currentUser.id), updated);
+      setCurrentUser(updated);
+      localStorage.setItem('ftc_current_user', JSON.stringify(updated));
+      showToast('Settings saved successfully.', 'success');
+      setIsSettingsOpen(false);
+    } catch (e: any) {
+      showToast('Failed to save settings: ' + e.message, 'danger');
+    }
   };
 
   const handleSetupCustomPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSettingUpPassword(false);
-    setShowPasswordSetupPrompt(false);
+    if (setupCustomPassword !== setupConfirmPassword) {
+      showToast('Passwords do not match.', 'danger');
+      return;
+    }
+    if (setupCustomPassword.length < 6) {
+      showToast('Password must be at least 6 characters.', 'danger');
+      return;
+    }
+    try {
+       setIsSettingUpPassword(true);
+       if (!auth.currentUser) throw new Error("Not logged into Auth. Please log out and log back in, then try again.");
+       await updatePassword(auth.currentUser, setupCustomPassword);
+       showToast('Password updated! Use this new password next time you log in.', 'success');
+       setShowPasswordSetupPrompt(false);
+    } catch (e: any) {
+       if (e.code === 'auth/requires-recent-login') {
+          showToast('For security, please log out and log back in to change your password.', 'danger');
+       } else {
+          showToast('Failed to update password: ' + e.message, 'danger');
+       }
+    } finally {
+       setIsSettingUpPassword(false);
+    }
   };
 
   const handleRunTransition = () => {
