@@ -75,7 +75,7 @@ export default function MemberDirectory({
     return accounts.find(a => a.status === 'Approved') || null;
   });
 
-  const isMentorOrCaptain = currentUser?.role === 'mentor_captain' || currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'ftc6567@gmail.com' || currentUser?.schoolEmail === 'admin@school.edu';
+  const isMentorOrCaptain = currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'ftc6567@gmail.com' || currentUser?.schoolEmail === 'admin@school.edu';
 
   // Filters
   const filteredRoster = accounts.filter(acc => {

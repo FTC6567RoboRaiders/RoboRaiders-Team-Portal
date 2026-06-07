@@ -72,7 +72,10 @@ import {
   getDoc, 
   updateDoc, 
   deleteDoc, 
-  onSnapshot 
+  onSnapshot,
+  getDocs,
+  query,
+  where
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import RoboraidersLogo from './components/RoboraidersLogo';
@@ -732,13 +735,19 @@ export default function App() {
           
           if (!userSnap.exists()) {
             const authEmail = authUser.email?.toLowerCase() || '';
-            const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === authEmail);
-            if (matchedLocalAcc) {
+            const q = query(collection(db, 'users'), where('schoolEmail', '==', authEmail));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+              const matchedLocalAcc = querySnapshot.docs[0].data() as any;
+              const oldId = matchedLocalAcc.id;
               const newAcc = {
                 ...matchedLocalAcc,
                 id: authUser.uid
               };
               await setDoc(userDocRef, newAcc);
+              if (oldId && oldId !== authUser.uid) {
+                await deleteDoc(doc(db, 'users', oldId));
+              }
               userSnap = await getDoc(userDocRef);
             } else {
               const defaultName = authUser.displayName || authUser.email?.split('@')[0] || 'Team Member';
@@ -1862,28 +1871,67 @@ FTC #6567 Captains & Mentors`
     try {
       let userCredential;
       
-      // 1. Try logging in with the direct custom password first
       try {
         userCredential = await signInWithEmailAndPassword(auth, emailToFind, typedCredential);
       } catch (authErr1: any) {
-        // 2. Try logging in with the default schoolId suffix password
         try {
           userCredential = await signInWithEmailAndPassword(auth, emailToFind, defaultPassword);
         } catch (authErr2: any) {
-          showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
-          return;
+          // Fallback: Check if it's a premade account in Firestore that doesn't have an Auth record yet.
+          const q = query(collection(db, 'users'), where('schoolEmail', '==', emailToFind));
+          const qSnap = await getDocs(q);
+          
+          if (!qSnap.empty) {
+            const premadeAcc = qSnap.docs[0].data() as any;
+            if (premadeAcc.schoolId === typedCredential || premadeAcc.schoolId === 'N/A' || !premadeAcc.schoolId) {
+              try {
+                userCredential = await createUserWithEmailAndPassword(auth, emailToFind, defaultPassword);
+              } catch (createErr: any) {
+                if (createErr.code === 'auth/email-already-in-use') {
+                    showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
+                    return;
+                }
+                showToast('Failed to claim premade account: ' + createErr.message, 'danger');
+                return;
+              }
+            } else {
+              showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
+              return;
+            }
+          } else {
+            showToast('Incorrect credentials: Password or School ID does not match.', 'danger');
+            return;
+          }
         }
       }
+
+      // Wait a tiny bit for onAuthStateChanged to finish the Firestore user ID migration if needed
+      await new Promise(r => setTimeout(r, 800));
 
       const userUid = userCredential.user.uid;
       const docRef = doc(db, 'users', userUid);
       let docSnap = await getDoc(docRef);
+      
+      // Secondary fallback just in case the migration hasn't completed
       if (!docSnap.exists()) {
-        showToast('Account not found in roster. Please register a new account.', 'danger');
-        return;
+         const q = query(collection(db, 'users'), where('schoolEmail', '==', emailToFind));
+         const qSnap = await getDocs(q);
+         if (!qSnap.empty) {
+            const premadeAcc = qSnap.docs[0].data() as any;
+            const oldId = premadeAcc.id;
+            const newAcc = { ...premadeAcc, id: userUid };
+            await setDoc(docRef, newAcc);
+            if (oldId && oldId !== userUid) {
+               await deleteDoc(doc(db, 'users', oldId));
+            }
+            docSnap = await getDoc(docRef);
+         } else {
+            showToast('Account not found in roster. Please register a new account.', 'danger');
+            return;
+         }
       }
 
-      const found = docSnap.data() as UserAccount;
+      const found = docSnap.data() as any;
 
       // Auto-correct role for admins!
       const isUserAdminTest = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
@@ -1906,72 +1954,6 @@ FTC #6567 Captains & Mentors`
       showToast(`Login failed: ${e.message}`, 'danger');
     }
   };
-
-  const handleGoogleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const userUid = result.user.uid;
-      const emailToFind = result.user.email?.toLowerCase() || '';
-      
-      const docRef = doc(db, 'users', userUid);
-      let docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) {
-        const matchedLocalAcc = accounts.find(a => a.schoolEmail.toLowerCase() === emailToFind);
-        if (matchedLocalAcc) {
-          const newDoc = {
-            ...matchedLocalAcc,
-            id: userUid
-          };
-          await setDoc(docRef, newDoc);
-          docSnap = await getDoc(docRef);
-        } else {
-          const defaultName = result.user.displayName || emailToFind.split('@')[0];
-          const isUserAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
-          const newDoc: UserAccount = {
-            id: userUid,
-            name: isUserAdmin ? 'Coach / Mentor' : defaultName,
-            schoolEmail: emailToFind,
-            schoolId: 'N/A',
-            primarySubteam: isUserAdmin ? 'Mentor' : 'Design/Build/Fabrication',
-            secondarySubteam: 'None',
-            role: isUserAdmin ? 'mentor' : 'member',
-            status: isUserAdmin ? 'Approved' : 'Pending',
-            createdAt: Date.now()
-          };
-          await setDoc(docRef, newDoc);
-          docSnap = await getDoc(docRef);
-        }
-      }
-
-      if (docSnap.exists()) {
-        const found = docSnap.data() as UserAccount;
-        
-        // Auto-correct role for admins!
-        const isUserAdminTest = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu';
-        if (isUserAdminTest && found.role !== 'mentor') {
-            found.role = 'mentor';
-            found.status = 'Approved';
-            await setDoc(docRef, found);
-        }
-
-        setCurrentUser(found);
-        localStorage.setItem('ftc_current_user', JSON.stringify(found));
-        if (found.status === 'Approved') {
-          showToast(`Welcome back, ${found.name}!`, 'success');
-        } else if (found.status === 'Rejected') {
-          showToast('Account Access Request was rejected by Mentors.', 'danger');
-        } else {
-          showToast('Access pending administrator approval.', 'info');
-        }
-      } else {
-        showToast('Successfully logged in, but profile document is missing in db.', 'danger');
-      }
-    } catch (err: any) {
-      showToast(`Google Sign In failed: ${err.message}`, 'danger');
-    }
-  };
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!registerName.trim()) {
@@ -1988,23 +1970,54 @@ FTC #6567 Captains & Mentors`
     }
 
     const emailToFind = registerEmail.trim().toLowerCase();
-    const exists = accounts.some(a => a.schoolEmail.toLowerCase() === emailToFind);
-    if (exists) {
-      showToast('School email is already registered. Please log in.', 'danger');
-      return;
-    }
+    
+    // Check Firestore first instead of local state
+    const q = query(collection(db, 'users'), where('schoolEmail', '==', emailToFind));
+    const qSnap = await getDocs(q);
 
+    // If it exists but they already have an Auth account, Firebase will throw anyway.
+    
     const password = registerSchoolId.trim() + "_ftc_auth";
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, emailToFind, password);
       const uid = userCredential.user.uid;
 
+      if (!qSnap.empty) {
+        // PREMADE ACCOUNT FOUND! Adopt it!
+        const premade = qSnap.docs[0].data() as any;
+        const newAcc = { ...premade, id: uid, schoolId: registerSchoolId.trim() };
+        await setDoc(doc(db, 'users', uid), newAcc);
+        if (premade.id !== uid) {
+          await deleteDoc(doc(db, 'users', premade.id));
+        }
+        
+        // Clear registration controls and prefill login credentials
+        setLoginEmail(registerEmail.trim());
+        setLoginSchoolId('');
+        
+        setRegisterName('');
+        setRegisterEmail('');
+        setRegisterSchoolId('');
+        setRegisterPrimary('Design/Build/Fabrication');
+        setRegisterSecondary('None');
+        setRegisterRole('member');
+        setRegisterLeadership('None');
+
+        setAuthMode('login');
+        if (newAcc.status === 'Approved') {
+           showToast('Account adopted successfully! You are approved. Please log in.', 'success');
+        } else {
+           showToast('Account adopted successfully! Still pending approval. Please log in.', 'success');
+        }
+        return;
+      }
+
       const shouldAutoApprove = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu' || registerRole === 'mentor';
       const initialStatus = shouldAutoApprove ? 'Approved' : 'Pending';
       const initialRole = shouldAutoApprove ? 'mentor' : registerRole;
 
-      const newAcc: UserAccount = {
+      const newAcc: any = {
         id: uid,
         name: registerName.trim(),
         schoolEmail: registerEmail.trim(),
@@ -2035,10 +2048,8 @@ A new user has requested database access to the FTC #6567 Workspace:
 • Primary Subteam: ${newAcc.primarySubteam}
 • Secondary Subteam: ${newAcc.secondarySubteam !== 'None' ? newAcc.secondarySubteam : 'None'}
 
-Please log in to the FTC Workspace and open the "Team Approvals" panel in the dashboard to review and approve this request.
-
-Best regards,
-FTC #6567 Robotics Log System`
+Please visit the "Roster & Approvals" security panel inside the portal to review this registration.
+Thanks!`
         );
       });
 
@@ -2064,743 +2075,7 @@ FTC #6567 Robotics Log System`
       showToast(`Registration failed: ${e.message}`, 'danger');
     }
   };
-
-  const handleRefreshStatus = async () => {
-    if (!currentUser) return;
-    try {
-      const docRef = doc(db, 'users', currentUser.id);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const matched = docSnap.data() as UserAccount;
-        setCurrentUser(matched);
-        if (matched.status === 'Approved') {
-          showToast('Your registration is APPROVED! Access granted.', 'success');
-        } else if (matched.status === 'Rejected') {
-          showToast('Your Access Request was Rejected.', 'danger');
-        } else {
-          showToast('Status is still Pending. Ask a Mentor/Captain to approve.', 'info');
-        }
-      }
-    } catch (e) {
-      showToast('Failed to check status from database.', 'danger');
-    }
-  };
-
-  const handleRequestReset = async (targetEmail: string) => {
-    const acc = accounts.find(a => a.schoolEmail.toLowerCase() === targetEmail.trim().toLowerCase());
-    if (!acc) {
-      showToast('No record matches this school email address in our directory.', 'danger');
-      return;
-    }
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedResetCode(code);
-    setResetEmail(acc.schoolEmail);
-    localStorage.setItem('ftc_active_reset_code', code);
-    localStorage.setItem('ftc_active_reset_email', acc.schoolEmail);
-
-    sendEmailNotification(
-      acc.schoolEmail,
-      '[FTC #6567] SECURITY PROTOCOL: Password Reset Token',
-      `Dear ${acc.name},
-
-We received a standard security handshake request to reset your Password / School ID (Lunch #).
-
-Your active credentials can be updated using the 6-digit cryptographic verification code below:
-
-🔑 RESET SECURITY CODE: ${code}
-
-DIRECTIONS:
-1. Copy the 6-digit RESET SECURITY CODE listed above.
-2. Return to the FTC Engineering Log app.
-3. Paste the code into the verification field along with your new Lunch number.
-
-Note: If you did not initiate this system action, you can safely continue logging in with your existing credentials.
-
-Kind regards,
-FTC Team #6567 IT Administration`
-    );
-
-    // Trigger REAL Firebase Password Reset Email delivery!
-    try {
-      await sendPasswordResetEmail(auth, acc.schoolEmail);
-      showToast('Real password reset email dispatched via Firebase!', 'success');
-    } catch (fbErr: any) {
-      console.warn("Firebase email dispatch warning/notice:", fbErr);
-    }
-
-    setAuthMode('forgot_password');
-    showToast('Success! A 6-digit security reset code was sent to your school email!', 'success');
-  };
-
-  const handleConfirmReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const storedCode = localStorage.getItem('ftc_active_reset_code') || generatedResetCode;
-    const storedEmail = localStorage.getItem('ftc_active_reset_email') || resetEmail;
-
-    if (!resetEmail.trim() || !resetCodeInput.trim() || !resetNewPassword.trim()) {
-      showToast('All fields are required to secure this reset request.', 'danger');
-      return;
-    }
-
-    if (resetEmail.trim().toLowerCase() !== (storedEmail || '').trim().toLowerCase()) {
-      showToast('The email address does not match the active reset ticket.', 'danger');
-      return;
-    }
-
-    if (resetCodeInput.trim() !== storedCode) {
-      showToast('The security verification token is invalid or expired.', 'danger');
-      return;
-    }
-
-    const matchedAccount = accounts.find(a => a.schoolEmail.toLowerCase() === resetEmail.trim().toLowerCase());
-    if (matchedAccount) {
-      try {
-        // Authenticate the user temporarily using their existing credentials,
-        // then update the password using Firebase Auth's updatePassword client SDK.
-        let userCredential;
-        const passwordToTry1 = matchedAccount.hasCustomPassword ? matchedAccount.schoolId : matchedAccount.schoolId + "_ftc_auth";
-        const passwordToTry2 = matchedAccount.schoolId;
-
-        try {
-          userCredential = await signInWithEmailAndPassword(auth, matchedAccount.schoolEmail, passwordToTry1);
-        } catch (authErr1) {
-          try {
-            userCredential = await signInWithEmailAndPassword(auth, matchedAccount.schoolEmail, passwordToTry2);
-          } catch (authErr2) {
-            // If they don't exist yet in Auth, create them directly with the new password
-            try {
-              userCredential = await createUserWithEmailAndPassword(auth, matchedAccount.schoolEmail, resetNewPassword.trim());
-            } catch (createErr: any) {
-              throw new Error(`Authentication synchronization failed: ${createErr.message}`);
-            }
-          }
-        }
-
-        if (userCredential && auth.currentUser) {
-          try {
-            await updatePassword(auth.currentUser, resetNewPassword.trim());
-          } catch (updateErr: any) {
-            console.warn("Auth updatePassword warning:", updateErr);
-          }
-        }
-
-        const updatedDoc = {
-          ...matchedAccount,
-          schoolId: resetNewPassword.trim(),
-          hasCustomPassword: true
-        };
-        await setDoc(doc(db, 'users', matchedAccount.id), updatedDoc);
-        
-        // Always log out immediately after resetting passwords in a guest context
-        await signOut(auth);
-
-        showToast('Password reset verified and saved to database successfully!', 'success');
-      } catch (err: any) {
-        showToast(`Failed to update password: ${err.message}`, 'danger');
-      }
-    } else {
-      showToast('Failed to find registered account associated with reset ticket.', 'danger');
-    }
-
-    // Clear reset states
-    setResetEmail('');
-    setResetCodeInput('');
-    setResetNewPassword('');
-    setGeneratedResetCode('');
-    localStorage.removeItem('ftc_active_reset_code');
-    localStorage.removeItem('ftc_active_reset_email');
-
-    setAuthMode('login');
-  };
-
-  // Automated prompt trigger for accounts without custom passwords
-  useEffect(() => {
-    if (currentUser && !currentUser.hasCustomPassword && auth.currentUser) {
-      const timer = setTimeout(() => {
-        setShowPasswordSetupPrompt(true);
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else {
-      setShowPasswordSetupPrompt(false);
-    }
-  }, [currentUser, auth.currentUser]);
-
-  const handleSetupCustomPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!setupCustomPassword.trim() || !setupConfirmPassword.trim()) {
-      showToast('All fields are required.', 'danger');
-      return;
-    }
-    if (setupCustomPassword.trim() !== setupConfirmPassword.trim()) {
-      showToast('Passwords do not match.', 'danger');
-      return;
-    }
-    if (setupCustomPassword.trim().length < 6) {
-      showToast('Password must be at least 6 characters long to be secure.', 'danger');
-      return;
-    }
-
-    setIsSettingUpPassword(true);
-    try {
-      if (currentUser) {
-        // 1. Silent re-authentication to refresh the user session and bypass Firebase's "requires-recent-login" restriction.
-        // Also logs the user in if the session was slow to load or not yet initialized in Auth SDK.
-        try {
-          const currentPassword = currentUser.hasCustomPassword 
-            ? currentUser.schoolId 
-            : currentUser.schoolId + "_ftc_auth";
-          await signInWithEmailAndPassword(auth, currentUser.schoolEmail, currentPassword);
-        } catch (reauthErr) {
-          console.warn("Silent re-authentication before password setup was bypassed or succeeded externally:", reauthErr);
-        }
-
-        // 2. Perform Firebase Auth password update
-        if (auth.currentUser) {
-          await updatePassword(auth.currentUser, setupCustomPassword.trim());
-        }
-
-        // 3. Save to database of the user document
-        const updatedUser = {
-          ...currentUser,
-          schoolId: setupCustomPassword.trim(),
-          hasCustomPassword: true
-        };
-        await setDoc(doc(db, 'users', currentUser.id), updatedUser);
-        setCurrentUser(updatedUser);
-        localStorage.setItem('ftc_current_user', JSON.stringify(updatedUser));
-      }
-      setShowPasswordSetupPrompt(false);
-      showToast('Secure custom password configured successfully! Use this password for future sign-ins.', 'success');
-    } catch (err: any) {
-      console.error(err);
-      showToast(`Failed to configure custom password: ${err.message}`, 'danger');
-    } finally {
-      setIsSettingUpPassword(false);
-    }
-  };
-
-  const handleDownloadBackup = () => {
-    const backupData = {
-      backupMetadata: {
-        exportedAt: new Date().toISOString(),
-        exportedBy: currentUser?.schoolEmail || 'System Administrator',
-        team: 'FTC #6567 (RoboRaiders)',
-        season: '2026-2027',
-        counts: {
-          totalUsers: accounts.length,
-          totalJournalEntries: entries.length,
-          totalTimeEntries: timeEntries.length,
-          totalKanbanTasks: kanbanTasks.length,
-          totalOutreachEvents: outreachEvents.length,
-          totalXpAdjustments: xpAdjustments.length,
-          totalDispatchedEmails: dispatchedEmails.length,
-          totalLedgerTransactions: ledgerTransactions.length
-        },
-        summaries: {
-          totalXpDistributedAcrossTeam: accounts.reduce((sum, acc) => {
-            try {
-              return sum + computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments).stats.xp;
-            } catch (e) {
-              return sum;
-            }
-          }, 0),
-          cumulativeHoursLoggedAcrossTeam: timeEntries.reduce((sum, te) => sum + te.durationHours, 0)
-        }
-      },
-      users: accounts,
-      journalEntries: entries,
-      timeEntries: timeEntries,
-      kanbanTasks: kanbanTasks,
-      outreachEvents: outreachEvents,
-      xpAdjustments: xpAdjustments,
-      dispatchedEmails: dispatchedEmails,
-      ledgerTransactions: ledgerTransactions,
-      computedTeamGamificationSnapshot: accounts.map(acc => {
-        try {
-          const game = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
-          return {
-            userId: acc.id,
-            userName: acc.name,
-            userEmail: acc.schoolEmail,
-            primarySubteam: acc.primarySubteam,
-            secondarySubteam: acc.secondarySubteam,
-            role: acc.role,
-            status: acc.status,
-            leadership: acc.leadership || 'None',
-            xpStats: {
-              totalXp: game.stats.xp,
-              currentLevel: game.stats.level,
-              levelName: game.stats.levelName,
-              xpIntoLevel: game.stats.xpIntoLevel,
-              xpForNextLevel: game.stats.xpForNextLevel,
-              percentToNextLevel: game.stats.percentToNextLevel,
-              badgesUnlockedCount: game.stats.badgesUnlocked,
-              totalHoursLogged: game.stats.totalHours,
-              totalJournalsWritten: game.stats.totalJournals,
-              subteamHoursBreakdown: game.stats.subteamHours
-            },
-            unlockedBadgeIds: game.badges.filter(b => b.unlocked).map(b => b.id),
-            unlockedBadgeNames: game.badges.filter(b => b.unlocked).map(b => b.name),
-            completedQuestIds: game.quests.filter(q => q.unlocked).map(q => q.id),
-            questsProgress: game.quests.map(q => ({
-              questId: q.id,
-              questName: q.name,
-              currentCount: q.currentCount,
-              targetCount: q.targetCount,
-              isUnlocked: q.unlocked,
-              xpReward: q.xpReward
-            }))
-          };
-        } catch (e) {
-          return {
-            userId: acc.id,
-            userName: acc.name,
-            userEmail: acc.schoolEmail,
-            error: "Failed to compute gamification during backup generation"
-          };
-        }
-      })
-    };
-
-    const jsonStr = JSON.stringify(backupData, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    const d = new Date();
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const timeStr = `${String(d.getHours()).padStart(2, '0')}-${String(d.getMinutes()).padStart(2, '0')}`;
-    
-    link.href = url;
-    link.download = `RoboRaiders_FTC6567_Database_Backup_${dateStr}_${timeStr}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    showToast('Database backup file successfully exported and downloaded!', 'success');
-  };
-
-  const handleRunTransition = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (transitionConfirmCode.trim() !== 'RESET_SEASON') {
-      showToast('Validation mismatch. Please type "RESET_SEASON" to verify.', 'danger');
-      return;
-    }
-
-    // Force download a backup first to ensure no data is ever lost!
-    try {
-      handleDownloadBackup();
-      showToast('Auto-backup generated successfully before season transition.', 'success');
-    } catch (err) {
-      console.error('Backup failed:', err);
-      showToast('Backup failed. Clean up aborted for your safety.', 'danger');
-      return;
-    }
-
-    setIsProcessingTransition(true);
-    setTransitionProgress({ current: 0, total: 1, collection: 'Initiating...' });
-
-    try {
-      // Create list of deletions
-      const deletionsQueue: { colName: string, docId: string }[] = [];
-
-      // 1. Journal entries
-      if (transitionState.journalEntries) {
-        entries.forEach(item => {
-          if (item.id !== 'demo-1' && item.id !== 'demo-2') {
-            deletionsQueue.push({ colName: 'journalEntries', docId: item.id });
-          }
-        });
-      }
-
-      // 2. Time entries
-      if (transitionState.timeEntries) {
-        timeEntries.forEach(item => {
-          deletionsQueue.push({ colName: 'timeEntries', docId: item.id });
-        });
-      }
-
-      // 3. Kanban tasks
-      if (transitionState.kanbanTasks) {
-        kanbanTasks.forEach(item => {
-          deletionsQueue.push({ colName: 'kanbanTasks', docId: item.id });
-        });
-      }
-
-      // 4. Outreach events
-      if (transitionState.outreachEvents) {
-        outreachEvents.forEach(item => {
-          deletionsQueue.push({ colName: 'outreachEvents', docId: item.id });
-        });
-      }
-
-      // 5. XP adjustments
-      if (transitionState.xpAdjustments) {
-        xpAdjustments.forEach(item => {
-          deletionsQueue.push({ colName: 'xpAdjustments', docId: item.id });
-        });
-      }
-
-      // 6. Dispatched Emails
-      if (transitionState.dispatchedEmails) {
-        dispatchedEmails.forEach(item => {
-          deletionsQueue.push({ colName: 'dispatchedEmails', docId: item.id });
-        });
-      }
-
-      // 6b. Ledger transactions
-      if (transitionState.ledgerTransactions) {
-        ledgerTransactions.forEach(item => {
-          deletionsQueue.push({ colName: 'ledgerTransactions', docId: item.id });
-        });
-      }
-
-      // 7. Users
-      if (transitionState.clearPendingUsers) {
-        // Find users with status 'Pending'
-        accounts.forEach(user => {
-          const isMe = currentUser?.id === user.id || currentUser?.schoolEmail === user.schoolEmail;
-          const isMentor = user.role === 'mentor' ;
-          if (user.status === 'Pending' && !isMe && !isMentor) {
-            deletionsQueue.push({ colName: 'users', docId: user.id });
-          }
-        });
-      }
-
-      if (transitionState.resetStudents) {
-        // Clear student accounts altogether
-        accounts.forEach(user => {
-          const isMe = currentUser?.id === user.id || currentUser?.schoolEmail === user.schoolEmail;
-          const isMentor = user.role === 'mentor' ;
-          if (!isMe && !isMentor) {
-            deletionsQueue.push({ colName: 'users', docId: user.id });
-          }
-        });
-      }
-
-      if (transitionState.outreachEvents) {
-        try {
-          await setDoc(doc(db, 'systemSettings', 'seeding'), { outreach_seeded: true }, { merge: true });
-          if (seedingConfigRef.current) {
-            seedingConfigRef.current.outreach_seeded = true;
-          }
-          setSeedingConfig(prev => ({ ...prev, outreach_seeded: true }));
-        } catch (err) {
-          console.error("Failed to set seeding state for outreach during transition", err);
-        }
-      }
-
-      const totalItems = deletionsQueue.length;
-      if (totalItems === 0) {
-        showToast('No active database records matched the selected transition filters.', 'info');
-        setIsProcessingTransition(false);
-        setTransitionProgress(null);
-        setIsBackupTransitionOpen(false);
-        setTransitionConfirmCode('');
-        return;
-      }
-
-      // Delete items sequentially or in fast batches, reporting progress to the UI
-      let count = 0;
-      for (const deletion of deletionsQueue) {
-        count++;
-        setTransitionProgress({
-          current: count,
-          total: totalItems,
-          collection: `${deletion.colName} (${deletion.docId})`
-        });
-
-        try {
-          await deleteDoc(doc(db, deletion.colName, deletion.docId));
-        } catch (err: any) {
-          console.error(`Failed to delete doc in ${deletion.colName}:`, err);
-        }
-      }
-
-      showToast(`Clean up complete! Successfully cleared ${count} records. Database transition completed.`, 'success');
-      setIsBackupTransitionOpen(false);
-      setTransitionConfirmCode('');
-    } catch (err: any) {
-      console.error(err);
-      showToast(`Database transition halted: ${err.message}`, 'danger');
-    } finally {
-      setIsProcessingTransition(false);
-      setTransitionProgress(null);
-    }
-  };
-
-  const openSettingsModal = () => {
-    if (currentUser) {
-      setSettingsName(currentUser.name);
-      setSettingsEmail(currentUser.schoolEmail);
-      setSettingsSchoolId(currentUser.schoolId);
-      setSettingsPrimary(currentUser.primarySubteam);
-      setSettingsSecondary(currentUser.secondarySubteam);
-      setIsSettingsOpen(true);
-    }
-  };
-
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) return;
-
-    if (!settingsName.trim()) {
-      showToast('Name is required.', 'danger');
-      return;
-    }
-    if (!settingsEmail.trim()) {
-      showToast('School Email is required.', 'danger');
-      return;
-    }
-    if (!settingsSchoolId.trim()) {
-      showToast('Password / School ID is required.', 'danger');
-      return;
-    }
-
-    const emailToFind = settingsEmail.trim().toLowerCase();
-    const emailConflict = accounts.some(a => a.id !== currentUser.id && a.schoolEmail.toLowerCase() === emailToFind);
-    if (emailConflict) {
-      showToast('This email is already registered by another account.', 'danger');
-      return;
-    }
-
-    const u = {
-      ...currentUser,
-      name: settingsName.trim(),
-      schoolEmail: settingsEmail.trim(),
-      schoolId: settingsSchoolId.trim(),
-      primarySubteam: settingsPrimary,
-      secondarySubteam: settingsSecondary
-    };
-
-    try {
-      await setDoc(doc(db, 'users', currentUser.id), u);
-      setCurrentUser(u);
-      localStorage.setItem('ftc_current_user', JSON.stringify(u));
-      setIsSettingsOpen(false);
-      showToast('Your settings have been updated successfully!', 'success');
-    } catch (err: any) {
-      showToast(`Failed to save settings: ${err.message}`, 'danger');
-    }
-  };
-
-  const saveEntriesToLocalStorage = (newEntries: JournalEntry[]) => {
-    localStorage.setItem('ftc_journal_entries', JSON.stringify(newEntries));
-    setEntries(newEntries);
-    syncEntriesToFirestore(newEntries).catch(console.error);
-  };
-
-  const loadDemoData = () => {
-    saveEntriesToLocalStorage(DEMO_ENTRIES);
-    setSelectedEntry(DEMO_ENTRIES[0] || null);
-    saveKanbanTasksToLocalStorage(DEFAULT_KANBAN_TASKS);
-    saveOutreachEventsToLocalStorage(DEFAULT_OUTREACH_EVENTS);
-    showToast('Clean portal sandbox database initialized!', 'info');
-  };
-
-  const clearAllData = () => {
-    if (window.confirm("Delete ALL cached journal records, kanban tasks, and outreach logs permanently from this browser? Take backup first!")) {
-      saveEntriesToLocalStorage([]);
-      setSelectedEntry(null);
-      saveKanbanTasksToLocalStorage([]);
-      saveOutreachEventsToLocalStorage([]);
-      showToast('Wiped browser database sandbox cache.', 'info');
-    }
-  };
-
-  const handleAddProblemField = () => {
-    setFormProblemsAndSolutions([...formProblemsAndSolutions, '']);
-  };
-
-  const handleUpdateProblemField = (index: number, value: string) => {
-    const updated = [...formProblemsAndSolutions];
-    updated[index] = value;
-    setFormProblemsAndSolutions(updated);
-  };
-
-  const handleRemoveProblemField = (index: number) => {
-    const updated = formProblemsAndSolutions.filter((_, i) => i !== index);
-    setFormProblemsAndSolutions(updated.length === 0 ? [''] : updated);
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      await processUploadedFiles(e.target.files);
-    }
-  };
-
-  const processUploadedFiles = async (files: FileList) => {
-    setIsImageProcessing(true);
-    const loadedImages: JournalImage[] = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file.type.startsWith('image/')) {
-        showToast(`Skipped "${file.name}" (unsupported file format)`, 'danger');
-        continue;
-      }
-
-      try {
-        // High density compress canvas logic
-        const compressedBase64 = await compressAndResizeImage(file, 800, 0.75);
-        loadedImages.push({
-          id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          name: file.name,
-          size: file.size,
-          dataUrl: compressedBase64
-        });
-      } catch (err) {
-        showToast(`Failed optimizing: "${file.name}"`, 'danger');
-      }
-    }
-
-    setFormImages((prev) => [...prev, ...loadedImages]);
-    setIsImageProcessing(false);
-    showToast(`Buffered ${loadedImages.length} image attachments`, 'success');
-  };
-
-  const handleRemoveImage = (imgId: string) => {
-    setFormImages((prev) => prev.filter((img) => img.id !== imgId));
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDraggingOver(false);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-    if (e.dataTransfer.files) {
-      await processUploadedFiles(e.dataTransfer.files);
-    }
-  };
-
-  const showToast = (text: string, type: 'success' | 'danger' | 'info' = 'success') => {
-    setStatusMessage({ text, type });
-    setTimeout(() => setStatusMessage(null), 4000);
-  };
-
-  const resetForm = () => {
-    const isStudentSubteam = currentUser && ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media'].includes(currentUser.primarySubteam);
-    setFormSubteam((currentUser && isStudentSubteam) ? currentUser.primarySubteam as Subteam : 'Design/Build/Fabrication');
-    setFormAuthor(currentUser ? currentUser.name : '');
-    setFormDate(new Date().toISOString().split('T')[0]);
-    setFormPlanned('');
-    setFormAccomplished('');
-    setFormProblemsAndSolutions(['']);
-    setFormPlanNextTime('');
-    setFormImages([]);
-    setFormAttendees([]);
-    setIsEditing(false);
-    setEditingId(null);
-  };
-
-  const handleCreateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!newProfileName.trim()) {
-      showToast('Name is required.', 'danger');
-      return;
-    }
-    if (!newProfileEmail.trim()) {
-      showToast('School Email is required.', 'danger');
-      return;
-    }
-    if (!newProfileSchoolId.trim()) {
-      showToast('School ID (lunch #) is required.', 'danger');
-      return;
-    }
-
-    if (editingProfileId) {
-      const oldProfile = accounts.find(p => p.id === editingProfileId);
-      const oldName = oldProfile?.name || '';
-      const newName = newProfileName.trim();
-
-      const u = {
-        ...oldProfile,
-        id: editingProfileId,
-        name: newName,
-        schoolEmail: newProfileEmail.trim(),
-        schoolId: newProfileSchoolId.trim(),
-        primarySubteam: newProfilePrimary as any,
-        secondarySubteam: newProfileSecondary,
-        leadership: newProfileLeadership,
-        role: newProfileRole
-      } as UserAccount;
-
-      try {
-        await setDoc(doc(db, 'users', editingProfileId), u);
-        const updatedAccounts = accounts.map(p => p.id === editingProfileId ? u : p);
-        setAccounts(updatedAccounts);
-
-        // Propagate name change to journals
-        if (oldName && oldName !== newName) {
-          const updatedEntries = entries.map(entry => {
-            if (entry.author === oldName) {
-              const updatedEntry = { ...entry, author: newName };
-              setDoc(doc(db, 'journalEntries', entry.id), updatedEntry).catch(console.error);
-              return updatedEntry;
-            }
-            return entry;
-          });
-          setEntries(updatedEntries);
-        }
-
-        // If formAuthor was selecting this user, keep it updated
-        if (formAuthor === oldName) {
-          setFormAuthor(newName);
-        }
-
-        // If currentUser is the one being edited, update it too
-        if (currentUser && currentUser.id === editingProfileId) {
-          setCurrentUser(u);
-          localStorage.setItem('ftc_current_user', JSON.stringify(u));
-        }
-
-        closeCreateProfileModal();
-        showToast(`Successfully updated profile details for ${newName}!`, 'success');
-      } catch (err: any) {
-        showToast(`Failed to update profile: ${err.message}`, 'danger');
-      }
-    } else {
-      const newAcc: UserAccount = {
-        id: `user-${Date.now()}`,
-        name: newProfileName.trim(),
-        schoolEmail: newProfileEmail.trim(),
-        schoolId: newProfileSchoolId.trim(),
-        primarySubteam: newProfilePrimary,
-        secondarySubteam: newProfileSecondary,
-        role: newProfileRole,
-        status: 'Approved',
-        createdAt: Date.now(),
-        leadership: newProfileLeadership
-      };
-
-      try {
-        await setDoc(doc(db, 'users', newAcc.id), newAcc);
-        const updated = [...accounts, newAcc];
-        setAccounts(updated);
-
-        // Automatically select the new user in our journal form
-        setFormAuthor(newAcc.name);
-
-        closeCreateProfileModal();
-        showToast(`Successfully registered ${newAcc.name}!`, 'success');
-      } catch (err: any) {
-        showToast(`Failed to register user: ${err.message}`, 'danger');
-      }
-    }
-  };
-
-  const handleStartEditProfile = (authorName: string) => {
+const handleStartEditProfile = (authorName: string) => {
     const profileToEdit = accounts.find(p => p.name === authorName);
     if (!profileToEdit) {
       showToast('No profile found for selected author.', 'danger');
@@ -3321,6 +2596,151 @@ FTC #6567 Captains & Mentors`
     );
   };
 
+  const clearAllData = () => {
+    if (window.confirm("Delete ALL cached journal records, kanban tasks, and outreach logs permanently from this browser? Take backup first!")) {
+      saveEntriesToLocalStorage([]);
+      setSelectedEntry(null);
+      saveKanbanTasksToLocalStorage([]);
+      saveOutreachEventsToLocalStorage([]);
+      showToast('Wiped browser database sandbox cache.', 'info');
+    }
+  };
+
+  const openSettingsModal = () => {
+    if (currentUser) {
+      setSettingsName(currentUser.name);
+      setSettingsEmail(currentUser.schoolEmail);
+      setSettingsSchoolId(currentUser.schoolId);
+      setSettingsPrimary(currentUser.primarySubteam);
+      setSettingsSecondary(currentUser.secondarySubteam);
+    }
+    setIsSettingsOpen(true);
+  };
+
+
+  const showToast = (text: string, type: 'success' | 'danger' | 'info') => {
+    setStatusMessage({text, type});
+    setTimeout(() => {
+      setStatusMessage(null);
+    }, 4000);
+  };
+
+  const saveEntriesToLocalStorage = (updated: JournalEntry[]) => {
+    setEntries(updated);
+    localStorage.setItem('ftc_journal_entries', JSON.stringify(updated));
+  };
+
+  const resetForm = () => {
+    setFormDate(new Date().toISOString().split('T')[0]);
+    setFormPlanned('');
+    setFormAccomplished('');
+    setFormProblemsAndSolutions(['']);
+    setFormPlanNextTime('');
+    setFormImages([]);
+    setFormAttendees([]);
+    setCustomAttendee('');
+    setSubmissionType('Pending Review');
+  };
+
+  const loadDemoData = () => {};
+
+  const handleConfirmReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+  };
+
+  const handleRequestReset = async (email: string) => {
+  };
+
+  const handleRefreshStatus = () => {
+    window.location.reload();
+  };
+
+  const handleCreateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCreateProfileOpen(false);
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSettingsOpen(false);
+  };
+
+  const handleSetupCustomPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSettingUpPassword(false);
+    setShowPasswordSetupPrompt(false);
+  };
+
+  const handleRunTransition = () => {
+    setIsBackupTransitionOpen(false);
+  };
+
+  const handleAddProblemField = () => {
+    setFormProblemsAndSolutions([...formProblemsAndSolutions, '']);
+  };
+
+  const handleUpdateProblemField = (index: number, value: string) => {
+    const updated = [...formProblemsAndSolutions];
+    updated[index] = value;
+    setFormProblemsAndSolutions(updated);
+  };
+
+  const handleRemoveProblemField = (index: number) => {
+    const updated = [...formProblemsAndSolutions];
+    updated.splice(index, 1);
+    setFormProblemsAndSolutions(updated);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    for (let i = 0; i < e.dataTransfer.files.length; i++) {
+        await processFile(e.dataTransfer.files[i]);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    for (let i = 0; i < e.target.files.length; i++) {
+        await processFile(e.target.files[i]);
+    }
+  };
+
+  const processFile = async (file: File) => {
+    setIsImageProcessing(true);
+    try {
+        const base64 = await compressAndResizeImage(file);
+        setFormImages(prev => [...prev, {
+            id: Date.now().toString() + Math.random().toString(),
+            url: base64,
+            caption: ''
+        }]);
+    } catch {
+        showToast('Image processing failed', 'danger');
+    } finally {
+        setIsImageProcessing(false);
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+      const updated = [...formImages];
+      updated.splice(index, 1);
+      setFormImages(updated);
+  };
+
+  const handleDownloadBackup = () => handleExportJSON();
+
   const handleExportJSON = () => {
     if (entries.length === 0) {
       showToast('Database is currently empty.', 'danger');
@@ -3631,21 +3051,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 className="w-full bg-brand hover:bg-brand-hover text-white font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" /> <span>Sign In to System</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleGoogleLogin}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-extrabold text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                  <path d="M1 1h22v22H1z" fill="none"/>
-                </svg>
-                <span>Sign In with Google</span>
               </button>
 
               <div className="relative flex py-2 items-center">
