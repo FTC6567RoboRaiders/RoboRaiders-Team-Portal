@@ -48,7 +48,7 @@ interface ArenaPortalProps {
 // Local lookup helper to prevent circular dependency imports with App.tsx
 const getGamifiedIconLocal = (iconName: string, sizeClass = "w-4 h-4") => {
   switch (iconName) {
-    case 'Wrench': return <Wrench className={`${sizeClass} text-slate-700 dark:text-slate-350`} />;
+    case 'Wrench': return <Wrench className={`${sizeClass} text-slate-700 dark:text-slate-300`} />;
     case 'Cpu': return <Settings className={`${sizeClass} text-cyan-600 dark:text-cyan-400`} />; // Fallback to Settings
     case 'BookOpen': return <BookOpen className={`${sizeClass} text-indigo-650 dark:text-indigo-400`} />;
     case 'Clock': return <Clock className={`${sizeClass} text-amber-600 dark:text-amber-400`} />;
@@ -229,29 +229,29 @@ export default function ArenaPortal({
 
   return (
     <div 
-      className="bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-xl p-6 shadow-md flex flex-col gap-6 relative overflow-hidden mt-8" 
+      className="bg-white border border-slate-205 rounded-xl p-6 shadow-md flex flex-col gap-6 relative overflow-hidden mt-8 dark:bg-slate-900" 
       id="roboraiders-championship-portal"
     >
       <div className="absolute top-0 right-0 transform translate-x-16 -translate-y-16 w-48 h-48 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none"></div>
       
       {/* Dashboard Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <div className="bg-cyan-50 dark:bg-cyan-950/40 p-2 rounded-xl text-cyan-600 dark:text-cyan-400 border border-cyan-100 dark:border-cyan-900">
             <Trophy className="w-5 h-5 text-cyan-650 dark:text-cyan-400" />
           </div>
           <div>
-            <h2 className="text-base font-extrabold uppercase font-display text-slate-900 dark:text-slate-50 flex items-center gap-2">
+            <h2 className="text-base font-extrabold uppercase font-display text-slate-900 flex items-center gap-2 dark:text-slate-400">
               <span>RoboRaiders Achievement Portal</span>
             </h2>
-            <p className="text-[11px] text-slate-505 dark:text-slate-400 font-sans mt-0.5">
+            <p className="text-[11px] text-slate-505 font-sans mt-0.5">
               Accumulate XP and ranks by logging laboratory sessions, completing peer reviews, and tracking subteam contributions.
             </p>
           </div>
         </div>
 
         {/* Improved Arena Tabs Navigation */}
-        <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200/80 dark:border-slate-800/60 font-mono text-[10px] uppercase font-bold shrink-0 flex-wrap gap-1">
+        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200/80 font-mono text-[10px] uppercase font-bold shrink-0 flex-wrap gap-1 dark:bg-slate-800">
           {(() => {
             const isUserAdminOrMentor = currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu';
             const tabList = isUserAdminOrMentor 
@@ -329,24 +329,24 @@ export default function ArenaPortal({
                 className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch"
               >
                 {/* Radial Progress Plate */}
-                <div className="md:col-span-4 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-955/40 border border-slate-200/60 dark:border-slate-800/50 rounded-xl p-6 text-center relative overflow-hidden group min-h-[300px] md:min-h-full py-8">
+                <div className="md:col-span-4 flex flex-col items-center justify-center bg-slate-50 border border-slate-200/60 rounded-xl p-6 text-center relative overflow-hidden group min-h-[300px] md:min-h-full py-8 dark:bg-slate-800">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-555 to-indigo-600"></div>
-                  <span className="text-[10px] font-mono font-extrabold text-slate-400 uppercase tracking-widest">
+                  <span className="text-[10px] font-mono font-extrabold text-slate-400 uppercase tracking-widest dark:text-slate-500">
                     Rank Class
                   </span>
                   <div className="relative mt-4 flex items-center justify-center">
                     <Award className="w-24 h-24 text-cyan-650 dark:text-cyan-400 group-hover:scale-110 transition-transform duration-300" />
-                    <div className="absolute inset-0 flex items-center justify-center -translate-y-2.5 font-mono font-black text-2xl sm:text-3xl text-slate-900 dark:text-slate-50">
+                    <div className="absolute inset-0 flex items-center justify-center -translate-y-2.5 font-mono font-black text-2xl sm:text-3xl text-slate-900 dark:text-slate-400">
                       {stats.level}
                     </div>
                   </div>
-                  <h3 className="text-xs font-mono font-black uppercase text-slate-900 dark:text-slate-50 mt-4 tracking-wider">
+                  <h3 className="text-xs font-mono font-black uppercase text-slate-900 mt-4 tracking-wider dark:text-slate-400">
                     Level {stats.level}
                   </h3>
                   <h4 className="text-sm sm:text-[15px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider font-display leading-tight mt-1 animate-pulse px-3">
                     {stats.levelName}
                   </h4>
-                  <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-2">
+                  <p className="text-[10px] font-mono text-slate-400 mt-2 dark:text-slate-500">
                     {stats.xp} Accumulated XP
                   </p>
                 </div>
@@ -358,16 +358,16 @@ export default function ArenaPortal({
                     <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
                       Experience Progression Matrix
                     </span>
-                    <span className="text-[10px] font-mono text-slate-500">
+                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                       <strong>{stats.xpIntoLevel}</strong> / {stats.xpForNextLevel} XP to Level {stats.level + 1}
                     </span>
                   </div>
-                  <div className="w-full h-4 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full overflow-hidden p-0.5 relative">
+                  <div className="w-full h-4 bg-slate-100 border border-slate-200 rounded-full overflow-hidden p-0.5 relative dark:bg-slate-800 dark:border-slate-800">
                     <div 
                       className="h-full bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-full transition-all duration-500" 
                       style={{ width: `${stats.percentToNextLevel}%` }}
                     ></div>
-                    <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-slate-600 dark:text-slate-305 font-bold">
+                    <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-slate-600 font-bold dark:text-slate-300">
                       {stats.percentToNextLevel}%
                     </div>
                   </div>
@@ -375,25 +375,25 @@ export default function ArenaPortal({
 
                 {/* Core Cumulative Scoreboard Row */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-sans">
-                  <div className="bg-slate-50/70 dark:bg-slate-955/20 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/40 text-center">
-                    <Wrench className="w-4 h-4 mx-auto text-slate-500 mb-1" />
-                    <div className="text-[10px] font-mono uppercase text-slate-400 leading-none">Workshop Hours</div>
-                    <div className="text-sm font-black font-mono text-slate-850 dark:text-slate-105 mt-1">{stats.totalHours.toFixed(1)}h</div>
+                  <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/50 text-center">
+                    <Wrench className="w-4 h-4 mx-auto text-slate-500 mb-1 dark:text-slate-400" />
+                    <div className="text-[10px] font-mono uppercase text-slate-400 leading-none dark:text-slate-500">Workshop Hours</div>
+                    <div className="text-sm font-black font-mono text-slate-850 mt-1 dark:text-slate-400">{stats.totalHours.toFixed(1)}h</div>
                   </div>
-                  <div className="bg-slate-50/70 dark:bg-slate-955/20 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/40 text-center">
+                  <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/50 text-center">
                     <BookOpen className="w-4 h-4 mx-auto text-cyan-650/85 dark:text-cyan-400 mb-1" />
-                    <div className="text-[10px] font-mono uppercase text-slate-400 leading-none">Journal Logs</div>
-                    <div className="text-sm font-black font-mono text-slate-850 dark:text-slate-105 mt-1">{stats.totalJournals} Logs</div>
+                    <div className="text-[10px] font-mono uppercase text-slate-400 leading-none dark:text-slate-500">Journal Logs</div>
+                    <div className="text-sm font-black font-mono text-slate-850 mt-1 dark:text-slate-400">{stats.totalJournals} Logs</div>
                   </div>
-                  <div className="bg-slate-50/70 dark:bg-slate-955/20 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/40 text-center">
+                  <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/50 text-center">
                     <Award className="w-4 h-4 mx-auto text-pink-500/85 mb-1" />
-                    <div className="text-[10px] font-mono uppercase text-slate-400 leading-none">Trophy Badges</div>
-                    <div className="text-sm font-black font-mono text-slate-850 dark:text-slate-105 mt-1">{stats.badgesUnlocked} Unlocked</div>
+                    <div className="text-[10px] font-mono uppercase text-slate-400 leading-none dark:text-slate-500">Trophy Badges</div>
+                    <div className="text-sm font-black font-mono text-slate-850 mt-1 dark:text-slate-400">{stats.badgesUnlocked} Unlocked</div>
                   </div>
-                  <div className="bg-slate-50/70 dark:bg-slate-955/20 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/40 text-center">
+                  <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/50 text-center">
                     <CheckCircle className="w-4 h-4 mx-auto text-rose-500/85 mb-1" />
-                    <div className="text-[10px] font-mono uppercase text-slate-400 leading-none">Validation Ratio</div>
-                    <div className="text-sm font-black font-mono text-slate-850 dark:text-slate-105 mt-1">
+                    <div className="text-[10px] font-mono uppercase text-slate-400 leading-none dark:text-slate-500">Validation Ratio</div>
+                    <div className="text-sm font-black font-mono text-slate-850 mt-1 dark:text-slate-400">
                       {stats.totalJournals > 0 
                         ? `${Math.round((entries.filter(e => e.status === 'Approved' && (e.author.includes(currentUser.name) || e.author.includes(currentUser.schoolEmail))).length / stats.totalJournals) * 100)}%`
                         : '100%'}
@@ -401,30 +401,30 @@ export default function ArenaPortal({
                   </div>
                 </div>
 
-                <p className="text-[10px] font-mono text-slate-400 leading-normal bg-cyan-50/30 dark:bg-cyan-955/10 p-2.5 rounded border border-cyan-100/50 dark:border-cyan-900/20">
+                <p className="text-[10px] font-mono text-slate-400 leading-normal bg-cyan-50/30 dark:bg-slate-900/10 p-2.5 rounded border border-cyan-100/50 dark:border-cyan-900/20 dark:text-slate-500">
                   ⚡ <strong>Note:</strong> Approved journal entries receive additional XP! Make sure to write comprehensive, precise details for your logs.
                 </p>
 
                 {/* Subteam Guild Alignment Badge */}
-                <div className="bg-slate-50 dark:bg-slate-955/35 border border-slate-200/60 dark:border-slate-805 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4 relative overflow-hidden group mt-3">
+                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4 relative overflow-hidden group mt-3 dark:bg-slate-800">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-radial from-cyan-500/5 to-transparent pointer-events-none"></div>
                   
                   {/* Icon frame */}
-                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/85 dark:border-slate-800 shadow-sm shrink-0 flex items-center justify-center">
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/85 shadow-sm shrink-0 flex items-center justify-center dark:bg-slate-900">
                     {getGamifiedIconLocal(guildObj.icon, "w-10 h-10")}
                   </div>
 
                   <div className="flex-1 flex flex-col gap-1.5 text-center sm:text-left w-full">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 w-full">
                       <div>
-                        <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest leading-none">
+                        <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
                           My Guild / Division Alignment
                         </span>
-                        <h3 className="text-sm font-black text-slate-850 dark:text-slate-105 uppercase tracking-wide flex items-center justify-center sm:justify-start gap-1.5 mt-0.5">
+                        <h3 className="text-sm font-black text-slate-850 uppercase tracking-wide flex items-center justify-center sm:justify-start gap-1.5 mt-0.5 dark:text-slate-400">
                           <span>{guildObj.name}</span>
                         </h3>
                       </div>
-                      <span className="px-2 py-0.5 bg-cyan-50 dark:bg-cyan-955/40 border border-cyan-200/55 dark:border-cyan-800 text-[10px] font-mono font-black rounded text-cyan-755 dark:text-cyan-400 self-center uppercase">
+                      <span className="px-2 py-0.5 bg-cyan-50 dark:bg-slate-900/40 border border-cyan-200/55 dark:border-cyan-800 text-[10px] font-mono font-black rounded text-cyan-755 dark:text-cyan-400 self-center uppercase">
                         Rank {subRankData.currentRank.rank}/{guildObj.ranks.length}
                       </span>
                     </div>
@@ -433,14 +433,14 @@ export default function ArenaPortal({
                       <h4 className="text-md font-extrabold text-indigo-650 dark:text-indigo-400 uppercase tracking-wide">
                         🏆 {subRankData.currentRank.title}
                       </h4>
-                      <p className="text-[11px] text-slate-505 dark:text-slate-450 italic font-medium leading-relaxed mt-1">
+                      <p className="text-[11px] text-slate-505 italic font-medium leading-relaxed mt-1">
                         "{subRankData.currentRank.explanation}"
                       </p>
                     </div>
 
                     {/* Guild Progress bar */}
                     <div className="mt-2.5">
-                      <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mb-1">
+                      <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mb-1 dark:text-slate-500">
                         <span>Division XP: <strong>{subRankData.points} XP</strong></span>
                         {subRankData.nextRank ? (
                           <span>Next Link: <strong>{subRankData.nextRank.title}</strong> in {subRankData.totalNeededForNext} XP</span>
@@ -448,7 +448,7 @@ export default function ArenaPortal({
                           <span className="text-amber-500 animate-pulse font-bold">✨ SECRET ZENITH UNLOCKED</span>
                         )}
                       </div>
-                      <div className="w-full h-2 bg-slate-205 dark:bg-slate-900 rounded-full overflow-hidden relative">
+                      <div className="w-full h-2 bg-slate-205 rounded-full overflow-hidden relative">
                         <div 
                           className={`h-full rounded-full transition-all duration-500 ${
                             subRankData.rankIndex >= guildObj.ranks.length - 1 
@@ -458,7 +458,7 @@ export default function ArenaPortal({
                           style={{ width: `${subRankData.percentToNext}%` }}
                         ></div>
                       </div>
-                      <p className="text-[8.5px] font-mono text-slate-400 mt-1.5">
+                      <p className="text-[8.5px] font-mono text-slate-400 mt-1.5 dark:text-slate-500">
                         💡 Guild XP: <strong>+5 XP</strong> per lab hour · <strong>+12 XP</strong> per journal writeup logged in {guildObj.codename}.
                       </p>
                     </div>
@@ -477,14 +477,14 @@ export default function ArenaPortal({
               exit={{ opacity: 0, y: -10 }}
               className="flex flex-col gap-5 text-xs font-sans w-full"
             >
-              <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-                <h3 className="text-sm font-black text-slate-850 dark:text-slate-100 uppercase tracking-wide flex items-center gap-1.5">
+              <div className="border-b border-slate-100 pb-3 dark:border-slate-800">
+                <h3 className="text-sm font-black text-slate-850 uppercase tracking-wide flex items-center gap-1.5 dark:text-slate-400">
                   <span>Guild & Mentor Career Trees</span>
-                  <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-955/40 text-indigo-700 dark:text-indigo-300 font-mono text-[9px] font-black rounded uppercase">
+                  <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-slate-900/40 text-indigo-700 dark:text-indigo-300 font-mono text-[9px] font-black rounded uppercase">
                     5 Specialized Divisions
                   </span>
                 </h3>
-                <p className="text-[11px] text-slate-452 dark:text-slate-400 mt-1 leading-normal">
+                <p className="text-[11px] text-slate-452 mt-1 leading-normal">
                   Advance through hierarchical ranks in student or mentor divisions. Earn Guild XP via <strong>laboratory hours (+5 XP/hr)</strong> and <strong>high-fidelity journal entries (+12 XP/log)</strong>.
                 </p>
               </div>
@@ -518,13 +518,13 @@ export default function ArenaPortal({
                         
                         const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, currentUser.role, stats.xp);
                         
-                        let activeColor = "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-350";
+                        let activeColor = "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300";
                         if (isActive) {
-                          if (g.color === 'slate') activeColor = "border-slate-655 dark:border-slate-500 bg-slate-55 dark:bg-slate-850 ring-2 ring-slate-500/10 text-slate-900 dark:text-slate-50";
-                          if (g.color === 'cyan') activeColor = "border-cyan-555 dark:border-cyan-500 bg-cyan-55/[0.1] dark:bg-cyan-955/20 ring-2 ring-cyan-500/10 text-cyan-755 dark:text-cyan-400";
-                          if (g.color === 'emerald') activeColor = "border-emerald-555 dark:border-emerald-500 bg-emerald-55/[0.1] dark:bg-emerald-955/20 ring-2 ring-emerald-500/10 text-emerald-755 dark:text-emerald-400";
-                          if (g.color === 'amber') activeColor = "border-amber-555 dark:border-amber-500 bg-amber-55/[0.1] dark:bg-amber-955/20 ring-2 ring-amber-500/10 text-amber-755 dark:text-amber-400";
-                          if (g.color === 'rose') activeColor = "border-rose-555 dark:border-rose-500 bg-rose-55/[0.1] dark:bg-rose-955/20 ring-2 ring-rose-500/10 text-rose-755 dark:text-rose-400";
+                          if (g.color === 'slate') activeColor = "border-slate-655 dark:border-slate-800 bg-slate-55 dark:bg-slate-800 ring-2 ring-slate-500/10 text-slate-900 dark:text-slate-400";
+                          if (g.color === 'cyan') activeColor = "border-cyan-555 dark:border-cyan-500 bg-cyan-55/[0.1] dark:bg-slate-900/20 ring-2 ring-cyan-500/10 text-cyan-755 dark:text-cyan-400";
+                          if (g.color === 'emerald') activeColor = "border-emerald-555 dark:border-emerald-500 bg-emerald-55/[0.1] dark:bg-slate-900/20 ring-2 ring-emerald-500/10 text-emerald-755 dark:text-emerald-400";
+                          if (g.color === 'amber') activeColor = "border-amber-555 dark:border-amber-500 bg-amber-55/[0.1] dark:bg-slate-900/20 ring-2 ring-amber-500/10 text-amber-755 dark:text-amber-400";
+                          if (g.color === 'rose') activeColor = "border-rose-555 dark:border-rose-500 bg-rose-55/[0.1] dark:bg-slate-900/20 ring-2 ring-rose-500/10 text-rose-755 dark:text-rose-400";
                         }
 
                         const isLocked = isM ? !isMentorUser : isMentorUser;
@@ -546,12 +546,12 @@ export default function ArenaPortal({
                               {isLocked ? (
                                 <>
                                   <span className="text-[10px] font-mono text-rose-555 font-extrabold flex items-center gap-1">🔒 Locked</span>
-                                  <span className="text-[9px] font-mono text-slate-400 mt-0.5">Role Restricted</span>
+                                  <span className="text-[9px] font-mono text-slate-400 mt-0.5 dark:text-slate-500">Role Restricted</span>
                                 </>
                               ) : (
                                 <>
-                                  <span className="text-[10px] font-mono text-slate-400 font-extrabold truncate">Rank {subStats.currentRank.rank}: {subStats.currentRank.title}</span>
-                                  <span className="text-[9px] font-mono text-slate-550 mt-0.5">{subStats.points} XP accumulated</span>
+                                  <span className="text-[10px] font-mono text-slate-400 font-extrabold truncate dark:text-slate-500">Rank {subStats.currentRank.rank}: {subStats.currentRank.title}</span>
+                                  <span className="text-[9px] font-mono text-slate-550 mt-0.5 dark:text-slate-300">{subStats.points} XP accumulated</span>
                                 </>
                               )}
                             </div>
@@ -581,7 +581,7 @@ export default function ArenaPortal({
                       const isLocked = activeGuild.id === 'Mentoring' ? !isMentorUser : isMentorUser;
                       
                       return (
-                        <div className="bg-slate-50 dark:bg-slate-955/20 border border-slate-201 dark:border-slate-800 rounded-xl p-5 flex flex-col gap-4 w-full">
+                        <div className="bg-slate-50 border border-slate-201 rounded-xl p-5 flex flex-col gap-4 w-full dark:bg-slate-800">
                           {isLocked && (
                             <div className="bg-rose-500/10 border border-rose-500/20 text-rose-755 dark:text-rose-455 p-3.5 rounded-lg text-xs flex items-center gap-2.5 font-medium leading-normal">
                               <ShieldCheck className="w-5 h-5 text-rose-500 shrink-0" />
@@ -595,20 +595,20 @@ export default function ArenaPortal({
                             </div>
                           )}
                           {/* Active Guild Header Card */}
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200/40 dark:border-slate-800/60 pb-3 w-full">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200/40 pb-3 w-full">
                             <div className="flex items-center gap-3">
-                              <div className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-lg shadow-sm">
+                              <div className="p-2 bg-white border border-slate-200 rounded-lg shadow-sm dark:bg-slate-900 dark:border-slate-800">
                                 {getGamifiedIconLocal(activeGuild.icon, "w-6 h-6")}
                               </div>
                               <div>
                                 <h4 className="text-[9px] font-black uppercase text-slate-455 tracking-wider">Active Division Selected</h4>
-                                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-105 uppercase">{activeGuild.name}</h3>
+                                <h3 className="text-sm font-extrabold text-slate-800 uppercase dark:text-slate-400">{activeGuild.name}</h3>
                               </div>
                             </div>
                             
                             <div className="text-left sm:text-right flex flex-col items-start sm:items-end">
-                              <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest">Division Progress</span>
-                              <span className="text-xs font-mono font-black text-slate-800 dark:text-slate-200">
+                              <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest dark:text-slate-500">Division Progress</span>
+                              <span className="text-xs font-mono font-black text-slate-800 dark:text-slate-400">
                                 {guildHours.toFixed(1)}h logged · {guildJournals} journal logs
                               </span>
                             </div>
@@ -616,7 +616,7 @@ export default function ArenaPortal({
 
                           {/* Progressive Timeline of Ranks */}
                           <div className="flex flex-col gap-3 w-full">
-                            <span className="text-[10px] font-mono uppercase font-black text-slate-400 tracking-wider mb-1">
+                            <span className="text-[10px] font-mono uppercase font-black text-slate-400 tracking-wider mb-1 dark:text-slate-500">
                               Division Promotion Ladder (1 to {activeGuild.ranks.length})
                             </span>
                             
@@ -654,27 +654,27 @@ export default function ArenaPortal({
                                       isUnlocked 
                                         ? 'bg-emerald-100 border-emerald-300 text-emerald-855 dark:bg-emerald-950 dark:border-emerald-905 dark:text-emerald-400' 
                                         : isLockedAndSecret
-                                          ? 'bg-amber-100/40 border-amber-300 text-amber-700 dark:bg-amber-955/40 dark:border-amber-900 dark:text-amber-400'
-                                          : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400'
+                                          ? 'bg-amber-100/40 border-amber-300 text-amber-700 dark:bg-slate-900/40 dark:border-amber-900 dark:text-amber-400'
+                                          : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-800 dark:text-slate-400'
                                     }`}>
                                       {isUnlocked ? "✓" : r.rank}
                                     </div>
 
                                     <div className="flex-1 min-w-0">
                                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                                        <h3 className={`text-xs font-black uppercase tracking-wide truncate ${isUnlocked ? 'text-slate-855 dark:text-slate-100 font-extrabold' : 'text-slate-500 dark:text-slate-400'}`}>
+                                        <h3 className={`text-xs font-black uppercase tracking-wide truncate ${isUnlocked ? 'text-slate-855 dark:text-slate-300 font-extrabold' : 'text-slate-500 dark:text-slate-400'}`}>
                                           {isUnlocked ? "🏅 " : ""}{displayedTitle}
                                         </h3>
                                         <span className={`text-[9px] font-mono px-1.5 py-0.2 select-none shrink-0 uppercase rounded-sm border ${
                                           isUnlocked 
                                             ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-855 text-emerald-755 dark:text-emerald-400' 
-                                            : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-550'
+                                            : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-800 dark:text-slate-400'
                                         }`}>
                                           Requires {reqPoints} XP
                                         </span>
                                       </div>
                                       
-                                      <p className={`text-[11px] mt-1 leading-normal italic ${isUnlocked ? 'text-slate-655 dark:text-slate-355 font-medium' : 'text-slate-400 dark:text-slate-500 font-normal'}`}>
+                                      <p className={`text-[11px] mt-1 leading-normal italic ${isUnlocked ? 'text-slate-655 dark:text-slate-355 font-medium' : 'text-slate-400 dark:text-slate-300 font-normal'}`}>
                                         "{displayedDesc}"
                                       </p>
                                     </div>
@@ -701,11 +701,11 @@ export default function ArenaPortal({
               exit={{ opacity: 0, y: -10 }}
               className="flex flex-col gap-4 text-xs font-sans"
             >
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1.5">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 dark:border-slate-800">
                 <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
                   FTC Field-Battle Achievement Wall
                 </span>
-                <span className="text-[10px] font-mono text-slate-500">
+                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                   Progress: <strong>{stats.badgesUnlocked}</strong> / {badges.length} Badges Earned
                 </span>
               </div>
@@ -718,8 +718,8 @@ export default function ArenaPortal({
                       onClick={() => toggleBadge(badge.id)}
                       className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all duration-300 relative overflow-hidden group select-none cursor-pointer ${
                         badge.unlocked 
-                          ? 'bg-slate-50 dark:bg-slate-905 border-cyan-500/40 shadow-sm hover:shadow-cyan-500/10 hover:border-cyan-500/80 ring-1 ring-cyan-500/5' 
-                          : 'bg-slate-50/40 dark:bg-slate-955/20 border-slate-200/60 dark:border-slate-800/50 opacity-60 hover:opacity-100'
+                          ? 'bg-slate-50 dark:bg-slate-800 border-cyan-500/40 shadow-sm hover:shadow-cyan-500/10 hover:border-cyan-500/80 ring-1 ring-cyan-500/5' 
+                          : 'bg-slate-50/40 dark:bg-slate-800/20 border-slate-200/60 dark:border-slate-800/50 opacity-60 hover:opacity-100'
                       }`}
                       title={`${badge.name}`}
                     >
@@ -731,16 +731,16 @@ export default function ArenaPortal({
                         <div className={`p-2 rounded-lg border shrink-0 transition-transform group-hover:scale-110 ${
                           badge.unlocked 
                             ? 'bg-gradient-to-br from-cyan-5 to-cyan-100/50 border-cyan-200 dark:from-cyan-950/30 dark:to-teal-950/20 dark:border-cyan-800' 
-                            : 'bg-slate-200/55 dark:bg-slate-900 border-slate-300 dark:border-slate-800 text-slate-400'
+                            : 'bg-slate-200/55 dark:bg-slate-800 border-slate-300 dark:border-slate-800 text-slate-400'
                         }`}>
                           {badge.unlocked ? (
                             getGamifiedIconLocal(badge.icon, "w-5 h-5")
                           ) : (
-                            <Lock className="w-5 h-5 text-slate-400 dark:text-slate-650" />
+                            <Lock className="w-5 h-5 text-slate-400 dark:text-slate-500" />
                           )}
                         </div>
                         <div className="min-w-0 font-sans">
-                          <h4 className="font-extrabold text-[12px] text-slate-900 dark:text-slate-100 uppercase tracking-wide truncate">
+                          <h4 className="font-extrabold text-[12px] text-slate-900 uppercase tracking-wide truncate dark:text-slate-400">
                             {badge.name}
                           </h4>
                           <p className={`text-[10px] text-slate-455 dark:text-slate-400 leading-tight mt-0.5 transition-all duration-300 ${expandedBadges[badge.id] ? '' : 'line-clamp-2'}`}>
@@ -750,12 +750,12 @@ export default function ArenaPortal({
                       </div>
 
                       <div className={`mt-3.5 border-t border-slate-105 dark:border-slate-800 pt-2 flex flex-col gap-1 text-[9px] font-mono transition-all duration-300 ${expandedBadges[badge.id] ? 'opacity-100 translate-y-0' : 'opacity-100'}`}>
-                        <div className={`flex ${expandedBadges[badge.id] ? 'flex-col gap-1 items-start' : 'justify-between items-center'} text-slate-400 dark:text-slate-500`}>
-                          <span className="uppercase text-[8px] font-black tracking-wider text-slate-450 dark:text-slate-500">Requirement:</span>
+                        <div className={`flex ${expandedBadges[badge.id] ? 'flex-col gap-1 items-start' : 'justify-between items-center'} text-slate-400 dark:text-slate-300`}>
+                          <span className="uppercase text-[8px] font-black tracking-wider text-slate-450 dark:text-slate-400">Requirement:</span>
                           <span 
-                            className={`font-bold transition-all duration-300 text-slate-700 dark:text-slate-350 ${
+                            className={`font-bold transition-all duration-300 text-slate-700 dark:text-slate-300 ${
                               expandedBadges[badge.id] 
-                                ? 'whitespace-normal text-left text-[9.5px] leading-normal bg-slate-100/60 dark:bg-slate-900/40 p-1.5 rounded border border-slate-200/50 dark:border-slate-800/50 w-full mt-0.5' 
+                                ? 'whitespace-normal text-left text-[9.5px] leading-normal bg-slate-100/60 dark:bg-slate-800/40 p-1.5 rounded border border-slate-200/50 dark:border-slate-800/50 w-full mt-0.5' 
                                 : 'truncate max-w-[110px] text-right'
                             }`} 
                             title={badge.reqText}
@@ -763,9 +763,9 @@ export default function ArenaPortal({
                             {badge.reqText}
                           </span>
                         </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-800 mt-0.5">
+                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200/50 mt-0.5 dark:bg-slate-800">
                           <div 
-                            className={`h-full rounded-full ${badge.unlocked ? 'bg-cyan-500' : 'bg-slate-350 dark:bg-slate-700'}`} 
+                            className={`h-full rounded-full ${badge.unlocked ? 'bg-cyan-500' : 'bg-slate-350 dark:bg-slate-800'}`} 
                             style={{ width: `${badge.progress}%` }}
                           ></div>
                         </div>
@@ -786,11 +786,11 @@ export default function ArenaPortal({
               exit={{ opacity: 0, y: -10 }}
               className="flex flex-col gap-4 text-xs font-sans"
             >
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1.5">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 dark:border-slate-800">
                 <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
                   Roboraiders Weekly Team Quests
                 </span>
-                <span className="text-[10px] font-mono text-slate-500">
+                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                   Tactical rewards stack dynamically
                 </span>
               </div>
@@ -804,7 +804,7 @@ export default function ArenaPortal({
                       className={`p-4 rounded-xl border flex flex-col justify-between transition-all duration-300 relative overflow-hidden group select-none ${
                         quest.unlocked 
                           ? 'bg-emerald-500/[0.02] dark:bg-emerald-500/[0.01] border-emerald-500/25 shadow-sm' 
-                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-800'
                       }`}
                     >
                       {quest.unlocked && (
@@ -817,29 +817,29 @@ export default function ArenaPortal({
                         <div className={`p-2.5 rounded-lg border mt-0.5 shrink-0 transition-transform group-hover:rotate-12 ${
                           quest.unlocked 
                             ? 'bg-emerald-100/40 border-emerald-250 dark:bg-emerald-950/20 dark:border-emerald-805' 
-                            : 'bg-slate-100 dark:bg-slate-955 border-slate-200 dark:border-slate-800'
+                            : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-800'
                         }`}>
                           {getGamifiedIconLocal(quest.icon, "w-4.5 h-4.5")}
                         </div>
                         <div className="min-w-0 pr-12">
-                          <h4 className="font-extrabold text-[12px] text-slate-855 dark:text-slate-100 uppercase tracking-wide">
+                          <h4 className="font-extrabold text-[12px] text-slate-855 uppercase tracking-wide">
                             {quest.name}
                           </h4>
-                          <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-1 max-w-sm leading-normal">
+                          <p className="text-[10.5px] text-slate-500 mt-1 max-w-sm leading-normal dark:text-slate-400">
                             {quest.description}
                           </p>
                         </div>
                       </div>
 
-                      <div className="mt-4 border-t border-slate-100 dark:border-slate-800/85 pt-3 flex items-center justify-between gap-4">
+                      <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between gap-4 dark:border-slate-800">
                         <div className="flex-1">
-                          <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-1">
+                          <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-1 dark:text-slate-500">
                             <span>Completion:</span>
-                            <span className="font-bold text-slate-705 dark:text-slate-300">
+                            <span className="font-bold text-slate-705">
                               {quest.currentCount} / {quest.targetCount} ({pct}%)
                             </span>
                           </div>
-                          <div className="w-full bg-slate-100 dark:bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-800 relative">
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200/50 relative dark:bg-slate-800">
                             <div 
                               className={`h-full rounded-full transition-all duration-500 ${quest.unlocked ? 'bg-emerald-500' : 'bg-cyan-500'}`} 
                               style={{ width: `${pct}%` }}
@@ -868,14 +868,14 @@ export default function ArenaPortal({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="flex flex-col gap-4 text-xs font-sans text-slate-855 dark:text-slate-100"
+              className="flex flex-col gap-4 text-xs font-sans text-slate-855"
             >
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-100 dark:border-slate-800 pb-2 gap-2">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-100 pb-2 gap-2 dark:border-slate-800">
                 <div className="flex flex-col">
                   <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
                     Roboraiders Championship scoreboard
                   </span>
-                  <span className="text-[10px] font-mono text-slate-550 mt-0.5">
+                  <span className="text-[10px] font-mono text-slate-550 mt-0.5 dark:text-slate-300">
                     Active team scoreboard. Click player to inspect trophy badge case.
                   </span>
                 </div>
@@ -891,10 +891,10 @@ export default function ArenaPortal({
               <div className="grid grid-cols-1 gap-5 items-start">
                 
                 {/* Scoreboard table index */}
-                <div className="max-h-[280px] overflow-y-auto border border-slate-250 dark:border-slate-800 rounded-lg bg-slate-50/20 dark:bg-slate-955/20 shadow-inner">
+                <div className="max-h-[280px] overflow-y-auto border border-slate-250 rounded-lg bg-slate-50/20 shadow-inner dark:border-slate-800">
                   <table className="w-full text-left text-[11px] border-collapse font-sans">
                     <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[9px] font-mono uppercase bg-slate-50 dark:bg-slate-900 text-slate-505 tracking-wider">
+                      <tr className="border-b border-slate-200 text-[9px] font-mono uppercase bg-slate-50 text-slate-505 tracking-wider dark:bg-slate-800 dark:border-slate-800">
                         <th className="py-2.5 px-3 text-center w-14">Rank</th>
                         <th className="py-2.5 px-3">Robotics Specialist</th>
                         <th className="py-2.5 px-2">Subteam Declared</th>
@@ -907,12 +907,12 @@ export default function ArenaPortal({
                         const isSelf = player.account.id === currentUser.id;
                         const medalColors = [
                           'bg-amber-100 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-805 dark:text-amber-300', // #1
-                          'bg-slate-150 border-slate-300 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200', // #2
+                          'bg-slate-150 border-slate-300 text-slate-800 dark:bg-slate-800 dark:border-slate-800 dark:text-slate-400', // #2
                           'bg-orange-100 border-orange-300 text-orange-950 dark:bg-orange-950/40 dark:border-orange-850 dark:text-orange-300', // #3
                         ];
                         const currentClass = isSelf 
-                          ? 'bg-cyan-55/[0.04] dark:bg-cyan-955/5 hover:bg-cyan-55/[0.08] dark:hover:bg-cyan-955/15 border-l-2 border-l-cyan-500' 
-                          : 'border-b border-slate-100 dark:border-slate-800 hover:bg-slate-100/40 dark:hover:bg-slate-800/40';
+                          ? 'bg-cyan-55/[0.04] dark:bg-slate-900/5 hover:bg-cyan-55/[0.08] dark:hover:bg-cyan-955/15 border-l-2 border-l-cyan-500' 
+                          : 'border-b border-slate-100 dark:border-slate-800 hover:bg-slate-100/40 dark:hover:bg-slate-600/40';
 
                         return (
                           <tr 
@@ -932,7 +932,7 @@ export default function ArenaPortal({
                             <td className="py-3 px-3">
                               <div className="flex items-center gap-1.5">
                                 <div className="flex flex-col">
-                                  <span className="font-bold flex items-center gap-1.5 text-slate-900 dark:text-slate-100">
+                                  <span className="font-bold flex items-center gap-1.5 text-slate-900 dark:text-slate-400">
                                     {player.account.name}
                                     {isSelf && (
                                       <span className="bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300 font-mono text-[8px] px-1 rounded uppercase font-black tracking-wide shrink-0">
@@ -947,7 +947,7 @@ export default function ArenaPortal({
                               </div>
                             </td>
                             <td className="py-3 px-2">
-                              <span className="font-mono text-[9px] border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-905 px-1.5 py-0.5 rounded truncate max-w-[150px] inline-block text-slate-700 dark:text-slate-350">
+                              <span className="font-mono text-[9px] border border-slate-200 bg-slate-100/50 px-1.5 py-0.5 rounded truncate max-w-[150px] inline-block text-slate-700 dark:text-slate-300 dark:border-slate-800">
                                 {player.account.primarySubteam}
                               </span>
                             </td>
@@ -960,7 +960,7 @@ export default function ArenaPortal({
                             <td className="py-3 px-3 text-right">
                               <div className="flex flex-col select-none font-mono">
                                 <span className="font-black text-cyan-655 dark:text-cyan-400">{player.stats.xp} XP</span>
-                                <span className="text-[9.5px] font-bold text-slate-450 dark:text-slate-500 uppercase">Lv.{player.stats.level}</span>
+                                <span className="text-[9.5px] font-bold text-slate-450 uppercase dark:text-slate-400">Lv.{player.stats.level}</span>
                               </div>
                             </td>
                           </tr>
@@ -981,17 +981,17 @@ export default function ArenaPortal({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="flex flex-col gap-6 text-xs font-sans text-slate-800 dark:text-slate-100"
+              className="flex flex-col gap-6 text-xs font-sans text-slate-800 dark:text-slate-400"
             >
               {/* Heading description */}
-              <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                <h3 className="text-sm font-black text-slate-850 dark:text-slate-100 uppercase tracking-widest flex items-center gap-1.5">
+              <div className="border-b border-slate-100 pb-2 dark:border-slate-800">
+                <h3 className="text-sm font-black text-slate-850 uppercase tracking-widest flex items-center gap-1.5 dark:text-slate-400">
                   <span>Mentorship XP & Accolade Dashboard</span>
                   <span className="px-1.5 py-0.5 bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 font-mono text-[9px] font-black rounded uppercase">
                     Admin Mode
                   </span>
                 </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-normal">
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal dark:text-slate-400">
                   Manually reward high-performance milestones or correct logs for robotics specialists. Changes here dynamically update the live championship leaderboard balances.
                 </p>
               </div>
@@ -999,8 +999,8 @@ export default function ArenaPortal({
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                 
                 {/* Form column */}
-                <div className="xl:col-span-5 bg-slate-50 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60 p-5 rounded-xl flex flex-col gap-4">
-                  <h4 className="text-xs font-mono font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                <div className="xl:col-span-5 bg-slate-50 border border-slate-200/80 p-5 rounded-xl flex flex-col gap-4 dark:bg-slate-800">
+                  <h4 className="text-xs font-mono font-black text-slate-800 uppercase tracking-wider flex items-center gap-2 dark:text-slate-400">
                     <Sparkles className="w-4 h-4 text-amber-500" />
                     <span>Issue XP Adjustment</span>
                   </h4>
@@ -1061,7 +1061,7 @@ export default function ArenaPortal({
                     
                     {/* Select robotics student */}
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold">Target Robotics Specialist</label>
+                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold dark:text-slate-500">Target Robotics Specialist</label>
                       <select
                         value={targetUserId}
                         onChange={(e) => {
@@ -1069,7 +1069,7 @@ export default function ArenaPortal({
                           setAdjustmentError('');
                           setAdjustmentSuccess('');
                         }}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-2 text-[11px] font-sans text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500"
+                        className="w-full bg-white border border-slate-200 rounded p-2 text-[11px] font-sans text-slate-800 focus:outline-none focus:border-cyan-500 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                       >
                         <option value="">-- Choose User Profile --</option>
                         {accounts
@@ -1086,7 +1086,7 @@ export default function ArenaPortal({
 
                     {/* Pre-set Quick Add/Deduct Buttons */}
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold">Quick Value Select</label>
+                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold dark:text-slate-500">Quick Value Select</label>
                       <div className="grid grid-cols-5 gap-1">
                         {['+50', '+100', '+250', '-50', '-100'].map((preset) => {
                           const val = preset;
@@ -1118,7 +1118,7 @@ export default function ArenaPortal({
 
                     {/* Custom Number Input */}
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold">Custom XP Amount (use negative to remove)</label>
+                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold dark:text-slate-500">Custom XP Amount (use negative to remove)</label>
                       <input
                         type="number"
                         placeholder="e.g. 150 or -100"
@@ -1128,13 +1128,13 @@ export default function ArenaPortal({
                           setAdjustmentError('');
                           setAdjustmentSuccess('');
                         }}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-2 text-[11px] font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500"
+                        className="w-full bg-white border border-slate-200 rounded p-2 text-[11px] font-mono text-slate-800 focus:outline-none focus:border-cyan-500 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                       />
                     </div>
 
                     {/* Context / Reason field */}
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold">Adjustment Context / Reason</label>
+                      <label className="text-[10px] font-mono uppercase text-slate-400 font-bold dark:text-slate-500">Adjustment Context / Reason</label>
                       <textarea
                         rows={3}
                         placeholder="e.g. Exceptional mechanical drive troubleshooting, or corrected clock-in shift hour logic."
@@ -1144,7 +1144,7 @@ export default function ArenaPortal({
                           setAdjustmentError('');
                           setAdjustmentSuccess('');
                         }}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-2 text-[11px] font-sans text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500 font-medium leading-relaxed"
+                        className="w-full bg-white border border-slate-200 rounded p-2 text-[11px] font-sans text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500 font-medium leading-relaxed dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                       />
                     </div>
 
@@ -1159,19 +1159,19 @@ export default function ArenaPortal({
 
                 {/* Log output log list column */}
                 <div className="xl:col-span-7 flex flex-col gap-4 w-full">
-                  <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1">
-                    <h4 className="text-xs font-mono font-black text-slate-850 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-1 dark:border-slate-800">
+                    <h4 className="text-xs font-mono font-black text-slate-850 uppercase tracking-wider flex items-center gap-1.5 flex-wrap dark:text-slate-400">
                       <Database className="w-4 h-4 text-cyan-600" />
                       <span>Historical Adjustments Audit Log</span>
                     </h4>
-                    <span className="text-[9px] font-mono text-slate-450 shrink-0">
+                    <span className="text-[9px] font-mono text-slate-450 shrink-0 dark:text-slate-400">
                       {xpAdjustments?.length || 0} Registered Entries
                     </span>
                   </div>
 
-                  <div className="max-h-[380px] overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50/20 dark:bg-slate-950/20 shadow-inner">
+                  <div className="max-h-[380px] overflow-y-auto border border-slate-200 rounded-lg bg-slate-50/20 shadow-inner dark:border-slate-800">
                     {(!xpAdjustments || xpAdjustments.length === 0) ? (
-                      <div className="p-12 text-center text-slate-400 dark:text-slate-500 font-mono text-[10px] font-semibold">
+                      <div className="p-12 text-center text-slate-400 font-mono text-[10px] font-semibold dark:text-slate-500">
                         🚫 No manual XP adjustments logged in database yet.
                       </div>
                     ) : (
@@ -1179,30 +1179,30 @@ export default function ArenaPortal({
                         {xpAdjustments.map((log) => {
                           const isPos = log.amount > 0;
                           return (
-                            <div key={log.id} className="p-3.5 flex flex-col sm:flex-row justify-between items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-905 transition-colors">
+                            <div key={log.id} className="p-3.5 flex flex-col sm:flex-row justify-between items-start gap-4 hover:bg-slate-50 transition-colors dark:hover:bg-slate-800">
                               <div className="flex-1 min-w-0 pr-3">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100">{log.userName}</span>
-                                  <span className="text-[10px] font-mono text-slate-400 truncate">({log.userEmail})</span>
+                                  <span className="font-bold text-[11px] text-slate-900 dark:text-slate-400">{log.userName}</span>
+                                  <span className="text-[10px] font-mono text-slate-400 truncate dark:text-slate-500">({log.userEmail})</span>
                                 </div>
-                                <p className="text-[11.5px] font-medium leading-relaxed text-slate-600 dark:text-slate-350 italic mt-1.5">
+                                <p className="text-[11.5px] font-medium leading-relaxed text-slate-600 italic mt-1.5 dark:text-slate-300">
                                   "{log.reason}"
                                 </p>
                                 <div className="mt-2.5 flex flex-wrap gap-x-2.5 gap-y-1 items-center font-mono text-[9px] text-slate-405">
-                                  <span>By Coach: <strong className="text-slate-500">{log.awardedBy}</strong></span>
+                                  <span>By Coach: <strong className="text-slate-500 dark:text-slate-400">{log.awardedBy}</strong></span>
                                   <span>•</span>
                                   <span>{new Date(log.createdAt).toLocaleString()}</span>
                                 </div>
                               </div>
 
-                              <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto shrink-0 gap-3 border-t sm:border-t-0 border-slate-150 dark:border-slate-800 pt-2.5 sm:pt-0">
+                              <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto shrink-0 gap-3 border-t sm:border-t-0 border-slate-150 pt-2.5 sm:pt-0">
                                 <div className="text-right flex flex-col items-end">
                                   <span className={`font-black font-mono text-xs ${
                                     isPos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                                   }`}>
                                     {isPos ? '+' : ''}{log.amount} XP
                                   </span>
-                                  <span className="text-[8px] font-bold font-mono text-slate-400 select-none uppercase">Audited balance</span>
+                                  <span className="text-[8px] font-bold font-mono text-slate-400 select-none uppercase dark:text-slate-500">Audited balance</span>
                                 </div>
 
                                 {onDeleteXpAdjustment && (

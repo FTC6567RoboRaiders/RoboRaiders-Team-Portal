@@ -311,21 +311,21 @@ export default function GeneralLedger({
           <span className="bg-indigo-600/10 text-indigo-700 dark:text-indigo-400 font-mono text-[9px] font-black uppercase px-2.5 py-1 rounded border border-indigo-500/30 tracking-widest leading-none">
             FINANCIAL INTELLIGENCE
           </span>
-          <h1 className="text-xl md:text-2xl font-black uppercase text-slate-900 dark:text-slate-50 mt-1.5 tracking-tight font-display">
+          <h1 className="text-xl md:text-2xl font-black uppercase text-slate-900 mt-1.5 tracking-tight font-display dark:text-slate-400">
             RoboRaiders General Ledger
           </h1>
-          <p className="text-xs text-slate-550 dark:text-slate-400 font-sans mt-0.5">
+          <p className="text-xs text-slate-550 font-sans mt-0.5 dark:text-slate-300">
             Track robotics build spendings, set budget funds, and trace custom credit reimbursements.
           </p>
         </div>
 
         {/* TOP VIEW TABS */}
-        <div className="flex bg-slate-150 dark:bg-slate-950 p-1 rounded-lg border border-slate-200/80 dark:border-slate-800/60 font-mono text-[10px] uppercase font-bold self-start md:self-center">
+        <div className="flex bg-slate-150 p-1 rounded-lg border border-slate-200/80 font-mono text-[10px] uppercase font-bold self-start md:self-center dark:bg-slate-800">
           <button
             onClick={() => setActiveTab('ledger')}
             className={`px-3 py-1.5 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'ledger'
-                ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-indigo-400 shadow-xs font-extrabold border-b-2 border-indigo-500'
+                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs font-extrabold border-b-2 border-indigo-500'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200'
             }`}
           >
@@ -336,7 +336,7 @@ export default function GeneralLedger({
             onClick={() => setActiveTab('post')}
             className={`px-3 py-1.5 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'post'
-                ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-indigo-400 shadow-xs font-extrabold border-b-2 border-indigo-500'
+                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs font-extrabold border-b-2 border-indigo-500'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200'
             }`}
           >
@@ -347,7 +347,7 @@ export default function GeneralLedger({
             onClick={() => setActiveTab('analytics')}
             className={`px-3 py-1.5 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'analytics'
-                ? 'bg-white dark:bg-slate-850 text-indigo-600 dark:text-indigo-400 shadow-xs font-extrabold border-b-2 border-indigo-500'
+                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs font-extrabold border-b-2 border-indigo-500'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200'
             }`}
           >
@@ -360,48 +360,48 @@ export default function GeneralLedger({
       {/* QUICK STATUS METRICS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Total Ledger Pool */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs flex items-center gap-4 relative overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-4 relative overflow-hidden dark:bg-slate-900 dark:border-slate-800">
           <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg">
             <DollarSign className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-450">Cumulative Team Balance</div>
-            <div className="text-xl font-black font-mono text-slate-850 dark:text-slate-50 mt-0.5">
+            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-450 dark:text-slate-400">Cumulative Team Balance</div>
+            <div className="text-xl font-black font-mono text-slate-850 mt-0.5 dark:text-slate-400">
               ${financialMetrics.totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5 leading-none">
+            <div className="text-[10px] text-slate-400 mt-0.5 leading-none dark:text-slate-500">
               Inflow: <span className="text-emerald-500 font-bold font-mono">${financialMetrics.totalIncome.toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* School Allocated Budget */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs flex items-center gap-4 relative overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-4 relative overflow-hidden dark:bg-slate-900 dark:border-slate-800">
           <div className="p-3 bg-blue-500/10 text-blue-605 dark:text-blue-400 rounded-lg">
             <TrendingUp className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-450">School Allocated Budget</div>
+            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-450 dark:text-slate-400">School Allocated Budget</div>
             <div className="text-xl font-black font-mono text-blue-650 dark:text-blue-400 mt-0.5">
               ${financialMetrics.schoolBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5 leading-none">
+            <div className="text-[10px] text-slate-400 mt-0.5 leading-none dark:text-slate-500">
               Spent: <span className="text-rose-500 font-bold font-mono">${financialMetrics.schoolExpense.toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* Self-Raised Funds Balance */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs flex items-center gap-4 relative overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-4 relative overflow-hidden dark:bg-slate-900 dark:border-slate-800">
           <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg">
             <TrendingDown className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-450">Self-Raised Funds Balance</div>
+            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-450 dark:text-slate-400">Self-Raised Funds Balance</div>
             <div className="text-xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
               ${financialMetrics.selfRaisedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5 leading-none">
+            <div className="text-[10px] text-slate-400 mt-0.5 leading-none dark:text-slate-500">
               Raised: <span className="text-emerald-500 font-bold font-mono">${financialMetrics.selfRaisedIncome.toLocaleString()}</span>
             </div>
           </div>
@@ -414,15 +414,15 @@ export default function GeneralLedger({
       {activeTab === 'ledger' && (
         <section className="flex flex-col gap-5">
           {/* Filters shelf */}
-          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-white border border-slate-205 rounded-xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-4 dark:bg-slate-900">
             <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[300px]">
               {/* Type Filter */}
               <div className="flex items-center gap-1.5 min-w-[120px]">
-                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <Filter className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                 <select
                   value={transactionType}
                   onChange={(e) => setTransactionType(e.target.value as any)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-300 font-sans"
+                  className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 font-sans dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
                 >
                   <option value="All">All Transactions</option>
                   <option value="expense">Expenses Only</option>
@@ -434,7 +434,7 @@ export default function GeneralLedger({
               <select
                 value={selectedAccount}
                 onChange={(e) => setSelectedAccount(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-300 font-sans"
+                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 font-sans dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
               >
                 <option value="All">All Account Pools</option>
                 <option value="Self-Raised Funds">Self-Raised Funds Only</option>
@@ -445,7 +445,7 @@ export default function GeneralLedger({
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-300 font-sans"
+                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 font-sans dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
               >
                 <option value="All">All Categories</option>
                 {Object.keys(CATEGORY_COLORS).map(cat => (
@@ -457,7 +457,7 @@ export default function GeneralLedger({
               <select
                 value={selectedFundingSource}
                 onChange={(e) => setSelectedFundingSource(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-300 font-sans"
+                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 font-sans dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
               >
                 <option value="All">All Mechanisms</option>
                 <option value="School Direct Payment">School Direct Payment</option>
@@ -470,23 +470,23 @@ export default function GeneralLedger({
 
             {/* Keyword Search Input */}
             <div className="relative w-full md:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search ledger receipts..."
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-sans w-full focus:outline-none focus:border-indigo-500"
+                className="bg-slate-50 border border-slate-200 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-700 font-sans w-full focus:outline-none focus:border-indigo-500 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
               />
             </div>
           </div>
 
           {/* Transactions List Registry Card */}
-          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl shadow-md overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-955/20">
-              <h3 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 font-display flex items-center gap-1.5">
+          <div className="bg-white border border-slate-205 rounded-xl shadow-md overflow-hidden dark:bg-slate-900">
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 dark:border-slate-800">
+              <h3 className="text-xs font-black uppercase text-slate-900 font-display flex items-center gap-1.5 dark:text-slate-400">
                 <span>Ledger Line Transactions</span>
-                <span className="text-[10px] font-mono font-normal text-slate-400 dark:text-slate-500 italic">
+                <span className="text-[10px] font-mono font-normal text-slate-400 italic dark:text-slate-500">
                   ({filteredTransactions.length} of {transactions.length} matches)
                 </span>
               </h3>
@@ -509,8 +509,8 @@ export default function GeneralLedger({
             </div>
 
             {filteredTransactions.length === 0 ? (
-              <div className="p-12 text-center text-slate-400 dark:text-slate-550 flex flex-col items-center gap-3">
-                <FileText className="w-12 h-12 text-slate-300 dark:text-slate-700 animate-pulse" />
+              <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-3 dark:text-slate-500">
+                <FileText className="w-12 h-12 text-slate-300 animate-pulse" />
                 <p className="text-sm font-medium">No ledger records match your active configuration queries.</p>
                 <button
                   onClick={() => handleTypeChange('expense')}
@@ -522,7 +522,7 @@ export default function GeneralLedger({
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-sans">
-                  <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-slate-450 uppercase font-mono text-[9px] tracking-wider border-b border-slate-100 dark:border-slate-800">
+                  <thead className="bg-slate-50/70 text-slate-450 uppercase font-mono text-[9px] tracking-wider border-b border-slate-100 dark:text-slate-400 dark:border-slate-800">
                     <tr>
                       <th className="py-2.5 px-4">Date/Time</th>
                       <th className="py-2.5 px-4">Registry Info / Description</th>
@@ -533,25 +533,25 @@ export default function GeneralLedger({
                       <th className="py-2.5 px-4 text-center">Admin</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                     {filteredTransactions.map((tx) => {
                       const isExpense = tx.type === 'expense';
                       
                       return (
-                        <tr key={tx.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-955/20 transition-all">
+                        <tr key={tx.id} className="hover:bg-slate-50/50 transition-all">
                           {/* Chrono */}
                           <td className="py-3 px-4 font-mono select-none">
-                            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">
+                            <span className="font-extrabold text-slate-800 block dark:text-slate-400">
                               {tx.date}
                             </span>
-                            <span className="text-[9px] text-slate-400 block mt-0.5">
+                            <span className="text-[9px] text-slate-400 block mt-0.5 dark:text-slate-500">
                               by {tx.createdBy}
                             </span>
                           </td>
                           
                           {/* Label / Description */}
                           <td className="py-3 px-4 max-w-sm">
-                            <p className="font-bold text-slate-905 dark:text-slate-50 leading-relaxed text-xs">
+                            <p className="font-bold text-slate-905 leading-relaxed text-xs">
                               {tx.description}
                             </p>
                             <span className="text-[9.5px] text-indigo-600 dark:text-indigo-400 block mt-0.5 font-mono">
@@ -575,10 +575,10 @@ export default function GeneralLedger({
 
                           {/* Funding Source & Original Paid By */}
                           <td className="py-3 px-4">
-                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                            <span className="font-bold text-slate-800 dark:text-slate-400">
                               {tx.paidBy}
                             </span>
-                            <span className="text-[9px] font-mono text-slate-400 dark:text-slate-500 block mt-0.5">
+                            <span className="text-[9px] font-mono text-slate-400 block mt-0.5 dark:text-slate-500">
                               via: {tx.fundingSource}
                             </span>
                           </td>
@@ -624,7 +624,7 @@ export default function GeneralLedger({
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             ) : (
-                              <span className="text-slate-350 dark:text-slate-700 italic">-</span>
+                              <span className="text-slate-350 italic">-</span>
                             )}
                           </td>
                         </tr>
@@ -640,18 +640,18 @@ export default function GeneralLedger({
 
       {/* VIEW 2: POST TRANSACTION (FORM TO INPUT ENTRY) */}
       {activeTab === 'post' && (
-        <section className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-4 relative animate-fade-in no-print text-slate-800 dark:text-slate-100">
-          <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+        <section className="bg-white border border-slate-205 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-4 relative animate-fade-in no-print text-slate-800 dark:bg-slate-900 dark:text-slate-400">
+          <div className="flex justify-between items-center border-b border-slate-100 pb-3 dark:border-slate-800">
             <div>
               <h3 className="text-sm font-black uppercase text-indigo-755 dark:text-indigo-400 font-display">
                 Post Transaction Ledger Entry
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-[11px] text-slate-500 mt-0.5 dark:text-slate-400">
                 Insert a verified expense or funding allocation securely into the cloud General Ledger registry.
               </p>
             </div>
             {/* Quick Toggle for transaction type */}
-            <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200/85">
+            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200/85 dark:bg-slate-800">
               <button
                 type="button"
                 onClick={() => handleTypeChange('expense')}
@@ -681,11 +681,11 @@ export default function GeneralLedger({
             
             {/* Amount Field */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-bold text-slate-500">
+              <label className="text-[10px] uppercase font-mono font-bold text-slate-500 dark:text-slate-400">
                 Transaction Value (USD $)
               </label>
               <div className="relative">
-                <DollarSign className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <DollarSign className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
                 <input
                   type="number"
                   step="0.01"
@@ -693,21 +693,21 @@ export default function GeneralLedger({
                   placeholder="e.g. 154.50"
                   value={formAmount}
                   onChange={(e) => setFormAmount(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500 font-mono"
+                  className="bg-slate-50 border border-slate-200 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 w-full focus:outline-none focus:border-indigo-500 font-mono dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                 />
               </div>
             </div>
 
             {/* Account Selector (Fund allocation) */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-bold text-slate-500">
+              <label className="text-[10px] uppercase font-mono font-bold text-slate-500 dark:text-slate-400">
                 Fund Pool/Account Destination <span className="text-rose-500">*</span>
               </label>
               <select
                 required
                 value={formAccount}
                 onChange={(e) => setFormAccount(e.target.value as any)}
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-sans focus:outline-none focus:border-indigo-500"
+                className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-700 font-sans focus:outline-none focus:border-indigo-500 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
               >
                 <option value="Self-Raised Funds">Self-Raised Funds (Raise Money)</option>
                 <option value="School Allocated Budget">School Allocated Budget (School-Allocated Funds)</option>
@@ -717,14 +717,14 @@ export default function GeneralLedger({
             {/* Expense Category Select - Only visible or required for expenses */}
             {formType === 'expense' && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-mono font-bold text-slate-500">
+                <label className="text-[10px] uppercase font-mono font-bold text-slate-500 dark:text-slate-400">
                   Category Breakdown <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
                   value={formCategory}
                   onChange={(e) => setFormCategory(e.target.value as any)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-sans focus:outline-none focus:border-indigo-500"
+                  className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-700 font-sans focus:outline-none focus:border-indigo-500 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
                 >
                   <option value="Parts & Hardware">Parts & Hardware (GoBILDA, Rev, AndyMark, etc.)</option>
                   <option value="Tools & Equipment">Tools & Equipment (Drivers, crimpers, 3D printing filaments)</option>
@@ -740,14 +740,14 @@ export default function GeneralLedger({
             {/* Funding Mechanism / paid by logic */}
             {formType === 'expense' && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-mono font-bold text-slate-500">
+                <label className="text-[10px] uppercase font-mono font-bold text-slate-500 dark:text-slate-400">
                   Funding Payment Mechanism <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
                   value={formFundingSource}
                   onChange={(e) => setFormFundingSource(e.target.value as any)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-sans focus:outline-none focus:border-indigo-500"
+                  className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-700 font-sans focus:outline-none focus:border-indigo-500 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
                 >
                   <option value="School Direct Payment">School Paid/Direct Payment (School PO, invoice or direct card)</option>
                   <option value="Steve's Credit Card">Steve's Credit Card (Steve paid directly - needs reimbursement)</option>
@@ -759,42 +759,42 @@ export default function GeneralLedger({
 
             {/* Who Paid / Funder name */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-bold text-slate-500">
+              <label className="text-[10px] uppercase font-mono font-bold text-slate-500 dark:text-slate-400">
                 Payment Source / Original Funder Name <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
                 <input
                   type="text"
                   required
                   placeholder={formType === 'income' ? 'e.g. Sponsor / Rotary Club' : 'e.g. Steve Jackson, Parent Vol Maria, School Admin'}
                   value={formPaidBy}
                   onChange={(e) => setFormPaidBy(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500"
+                  className="bg-slate-50 border border-slate-200 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 w-full focus:outline-none focus:border-indigo-500 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                 />
               </div>
             </div>
 
             {/* Transaction Date */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-bold text-slate-500">
+              <label className="text-[10px] uppercase font-mono font-bold text-slate-500 dark:text-slate-400">
                 Effective Transaction Date <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
                 <input
                   type="date"
                   required
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:border-indigo-500 font-mono"
+                  className="bg-slate-50 border border-slate-200 rounded pl-10 pr-2.5 py-1.5 text-xs text-slate-800 w-full focus:outline-none focus:border-indigo-500 font-mono dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                 />
               </div>
             </div>
 
             {/* Description Multi-line text area */}
             <div className="flex flex-col gap-1.5 md:col-span-2">
-              <label className="text-[10px] uppercase font-mono font-bold text-slate-500">
+              <label className="text-[10px] uppercase font-mono font-bold text-slate-500 dark:text-slate-400">
                 Specific Items Purchased / Intent Description <span className="text-rose-500">*</span>
               </label>
               <textarea
@@ -803,7 +803,7 @@ export default function GeneralLedger({
                 value={formDescription}
                 onChange={(e) => setFormDescription(e.target.value)}
                 maxLength={2000}
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-2 text-xs text-slate-800 dark:text-slate-100 w-full h-20 focus:outline-none focus:border-indigo-500 resize-y"
+                className="bg-slate-50 border border-slate-200 rounded px-2.5 py-2 text-xs text-slate-800 w-full h-20 focus:outline-none focus:border-indigo-500 resize-y dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
               />
             </div>
 
@@ -812,7 +812,7 @@ export default function GeneralLedger({
               <button
                 type="button"
                 onClick={() => setActiveTab('ledger')}
-                className="bg-slate-150 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded text-xs font-bold transition-all uppercase tracking-wider cursor-pointer"
+                className="bg-slate-150 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded text-xs font-bold transition-all uppercase tracking-wider cursor-pointer dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-600"
               >
                 Cancel
               </button>
@@ -839,15 +839,15 @@ export default function GeneralLedger({
 
       {/* VIEW 3: REPORTS & ANALYTICS (BALANCE SHEET & VISUALIZATIONS) */}
       {activeTab === 'analytics' && (
-        <section className="flex flex-col gap-6 animate-fade-in text-slate-800 dark:text-slate-100">
+        <section className="flex flex-col gap-6 animate-fade-in text-slate-800 dark:text-slate-400">
           
           {/* BALANCE SHEET REPORT ROW */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Balance Sheet Ledger Document Card */}
-            <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 shadow-md flex flex-col justify-between">
+            <div className="bg-white border border-slate-205 rounded-xl p-5 shadow-md flex flex-col justify-between dark:bg-slate-900">
               <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 font-display pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                <h3 className="text-xs font-black uppercase text-slate-900 font-display pb-3 border-b border-slate-100 flex items-center gap-2 dark:text-slate-400 dark:border-slate-800">
                   <FileSpreadsheet className="w-5 h-5 text-indigo-550" />
                   <span>Official Budget Balance Sheet</span>
                 </h3>
@@ -856,10 +856,10 @@ export default function GeneralLedger({
                   {/* Row 1: School Allocation */}
                   <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800">
                     <div>
-                      <span className="font-bold text-slate-850 dark:text-slate-150">School allocated total:</span>
-                      <span className="block text-[10px] text-slate-400 mt-0.5 font-mono">Original funds provided directly by high-school administration</span>
+                      <span className="font-bold text-slate-850 dark:text-slate-400">School allocated total:</span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5 font-mono dark:text-slate-500">Original funds provided directly by high-school administration</span>
                     </div>
-                    <span className="font-mono font-black text-slate-800 dark:text-slate-200">
+                    <span className="font-mono font-black text-slate-800 dark:text-slate-400">
                       ${transactions.filter(t => t.account === 'School Allocated Budget' && t.type === 'income').reduce((sum, t) => sum + t.amount, 0).toFixed(2)}
                     </span>
                   </div>
@@ -867,8 +867,8 @@ export default function GeneralLedger({
                   {/* Row 2: Self Raised Inflows */}
                   <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800">
                     <div>
-                      <span className="font-bold text-slate-850 dark:text-slate-150">Self-Raised team inflows:</span>
-                      <span className="block text-[10px] text-slate-400 mt-0.5 font-mono">Corporate grants, fundraising event donations, custom sales</span>
+                      <span className="font-bold text-slate-850 dark:text-slate-400">Self-Raised team inflows:</span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5 font-mono dark:text-slate-500">Corporate grants, fundraising event donations, custom sales</span>
                     </div>
                     <span className="font-mono font-black text-emerald-500">
                       +${financialMetrics.selfRaisedIncome.toFixed(2)}
@@ -876,16 +876,16 @@ export default function GeneralLedger({
                   </div>
 
                   {/* Row 3: Total Cumulative Inflow Pool */}
-                  <div className="flex justify-between items-center py-2 border-b border-slate-105 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950 p-2 rounded">
-                    <span className="font-bold text-slate-905 dark:text-slate-200">Total Team Capital Accumulation:</span>
-                    <span className="font-mono font-extrabold text-slate-905 dark:text-slate-50">
+                  <div className="flex justify-between items-center py-2 border-b border-slate-105 bg-slate-50 p-2 rounded dark:bg-slate-800">
+                    <span className="font-bold text-slate-905">Total Team Capital Accumulation:</span>
+                    <span className="font-mono font-extrabold text-slate-905">
                       ${financialMetrics.totalIncome.toFixed(2)}
                     </span>
                   </div>
 
                   {/* Row 4: School allocated outflows */}
                   <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800">
-                    <span className="text-slate-550">School Outflow Expenditures:</span>
+                    <span className="text-slate-550 dark:text-slate-300">School Outflow Expenditures:</span>
                     <span className="font-mono font-black text-rose-500">
                       -${financialMetrics.schoolExpense.toFixed(2)}
                     </span>
@@ -893,22 +893,22 @@ export default function GeneralLedger({
 
                   {/* Row 5: Self Raised outflows */}
                   <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800">
-                    <span className="text-slate-550">Self-Raised Spent Outflows:</span>
+                    <span className="text-slate-550 dark:text-slate-300">Self-Raised Spent Outflows:</span>
                     <span className="font-mono font-black text-rose-500">
                       -${financialMetrics.selfRaisedExpense.toFixed(2)}
                     </span>
                   </div>
 
                   {/* Row 6: Total Expenditures */}
-                  <div className="flex justify-between items-center py-2 border-b border-slate-105 dark:border-slate-800 bg-rose-500/5 dark:bg-rose-500/10 p-2 rounded">
-                    <span className="font-bold text-slate-905 dark:text-slate-200">Total Spent/Invested Outflows:</span>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-105 bg-rose-500/5 dark:bg-rose-500/10 p-2 rounded">
+                    <span className="font-bold text-slate-905">Total Spent/Invested Outflows:</span>
                     <span className="font-mono font-extrabold text-rose-500">
                       -${financialMetrics.totalExpense.toFixed(2)}
                     </span>
                   </div>
 
                   {/* Row 7: Outstanding Personal Credits outstanding */}
-                  <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800 italic text-slate-400">
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100 italic text-slate-400 dark:text-slate-500 dark:border-slate-800">
                     <div>
                       <span>Outstanding Personal credit expenditures:</span>
                       <span className="block text-[9px]">Included in total spending, awaiting reimbursement transactions</span>
@@ -920,7 +920,7 @@ export default function GeneralLedger({
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/85">
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <div className="flex justify-between items-center bg-indigo-600/10 dark:bg-indigo-600/20 p-3 rounded-lg border border-indigo-500/20">
                   <span className="text-xs font-bold text-indigo-750 dark:text-indigo-400 uppercase tracking-wider font-display">Net Remaining Treasury:</span>
                   <span className="text-sm font-black font-mono text-indigo-750 dark:text-indigo-400">
@@ -931,19 +931,19 @@ export default function GeneralLedger({
             </div>
 
             {/* CREDITS & REIMBURSEMENTS TRACKER */}
-            <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 shadow-md flex flex-col justify-between">
+            <div className="bg-white border border-slate-205 rounded-xl p-5 shadow-md flex flex-col justify-between dark:bg-slate-900">
               <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 font-display pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                <h3 className="text-xs font-black uppercase text-slate-900 font-display pb-3 border-b border-slate-100 flex items-center gap-2 dark:text-slate-400 dark:border-slate-800">
                   <CreditCard className="w-5 h-5 text-indigo-550" />
                   <span>Personal Credit Reimbursement Tracker</span>
                 </h3>
 
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-normal font-sans mt-3">
+                <p className="text-xs text-slate-500 leading-normal font-sans mt-3 dark:text-slate-400">
                   Sometimes team members use their own payment mechanisms (e.g. Steve's credit card or standard pocket cash) to buy urgent components. Look up who needs reimbursement transfers here.
                 </p>
 
                 {outstandingReimbursements.length === 0 ? (
-                  <div className="mt-12 text-center text-slate-400 flex flex-col items-center gap-2.5">
+                  <div className="mt-12 text-center text-slate-400 flex flex-col items-center gap-2.5 dark:text-slate-500">
                     <CheckCircle2 className="w-10 h-10 text-emerald-505" />
                     <p className="text-xs font-bold text-emerald-550">All personal credit expenditures are reimbursed / None outstanding.</p>
                   </div>
@@ -952,15 +952,15 @@ export default function GeneralLedger({
                     {outstandingReimbursements.map((item, idx) => (
                       <div 
                         key={idx} 
-                        className="bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-850 flex items-center justify-between"
+                        className="bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between dark:bg-slate-800"
                       >
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-605 dark:text-indigo-400 font-bold flex items-center justify-center text-xs">
                             {item.person.substring(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <span className="font-bold text-slate-850 dark:text-slate-100 text-xs block">{item.person}</span>
-                            <span className="text-[10px] text-slate-400 block mt-0.5 italic">
+                            <span className="font-bold text-slate-850 text-xs block dark:text-slate-400">{item.person}</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5 italic dark:text-slate-500">
                               {item.count} items via {item.source}
                             </span>
                           </div>
@@ -986,7 +986,7 @@ export default function GeneralLedger({
                 )}
               </div>
               
-              <div className="mt-4 text-xs italic text-slate-400 font-mono text-right leading-none">
+              <div className="mt-4 text-xs italic text-slate-400 font-mono text-right leading-none dark:text-slate-500">
                 Auto-compiled logs from {transactions.length} registry entries
               </div>
             </div>
@@ -994,21 +994,21 @@ export default function GeneralLedger({
           </div>
 
           {/* VISUAL REPORT CHARTS CARD (PIE OR BAR) */}
-          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-4">
+          <div className="bg-white border border-slate-205 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-4 dark:bg-slate-900">
             
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-3 dark:border-slate-800">
               <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 dark:text-slate-100 font-display flex items-center gap-2">
+                <h3 className="text-xs font-black uppercase text-slate-900 font-display flex items-center gap-2 dark:text-slate-400">
                   <PieIcon className="w-5 h-5 text-indigo-550 animate-spin" style={{ animationDuration: '40s' }} />
                   <span>Interactive Spend Statistics and Trends</span>
                 </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-450 font-sans mt-0.5">
+                <p className="text-[11px] text-slate-500 font-sans mt-0.5 dark:text-slate-400">
                   Analyze team capital distribution and trace budget saturation across parts, travels, &amp; registration items.
                 </p>
               </div>
 
               {/* Chart selector switches */}
-              <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200/80">
+              <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200/80 dark:bg-slate-800">
                 <button
                   onClick={() => setChartType('pie')}
                   className={`px-3 py-1 text-[10px] font-mono uppercase font-black rounded cursor-pointer transition-colors duration-150 flex items-center gap-1 ${
@@ -1035,7 +1035,7 @@ export default function GeneralLedger({
             </div>
 
             {categoryChartData.length === 0 ? (
-              <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2.5">
+              <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2.5 dark:text-slate-500">
                 <TrendingUp className="w-10 h-10 text-slate-300 animate-bounce" />
                 <p className="text-xs font-medium">Log active expenses to display interactive financial charts.</p>
               </div>
@@ -1043,7 +1043,7 @@ export default function GeneralLedger({
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                 
                 {/* Visual Chart Box */}
-                <div className="lg:col-span-8 flex justify-center items-center h-[320px] bg-slate-50/50 dark:bg-slate-955/20 border border-slate-100 dark:border-slate-850/50 rounded-xl p-3 relative overflow-hidden">
+                <div className="lg:col-span-8 flex justify-center items-center h-[320px] bg-slate-50/50 border border-slate-100 rounded-xl p-3 relative overflow-hidden dark:border-slate-800">
                   
                   {chartType === 'pie' ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -1089,22 +1089,22 @@ export default function GeneralLedger({
 
                 {/* Index legends & listings */}
                 <div className="lg:col-span-4 flex flex-col gap-3 font-sans text-xs">
-                  <h4 className="font-bold border-b border-slate-100 dark:border-slate-805 pb-1 text-slate-450 uppercase font-mono text-[10px]">
+                  <h4 className="font-bold border-b border-slate-100 pb-1 text-slate-450 uppercase font-mono text-[10px] dark:text-slate-400 dark:border-slate-800">
                     {chartType === 'pie' ? 'Spending By Category' : 'Budget Pool Ratios'}
                   </h4>
 
                   {chartType === 'pie' ? (
                     <div className="flex flex-col gap-2 max-h-[250px] overflow-y-auto pr-1">
                       {categoryChartData.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 rounded bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800">
+                        <div key={idx} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100 dark:bg-slate-800 dark:border-slate-800">
                           <div className="flex items-center gap-2">
                             <span 
                               className="w-3 h-3 rounded-full shrink-0" 
                               style={{ backgroundColor: item.color }}
                             />
-                            <span className="font-medium text-slate-800 dark:text-slate-200">{item.name}</span>
+                            <span className="font-medium text-slate-800 dark:text-slate-400">{item.name}</span>
                           </div>
-                          <span className="font-mono font-black text-slate-905 dark:text-slate-50">
+                          <span className="font-mono font-black text-slate-905">
                             ${item.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>

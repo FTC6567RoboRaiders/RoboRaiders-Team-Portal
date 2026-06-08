@@ -276,7 +276,7 @@ export const DEFAULT_PROFILES: AuthorProfile[] = [];
 
 export const getGamifiedIcon = (iconName: string, sizeClass = "w-4 h-4") => {
   switch (iconName) {
-    case 'Wrench': return <Wrench className={`${sizeClass} text-slate-700 dark:text-slate-350`} />;
+    case 'Wrench': return <Wrench className={`${sizeClass} text-slate-700 dark:text-slate-300`} />;
     case 'Cpu': return <Cpu className={`${sizeClass} text-cyan-600 dark:text-cyan-400`} />;
     case 'BookOpen': return <BookOpen className={`${sizeClass} text-indigo-650 dark:text-indigo-400`} />;
     case 'Clock': return <Clock className={`${sizeClass} text-amber-600 dark:text-amber-400`} />;
@@ -734,38 +734,8 @@ export default function App() {
           let userSnap = await getDoc(userDocRef);
           
           if (!userSnap.exists()) {
-            const authEmail = authUser.email?.toLowerCase() || '';
-            const q = query(collection(db, 'users'), where('schoolEmail', '==', authEmail));
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-              const matchedLocalAcc = querySnapshot.docs[0].data() as any;
-              const oldId = matchedLocalAcc.id;
-              const newAcc = {
-                ...matchedLocalAcc,
-                id: authUser.uid
-              };
-              await setDoc(userDocRef, newAcc);
-              if (oldId && oldId !== authUser.uid) {
-                await deleteDoc(doc(db, 'users', oldId));
-              }
-              userSnap = await getDoc(userDocRef);
-            } else {
-              const defaultName = authUser.displayName || authUser.email?.split('@')[0] || 'Team Member';
-              const isUserAdmin = authEmail === 'ftc6567@gmail.com' || authEmail === 'mentor@school.edu' || authEmail === 'admin@school.edu';
-              const newAcc: UserAccount = {
-                id: authUser.uid,
-                name: defaultName,
-                schoolEmail: authUser.email || 'unknown@school.edu',
-                schoolId: 'N/A',
-                primarySubteam: isUserAdmin ? 'Mentor' : 'Design/Build/Fabrication',
-                secondarySubteam: 'None',
-                role: isUserAdmin ? 'mentor' : 'member',
-                status: isUserAdmin ? 'Approved' : 'Pending',
-                createdAt: Date.now()
-              };
-              await setDoc(userDocRef, newAcc);
-              userSnap = await getDoc(userDocRef);
-            }
+            // Do NOT auto-create a document here to avoid race conditions with handleRegister!
+            // Let handleRegister create the document. We will just wait.
           }
 
           if (userSnap.exists()) {
@@ -1532,7 +1502,7 @@ export default function App() {
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
 
   // Lightbox / Expanded Image State
-  const [expandedImage, setExpandedImage] = useState<{ url: string; name: string } | null>(null);
+  const [expandedImage, setExpandedImage] = useState<{ images: {url: string, name: string, size?: number}[], currentIndex: number } | null>(null);
 
   // Filter criteria
   const [filters, setFilters] = useState<FilterOptions>({
@@ -1816,6 +1786,10 @@ FTC #6567 Captains & Mentors`
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setExpandedImage(null);
+      } else if (e.key === 'ArrowRight' && expandedImage && expandedImage.images.length > 1) {
+        setExpandedImage(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null);
+      } else if (e.key === 'ArrowLeft' && expandedImage && expandedImage.images.length > 1) {
+        setExpandedImage(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null);
       }
     };
     if (expandedImage) {
@@ -1954,11 +1928,17 @@ FTC #6567 Captains & Mentors`
         
         const isHardcodedAdmin = emailToFind === 'ftc6567@gmail.com' || emailToFind === 'mentor@school.edu' || emailToFind === 'admin@school.edu' || emailToFind === 'schen@school.edu' || emailToFind === 'arivera@school.edu';
         
+        let newStatus = isHardcodedAdmin ? 'Approved' : 'Pending';
+
         const newAcc = { 
             ...premade, 
             id: uid, 
+            name: registerName.trim() || premade.name,
             schoolId: registerSchoolId.trim(),
-            status: isHardcodedAdmin ? 'Approved' : 'Pending'
+            primarySubteam: registerPrimary,
+            secondarySubteam: registerSecondary,
+            leadership: registerLeadership,
+            status: newStatus
         };
         
         await setDoc(doc(db, 'users', uid), newAcc);
@@ -2172,8 +2152,13 @@ const handleStartEditProfile = (authorName: string) => {
     showToast(`Logged ${durationHours} hours manually onto ${manualTimeSubteam}!`, 'success');
   };
 
-  const handleDeleteTimeEntry = (id: string, name: string) => {
+  const handleDeleteTimeEntry = async (id: string, name: string) => {
     if (window.confirm(`Permanently rescind the hour log contribution from ${name}?`)) {
+      try {
+        await deleteDoc(doc(db, 'timeEntries', id));
+      } catch (e: any) {
+        showToast(`Failed to delete time entry on server: ${e.message}`, 'danger');
+      }
       const updated = timeEntries.filter(t => t.id !== id);
       setTimeEntries(updated);
       syncTimeEntriesToFirestore(updated).catch(console.error);
@@ -2369,19 +2354,24 @@ FTC #6567 Robotics Log System`
     showToast('Loaded variables into draft editor.', 'info');
   };
 
-  const handleDeleteEntry = (entryId: string) => {
+  const handleDeleteEntry = async (entryId: string) => {
     const target = entries.find(e => e.id === entryId);
     if (target && target.status === 'Approved') {
       showToast('ERROR: This entry has been Approved & Sealed. Deletion is restricted.', 'danger');
       return;
     }
     if (window.confirm("Are you sure you want to delete this specific log?")) {
+      try {
+        await deleteDoc(doc(db, 'journalEntries', entryId));
+        showToast('Removed entry permanently.', 'info');
+      } catch (err: any) {
+        showToast(`Failed to permanently delete: ${err.message}`, 'danger');
+      }
       const updated = entries.filter(e => e.id !== entryId);
       saveEntriesToLocalStorage(updated);
       if (selectedEntry?.id === entryId) {
         setSelectedEntry(updated.length > 0 ? updated[0] : null);
       }
-      showToast('Removed entry.', 'info');
     }
   };
 
@@ -2649,8 +2639,7 @@ FTC #6567 Captains & Mentors`
       if (editingProfileId) {
         const acc = accounts.find(a => a.id === editingProfileId);
         if (!acc) return;
-        const updatedAcc = {
-           ...acc,
+        const updatedDiff = {
            name: newProfileName.trim(),
            schoolEmail: newProfileEmail.trim(),
            schoolId: newProfileSchoolId.trim(),
@@ -2658,8 +2647,8 @@ FTC #6567 Captains & Mentors`
            secondarySubteam: newProfileSecondary,
            role: newProfileRole,
            leadership: newProfileLeadership
-        } as any;
-        await setDoc(doc(db, 'users', acc.id), updatedAcc);
+        };
+        await updateDoc(doc(db, 'users', acc.id), updatedDiff);
         showToast('Profile updated successfully!', 'success');
       } else {
         const uid = Date.now().toString() + Math.random().toString().substring(2, 6);
@@ -2692,10 +2681,12 @@ FTC #6567 Captains & Mentors`
     e.preventDefault();
     if (!currentUser) return;
     try {
-      const updated = { ...currentUser, name: settingsName, primarySubteam: settingsPrimary, secondarySubteam: settingsSecondary };
-      await setDoc(doc(db, 'users', currentUser.id), updated);
-      setCurrentUser(updated);
-      localStorage.setItem('ftc_current_user', JSON.stringify(updated));
+      const updatedDiff = { name: settingsName, primarySubteam: settingsPrimary, secondarySubteam: settingsSecondary };
+      await updateDoc(doc(db, 'users', currentUser.id), updatedDiff);
+      
+      const updatedUser = { ...currentUser, ...updatedDiff };
+      setCurrentUser(updatedUser as any);
+      localStorage.setItem('ftc_current_user', JSON.stringify(updatedUser));
       showToast('Settings saved successfully.', 'success');
       setIsSettingsOpen(false);
     } catch (e: any) {
@@ -2782,9 +2773,10 @@ FTC #6567 Captains & Mentors`
         const base64 = await compressAndResizeImage(file);
         setFormImages(prev => [...prev, {
             id: Date.now().toString() + Math.random().toString(),
-            url: base64,
-            caption: ''
-        }]);
+            dataUrl: base64,
+            name: file.name,
+            size: file.size
+        } as any]);
     } catch {
         showToast('Image processing failed', 'danger');
     } finally {
@@ -3019,7 +3011,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
       <div className={`min-h-screen relative overflow-hidden flex flex-col items-center justify-center font-sans p-4 border-t-8 border-brand transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="auth-root">
         {/* Decorative diagonal repeating watermark background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0 opacity-[0.06] dark:opacity-[0.035]">
-          <div className="absolute -inset-[50%] flex flex-col justify-around rotate-[-15deg] font-mono tracking-widest text-[11px] font-black uppercase text-slate-800 dark:text-slate-100 leading-none">
+          <div className="absolute -inset-[50%] flex flex-col justify-around rotate-[-15deg] font-mono tracking-widest text-[11px] font-black uppercase text-slate-800 leading-none dark:text-slate-400">
             {Array.from({ length: 30 }).map((_, rIdx) => (
               <div 
                 key={rIdx} 
@@ -3029,7 +3021,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 {Array.from({ length: 15 }).map((_, cIdx) => (
                   <span key={cIdx} className="flex items-center gap-1.5">
                     <span>ROBORAIDERS</span> 
-                    <span className="text-brand dark:text-brand-hover">•</span> 
+                    <span className="text-brand dark:text-brand/80-hover">•</span> 
                     <span>FTC 6567</span>
                   </span>
                 ))}
@@ -3054,52 +3046,52 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
         )}
 
-        <div className="w-full max-w-md bg-white/95 border border-slate-200 dark:bg-slate-900/95 dark:border-slate-800 rounded-xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center relative z-10 backdrop-blur-xs">
+        <div className="w-full max-w-md bg-white/95 border border-slate-200 rounded-xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center relative z-10 backdrop-blur-xs dark:border-slate-800">
           {/* Logo */}
           <div className="mb-6 flex flex-col items-center text-center">
             <RoboraidersLogo className="w-16 h-16 text-brand mb-2" />
-            <h1 className="text-md font-black tracking-widest text-slate-900 dark:text-slate-100 uppercase font-display select-none">
+            <h1 className="text-md font-black tracking-widest text-slate-900 uppercase font-display select-none dark:text-slate-400">
               RoboRaiders Team Portal
             </h1>
-            <p className="text-[10px] text-slate-500 font-mono mt-1">FTC Team #6567</p>
+            <p className="text-[10px] text-slate-500 font-mono mt-1 dark:text-slate-400">FTC Team #6567</p>
           </div>
 
           {authMode === 'login' ? (
             /* Login Form */
             <form onSubmit={handleLogin} className="w-full space-y-4">
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                   School Email
                 </label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                    <Mail className="h-4 w-4 text-slate-400" />
+                    <Mail className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                   </span>
                   <input
                     type="email"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     placeholder="e.g. m_member@school.edu"
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-lg pl-10 pr-3 py-2 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-10 pr-3 py-2 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                   School ID / Password (lunch #)
                 </label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                    <Lock className="h-4 w-4 text-slate-400" />
+                    <Lock className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                   </span>
                   <input
                     type="password"
                     value={loginSchoolId}
                     onChange={(e) => setLoginSchoolId(e.target.value)}
                     placeholder="e.g. 123456"
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-lg pl-10 pr-3 py-2 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-10 pr-3 py-2 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     required
                   />
                 </div>
@@ -3113,16 +3105,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </button>
 
               <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
                 <span className="flex-shrink mx-3 text-[9px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500">Don't have an account?</span>
-                <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
               </div>
 
               {/* Main Button to Create Account */}
               <button
                 type="button"
                 onClick={() => setAuthMode('register')}
-                className="w-full bg-indigo-50/50 hover:bg-indigo-50 dark:bg-slate-850 dark:hover:bg-slate-800 text-brand dark:text-brand-hover font-black text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all border border-dashed border-brand/40 hover:border-brand flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-full bg-indigo-50/50 hover:bg-indigo-50 text-brand dark:text-brand/80-hover font-black text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all border border-dashed border-brand/40 hover:border-brand flex items-center justify-center gap-2 cursor-pointer shadow-xs"
               >
                 <UserPlus className="w-4 h-4 text-brand" />
                 <span>Create a New Account</span>
@@ -3145,9 +3137,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
             /* Forgot Password Form */
             <form onSubmit={handleConfirmReset} className="w-full space-y-3.5">
               <div className="text-center mb-1">
-                <span className="text-[10px] font-black text-rose-600 bg-rose-50 dark:bg-rose-955 px-2.5 py-0.5 rounded uppercase tracking-widest">Verify Password Reset</span>
+                <span className="text-[10px] font-black text-rose-600 bg-rose-50 dark:bg-slate-900 px-2.5 py-0.5 rounded uppercase tracking-widest">Verify Password Reset</span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+              <p className="text-[11px] text-slate-500 text-center leading-relaxed dark:text-slate-400">
                 Enter your School Email and click 'Send Code' to retrieve a temporary 6-digit cryptographic verification code.
               </p>
 
@@ -3162,14 +3154,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   <div className="mt-1.5 font-mono font-black text-base tracking-widest bg-emerald-100/70 dark:bg-emerald-900/40 px-3 py-1 rounded inline-block text-brand border border-emerald-200 dark:border-emerald-800 select-all">
                     {generatedResetCode}
                   </div>
-                  <div className="text-[9px] text-slate-450 mt-1 leading-normal">
+                  <div className="text-[9px] text-slate-450 mt-1 leading-normal dark:text-slate-400">
                     (Use this code in the input below to change password)
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                   School Email Address <span className="text-red-500">*</span>
                 </label>
                 <div className="flex gap-1.5">
@@ -3178,7 +3170,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     placeholder="e.g. name@school.edu"
-                    className="flex-1 bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
+                    className="flex-1 bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     required
                   />
                   <button
@@ -3198,7 +3190,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
 
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                   6-Digit Verification Code <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -3207,13 +3199,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   value={resetCodeInput}
                   onChange={(e) => setResetCodeInput(e.target.value)}
                   placeholder="e.g. 529124"
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-mono text-center font-bold tracking-widest"
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-mono text-center font-bold tracking-widest dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                   New Password / School ID (Lunch #) <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -3221,7 +3213,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   value={resetNewPassword}
                   onChange={(e) => setResetNewPassword(e.target.value)}
                   placeholder="Enter New Lunch ID Password"
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   required
                 />
               </div>
@@ -3237,7 +3229,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <button
                   type="button"
                   onClick={() => setAuthMode('login')}
-                  className="text-[11px] text-slate-500 hover:text-brand font-bold transition-colors uppercase tracking-wider cursor-pointer"
+                  className="text-[11px] text-slate-500 hover:text-brand font-bold transition-colors uppercase tracking-wider cursor-pointer dark:text-slate-400"
                 >
                   Back to Sign In
                 </button>
@@ -3251,7 +3243,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
 
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                   Full Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -3259,14 +3251,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   value={registerName}
                   onChange={(e) => setRegisterName(e.target.value)}
                   placeholder="e.g. John Doe"
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-semibold"
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-semibold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                     School Email <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -3274,12 +3266,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     value={registerEmail}
                     onChange={(e) => setRegisterEmail(e.target.value)}
                     placeholder="e.g. jdoe@school.edu"
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                     School ID (Lunch #) <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -3287,7 +3279,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     value={registerSchoolId}
                     onChange={(e) => setRegisterSchoolId(e.target.value)}
                     placeholder="Lunch Number"
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium"
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     required
                   />
                 </div>
@@ -3295,7 +3287,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                     Primary Subteam
                   </label>
                   <select
@@ -3311,7 +3303,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                          setRegisterRole('member');
                       }
                     }}
-                    className="w-full bg-slate-50 border border-slate-350 dark:bg-slate-900 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold"
+                    className="w-full bg-slate-50 border border-slate-350 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold dark:bg-slate-800 dark:text-slate-400"
                   >
                     <option value="Design/Build/Fabrication">Design/Build/Fabrication</option>
                     <option value="Programming">Programming</option>
@@ -3323,13 +3315,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                     Secondary Subteam
                   </label>
                   <select
                     value={registerSecondary}
                     onChange={(e) => setRegisterSecondary(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold"
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   >
                     <option value="None">None</option>
                     <option value="Inspire">Inspire</option>
@@ -3339,13 +3331,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
 
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                   Requested User Class / Role <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={registerRole}
                   onChange={(e) => setRegisterRole(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-black"
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-black dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                 >
                   <option value="member">Student Team Member</option>
                   <option value="captain">Subteam Lead / Captain</option>
@@ -3354,13 +3346,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
 
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                   Leadership
                 </label>
                 <select
                   value={registerLeadership}
                   onChange={(e) => setRegisterLeadership(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold"
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none font-bold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                 >
                   <option value="None">None</option>
                   <option value="Captain">Captain</option>
@@ -3376,15 +3368,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </button>
 
               <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
                 <span className="flex-shrink mx-3 text-[9px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500">Already registered?</span>
-                <div className="flex-grow border-t border-slate-200 dark:border-slate-850"></div>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setAuthMode('login')}
-                className="w-full bg-slate-50 hover:bg-emerald-50 dark:bg-slate-850 dark:hover:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-black text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all border border-dashed border-emerald-500/30 hover:border-emerald-500 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-full bg-slate-50 hover:bg-emerald-50 text-emerald-600 dark:text-emerald-400 font-black text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all border border-dashed border-emerald-500/30 hover:border-emerald-500 flex items-center justify-center gap-2 cursor-pointer shadow-xs dark:bg-slate-800"
               >
                 <LogIn className="w-4 h-4 text-emerald-500" />
                 <span>Sign In to Existing Account</span>
@@ -3418,41 +3410,41 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
         )}
 
-        <div className="w-full max-w-md bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-6 md:p-8 shadow-xl flex flex-col items-center justify-center relative">
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-6 md:p-8 shadow-xl flex flex-col items-center justify-center relative dark:bg-slate-900 dark:border-slate-800">
           
           <div className="bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 p-3.5 rounded-full mb-4 animate-pulse">
             <ShieldCheck className="w-10 h-10 animate-pulse" />
           </div>
 
-          <h2 className="text-md font-extrabold text-slate-900 dark:text-slate-50 uppercase tracking-widest text-center select-none">
+          <h2 className="text-md font-extrabold text-slate-900 uppercase tracking-widest text-center select-none dark:text-slate-400">
             Access Request Pending
           </h2>
-          <p className="text-[11px] text-slate-500 font-mono mt-1 text-center font-bold font-sans">FTC #6567 — WORKSPACE ACCESS CONTROL</p>
+          <p className="text-[11px] text-slate-500 font-mono mt-1 text-center font-bold font-sans dark:text-slate-400">FTC #6567 — WORKSPACE ACCESS CONTROL</p>
 
-          <div className="my-5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 p-4 rounded-lg w-full text-xs space-y-2 font-mono">
-            <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5 font-bold">
-              <span className="text-slate-400 uppercase tracking-wider text-[9px]">Requested Identity</span>
-              <span className="text-slate-800 dark:text-slate-100">{currentUser.name}</span>
+          <div className="my-5 bg-slate-50 border border-slate-200 p-4 rounded-lg w-full text-xs space-y-2 font-mono dark:bg-slate-800 dark:border-slate-800">
+            <div className="flex justify-between border-b border-slate-100 pb-1.5 font-bold dark:border-slate-800">
+              <span className="text-slate-400 uppercase tracking-wider text-[9px] dark:text-slate-500">Requested Identity</span>
+              <span className="text-slate-800 dark:text-slate-400">{currentUser.name}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
-              <span className="text-slate-400 uppercase tracking-wider text-[9px]">Role Group</span>
+            <div className="flex justify-between border-b border-slate-100 pb-1.5 dark:border-slate-800">
+              <span className="text-slate-400 uppercase tracking-wider text-[9px] dark:text-slate-500">Role Group</span>
               <span className="font-extrabold text-brand uppercase text-[10px]">{currentUser.role === 'mentor' ? 'Coach / Mentor' : currentUser.role === 'captain' ? 'Subteam Lead / Captain' :  'Team Member'}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
-              <span className="text-slate-400 uppercase tracking-wider text-[9px]">Email Address</span>
-              <span className="font-medium text-slate-700 dark:text-slate-300 font-mono">{currentUser.schoolEmail}</span>
+            <div className="flex justify-between border-b border-slate-100 pb-1.5 dark:border-slate-800">
+              <span className="text-slate-400 uppercase tracking-wider text-[9px] dark:text-slate-500">Email Address</span>
+              <span className="font-medium text-slate-700 font-mono dark:text-slate-300">{currentUser.schoolEmail}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
-              <span className="text-slate-400 uppercase tracking-wider text-[9px]">School ID (#)</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300 font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">••••••</span>
+            <div className="flex justify-between border-b border-slate-100 pb-1.5 dark:border-slate-800">
+              <span className="text-slate-400 uppercase tracking-wider text-[9px] dark:text-slate-500">School ID (#)</span>
+              <span className="font-bold text-slate-700 font-mono bg-slate-200 px-1 rounded dark:bg-slate-800 dark:text-slate-300">••••••</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400 uppercase tracking-wider text-[9px]">Primary Subteam</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">{formatSubteamLabel(currentUser.primarySubteam)}</span>
+              <span className="text-slate-400 uppercase tracking-wider text-[9px] dark:text-slate-500">Primary Subteam</span>
+              <span className="font-bold text-slate-800 dark:text-slate-400">{formatSubteamLabel(currentUser.primarySubteam)}</span>
             </div>
           </div>
 
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center leading-relaxed font-semibold">
+          <p className="text-[11px] text-slate-500 text-center leading-relaxed font-semibold dark:text-slate-400">
             Thank you for registering! Your account has been filed successfully, but must be reviewed and <strong>approved by an active mentor/captain</strong> before entering the engineering database.
           </p>
 
@@ -3466,7 +3458,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
             <button
               onClick={handleLogout}
-              className="w-full bg-slate-101 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold text-xs py-2 px-4 rounded uppercase tracking-wider transition-all border border-slate-300 dark:border-slate-700 flex items-center justify-center gap-2 cursor-pointer font-sans"
+              className="w-full bg-slate-101 hover:bg-slate-200 text-slate-700 font-extrabold text-xs py-2 px-4 rounded uppercase tracking-wider transition-all border border-slate-300 flex items-center justify-center gap-2 cursor-pointer font-sans dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-600"
             >
               <LogOut className="w-3.5 h-3.5" /> <span>Log Out / Cancel</span>
             </button>
@@ -3481,7 +3473,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
   if (currentUser.status === 'Rejected') {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center font-sans p-4 border-t-8 border-brand transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="rejected-root">
-        <div className="w-full max-w-md bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-6 md:p-8 shadow-xl flex flex-col items-center justify-center font-sans">
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-6 md:p-8 shadow-xl flex flex-col items-center justify-center font-sans dark:bg-slate-900 dark:border-slate-800">
           <div className="bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 p-3.5 rounded-full mb-4">
             <XCircle className="w-10 h-10" />
           </div>
@@ -3489,15 +3481,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
           <h2 className="text-md font-extrabold text-rose-700 dark:text-rose-400 uppercase tracking-widest text-center select-none">
             Access Request Denied
           </h2>
-          <p className="text-[10px] text-slate-500 font-mono mt-1 text-center font-bold">FTC #6567 — COMPROMISED OR DECLINED CREDENTIALS</p>
+          <p className="text-[10px] text-slate-500 font-mono mt-1 text-center font-bold dark:text-slate-400">FTC #6567 — COMPROMISED OR DECLINED CREDENTIALS</p>
 
-          <div className="my-5 bg-rose-500/5 border border-rose-300/30 p-4 rounded-lg text-center text-xs text-slate-700 dark:text-slate-350 font-medium">
+          <div className="my-5 bg-rose-500/5 border border-rose-300/30 p-4 rounded-lg text-center text-xs text-slate-700 font-medium dark:text-slate-300">
             Your Access Request has been turned down by team mentors/captains. If you believe this was an error, please coordinate directly with testMentor inside the lab workspace.
           </div>
 
           <button
             onClick={handleLogout}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-2 px-4 rounded uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer font-sans"
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-2 px-4 rounded uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer font-sans dark:bg-slate-950"
           >
             <LogOut className="w-3.5 h-3.5" /> <span>Back to Login</span>
           </button>
@@ -3590,11 +3582,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
     });
   }
 
+  const handleDeleteKanbanTask = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'kanbanTasks', id));
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.DELETE, `kanbanTasks/${id}`);
+    }
+  };
+
+  const handleDeleteOutreachEvent = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'outreachEvents', id));
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.DELETE, `outreachEvents/${id}`);
+    }
+  };
+
   return (
     <div className={`min-h-screen flex flex-col font-sans border-t-8 transition-colors duration-200 border-brand ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="main-root">
       
       {/* HIGH DENSITY HEADER SECTION */}
-      <header className="bg-slate-900 text-white p-4 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 shadow-lg no-print">
+      <header className="bg-slate-900 text-white p-4 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 shadow-lg no-print dark:bg-slate-950">
         <div className="flex items-center gap-3 w-full md:w-auto">
           <RoboraidersLogo className="w-12 h-12" />
           <div>
@@ -3602,7 +3610,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               <span>RoboRaiders Team Portal</span>
               <span className="text-[10px] tracking-normal font-mono bg-brand/35 text-red-200 border border-brand/50 px-1.5 rounded uppercase">LIVE</span>
             </h1>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">FTC Team #6567 — ENGINEERING NOTEBOOK WRITER</p>
+            <p className="text-xs text-slate-400 font-mono mt-0.5 dark:text-slate-500">FTC Team #6567 — ENGINEERING NOTEBOOK WRITER</p>
           </div>
         </div>
 
@@ -3612,7 +3620,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <div className="flex items-center gap-1.5" title="Your Core Level in RoboRaiders Arena">
               <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
               <span className="font-mono text-xs font-black text-amber-400">LVL {userGamification.stats.level}</span>
-              <span className="font-mono text-[10px] text-slate-400">({userGamification.stats.xp} XP)</span>
+              <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">({userGamification.stats.xp} XP)</span>
             </div>
             
             <div className="hidden sm:block h-3.5 w-px bg-slate-700" />
@@ -3638,7 +3646,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           {/* THEME TOGGLE BUTTON */}
           <button 
             onClick={() => setIsDark(!isDark)}
-            className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider border border-slate-700 flex items-center gap-1.5"
+            className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider border border-slate-700 flex items-center gap-1.5 dark:bg-slate-950"
             title="Switch Workspace Theme"
             id="theme-toggle-btn"
           >
@@ -3648,13 +3656,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
           {isUserAdminOrMentor && (
             <>
-              <label className="bg-slate-800 hover:bg-slate-700 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider cursor-pointer border border-slate-700 text-slate-300">
+              <label className="bg-slate-800 hover:bg-slate-700 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider cursor-pointer border border-slate-700 text-slate-300 dark:bg-slate-950">
                 <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
                 <span className="flex items-center gap-1"><Upload className="w-3.5 h-3.5" /> Import</span>
               </label>
               <button 
                 onClick={handleExportJSON}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider border border-slate-700 flex items-center gap-1"
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider border border-slate-700 flex items-center gap-1 dark:bg-slate-950"
               >
                 <Download className="w-3.5 h-3.5" /> Export DB
               </button>
@@ -3671,7 +3679,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
       </header>
 
       {/* ACTIVE REAL-ID USER SESSION BANNER */}
-      <div className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2 flex justify-end items-center gap-3 text-xs no-print shrink-0 transition-colors" id="active-session-banner">
+      <div className="bg-slate-100 border-b border-slate-200 px-4 py-2 flex justify-end items-center gap-3 text-xs no-print shrink-0 transition-colors dark:bg-slate-800 dark:border-slate-800" id="active-session-banner">
         <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0 justify-end shrink-0 text-xs">
           {currentView !== 'landing' && (
             <button
@@ -3686,7 +3694,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
           <button
             onClick={openSettingsModal}
-            className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-350 dark:border-slate-700 text-slate-800 dark:text-slate-200 px-3 py-1 rounded text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="bg-slate-200 hover:bg-slate-300 border border-slate-350 text-slate-800 px-3 py-1 rounded text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
             title="Update User Settings and Password"
             id="user-settings-trigger"
           >
@@ -3696,7 +3704,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
           <button
             onClick={handleLogout}
-            className="bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 border border-slate-300 dark:border-slate-700 px-3 py-1 rounded text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs animate-fade-in"
+            className="bg-white hover:bg-slate-50 text-slate-700 hover:text-red-600 dark:hover:text-red-400 border border-slate-300 px-3 py-1 rounded text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs animate-fade-in dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-800"
             title="Sign out of engineering notebook session"
           >
             <LogOut className="w-3 w-3" />
@@ -3780,7 +3788,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative overflow-hidden" id="workspace-layout-wrapper">
         
         {/* RESPONSIVE MOBILE HORIZONTAL TAB STRIP */}
-        <div className="md:hidden flex overflow-x-auto gap-2 p-2 bg-slate-900 border-b border-slate-800 shrink-0 no-print" id="workspace-mobile-nav">
+        <div className="md:hidden flex overflow-x-auto gap-2 p-2 bg-slate-900 border-b border-slate-800 shrink-0 no-print dark:bg-slate-950" id="workspace-mobile-nav">
           {sidebarLinks.map((link) => {
             const LinkIcon = link.icon;
             const isActive = currentView === link.id;
@@ -3812,17 +3820,17 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
         {/* SIDEBAR NAVIGATION PANEL (DESKTOP) */}
         <aside 
-          className={`hidden md:flex flex-col shrink-0 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-r border-slate-250 dark:border-slate-800 transition-all duration-300 no-print select-none ${
+          className={`hidden md:flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-300 border-r border-slate-250 dark:border-slate-800 transition-all duration-300 no-print select-none ${
             isSidebarCollapsed ? 'w-20' : 'w-72'
           }`}
           id="workspace-sidebar"
         >
           {/* TOP HEADER CONTROLS (COLLAPSER AT THE TOP) */}
-          <div className={`p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-950/20 flex items-center justify-between gap-2 ${
+          <div className={`p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/20 flex items-center justify-between gap-2 ${
             isSidebarCollapsed ? 'justify-center p-3' : ''
           }`}>
             {!isSidebarCollapsed && (
-              <div className="flex items-center gap-2 font-mono text-[10px] text-slate-500 dark:text-slate-400 font-extrabold tracking-widest leading-none">
+              <div className="flex items-center gap-2 font-mono text-[10px] text-slate-500 font-extrabold tracking-widest leading-none dark:text-slate-400">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                 <span>ROBORAIDERS OS</span>
               </div>
@@ -3830,7 +3838,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               type="button"
-              className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg cursor-pointer transition-all border-none bg-transparent outline-none flex items-center justify-center shadow-xs"
+              className="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-slate-900 rounded-lg cursor-pointer transition-all border-none bg-transparent outline-none flex items-center justify-center shadow-xs dark:text-slate-400 dark:hover:bg-slate-600 dark:hover:text-white"
               title={isSidebarCollapsed ? "Expand Sidebar Panel" : "Collapse Sidebar Panel"}
               id="workspace-sidebar-toggle-top"
             >
@@ -3839,7 +3847,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
 
           {/* USER CARD PROFILE PREVIEW */}
-          <div className={`p-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/45 flex flex-col gap-3.5 transition-all ${
+          <div className={`p-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/45 flex flex-col gap-3.5 transition-all ${
             isSidebarCollapsed ? 'items-center p-3' : ''
           }`}>
             <div className="flex items-center gap-3.5">
@@ -3848,7 +3856,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
               {!isSidebarCollapsed && (
                 <div className="min-w-0 flex-1">
-                  <h4 className="text-[13.5px] font-extrabold text-slate-900 dark:text-slate-50 truncate leading-none tracking-tight">{currentUser?.name}</h4>
+                  <h4 className="text-[13.5px] font-extrabold text-slate-900 truncate leading-none tracking-tight dark:text-slate-400">{currentUser?.name}</h4>
                   <span className="text-[9.5px] font-mono text-indigo-600 dark:text-indigo-400 font-black block mt-1.5 uppercase tracking-wider truncate">
                     {currentUser?.role === 'mentor' ? 'Coach / Mentor' : currentUser?.role === 'captain' ? 'Captain' :  'Team Member'}
                   </span>
@@ -3858,15 +3866,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
             {/* GAMIFIED PROGRESS TRACKER */}
             {!isSidebarCollapsed && userGamification && (
-              <div className="mt-1 bg-slate-100 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
-                <div className="flex justify-between items-center text-[10px] font-mono text-slate-600 dark:text-slate-400 leading-none">
+              <div className="mt-1 bg-slate-100 p-3.5 rounded-xl border border-slate-200/80 shadow-xs dark:bg-slate-800">
+                <div className="flex justify-between items-center text-[10px] font-mono text-slate-600 leading-none dark:text-slate-300">
                   <span className="font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-wider">LEVEL {userGamification.stats.level}</span>
-                  <span className="font-extrabold text-slate-800 dark:text-slate-200">{userGamification.stats.xp} / {userGamification.stats.xp + userGamification.stats.xpForNextLevel} XP</span>
+                  <span className="font-extrabold text-slate-800 dark:text-slate-400">{userGamification.stats.xp} / {userGamification.stats.xp + userGamification.stats.xpForNextLevel} XP</span>
                 </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2.5 border border-slate-205 dark:border-slate-850">
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-2.5 border border-slate-205 dark:bg-slate-800">
                   <div className="bg-gradient-to-r from-cyan-400 to-indigo-500 h-full transition-all duration-500" style={{ width: `${userGamification.stats.percentToNextLevel}%` }} />
                 </div>
-                <div className="text-[8.5px] text-slate-500 dark:text-slate-500 text-center uppercase tracking-widest font-mono font-bold mt-2">
+                <div className="text-[8.5px] text-slate-500 text-center uppercase tracking-widest font-mono font-bold mt-2 dark:text-slate-400">
                   {userGamification.stats.percentToNextLevel}% to Level {userGamification.stats.level + 1}
                 </div>
               </div>
@@ -3893,7 +3901,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   } outline-none border-none text-left cursor-pointer ${
                     isActive 
                       ? 'bg-brand text-white shadow-md shadow-brand/15 font-bold border-l-4 border-brand-hover scale-[1.02]' 
-                      : 'text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
                   }`}
                 >
                   <LinkIcon className={`w-[18px] h-[18px] shrink-0 transition-colors ${isActive ? 'text-white' : link.color}`} />
@@ -3902,7 +3910,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <div className="min-w-0 flex-1 flex flex-col">
                       <span className="text-[12.5px] leading-tight font-extrabold uppercase tracking-wide">{link.label}</span>
                       <span className={`text-[9.5px] font-mono leading-none mt-1 truncate uppercase tracking-normal ${
-                        isActive ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'
+                        isActive ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-300'
                       }`}>
                         {link.sublabel}
                       </span>
@@ -3923,7 +3931,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
           {/* LOWER STATUS FOOTER */}
           {!isSidebarCollapsed && (
-            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-100/30 dark:bg-slate-950/20 flex items-center justify-center font-mono text-[8.5px] text-slate-400 dark:text-slate-500 font-bold tracking-widest leading-none">
+            <div className="p-3 border-t border-slate-200 bg-slate-100/30 flex items-center justify-center font-mono text-[8.5px] text-slate-400 font-bold tracking-widest leading-none dark:text-slate-500 dark:border-slate-800">
               <span>ACTIVE SYNCHRONOUS CLOUD</span>
             </div>
           )}
@@ -3936,14 +3944,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
       {currentView === 'landing' && (
         <div className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 no-print" id="dashboard-landing-hub animate-fade-in">
           {/* Welcome Card & Team Announcement */}
-          <div className="bg-slate-900 text-white rounded-xl p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden border border-slate-800 shadow-xl">
+          <div className="bg-slate-900 text-white rounded-xl p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden border border-slate-800 shadow-xl dark:bg-slate-950">
             <div className="absolute top-0 right-0 transform translate-x-12 -translate-y-12 w-48 h-48 bg-brand/10 rounded-full blur-3xl pointer-events-none"></div>
             <div className="z-10 text-center md:text-left">
               <h1 className="text-xl md:text-2xl font-extrabold tracking-tight uppercase font-display text-slate-50">
                 Welcome back, {currentUser?.name}!
               </h1>
               <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-1 items-center justify-center md:justify-start">
-                <span className="text-xs text-slate-400 font-mono">
+                <span className="text-xs text-slate-400 font-mono dark:text-slate-500">
                   Primary Subteam: <strong className="text-slate-200">{formatSubteamLabel(currentUser?.primarySubteam)}</strong>
                 </span>
               </div>
@@ -3968,7 +3976,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </div>
               ) : (
                 <div className="flex flex-col items-center">
-                  <span className="text-[10px] uppercase font-mono tracking-widest text-slate-400 font-bold">Time Card</span>
+                  <span className="text-[10px] uppercase font-mono tracking-widest text-slate-400 font-bold dark:text-slate-500">Time Card</span>
                   <span className="text-sm font-bold text-slate-200 mt-1 leading-none">Off-duty / Standby</span>
                   <button 
                     onClick={() => setCurrentView('time_entry')}
@@ -4112,11 +4120,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
               };
 
               return (
-                <div className="bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-xl p-6 shadow-md flex flex-col gap-5 relative overflow-hidden" id="roboraiders-championship-portal">
+                <div className="bg-white border border-slate-205 rounded-xl p-6 shadow-md flex flex-col gap-5 relative overflow-hidden dark:bg-slate-900" id="roboraiders-championship-portal">
                   <div className="absolute top-0 right-0 transform translate-x-16 -translate-y-16 w-48 h-48 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none"></div>
                   
                   {/* Dashboard Header */}
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="relative flex h-2 w-2">
@@ -4127,16 +4135,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           Arena Portal
                         </span>
                       </div>
-                      <h2 className="text-base font-extrabold uppercase font-display text-slate-900 dark:text-slate-50 mt-1 flex items-center gap-2">
+                      <h2 className="text-base font-extrabold uppercase font-display text-slate-900 mt-1 flex items-center gap-2 dark:text-slate-400">
                         <span>RoboRaiders Achievement Portal</span>
                       </h2>
-                      <p className="text-[11px] text-slate-550 dark:text-slate-400 font-sans mt-0.5">
+                      <p className="text-[11px] text-slate-550 font-sans mt-0.5 dark:text-slate-300">
                         Earn experience multipliers directly by submitting engineering logs, punching time cards, and solving complex robotics loop blocks.
                       </p>
                     </div>
 
                     {/* Arena Tabs Navigation */}
-                    <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200/80 dark:border-slate-800/60 font-mono text-[10px] uppercase font-bold shrink-0">
+                    <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200/80 font-mono text-[10px] uppercase font-bold shrink-0 dark:bg-slate-800">
                       {(['profile', 'subteamRanks', 'badges', 'quests', 'leaderboard'] as const).map(tab => {
                         const active = gamificationTab === tab;
                         const labelMap = {
@@ -4156,7 +4164,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             }}
                             className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
                               active 
-                                ? 'bg-white dark:bg-slate-850 text-cyan-600 dark:text-cyan-400 shadow-sm font-extrabold border-b-2 border-cyan-500' 
+                                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-sm font-extrabold border-b-2 border-cyan-500' 
                                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                             }`}
                           >
@@ -4181,24 +4189,24 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch"
                         >
                           {/* Radial Progress Plate */}
-                          <div className="md:col-span-4 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-955/40 border border-slate-200/60 dark:border-slate-800/50 rounded-xl p-6 text-center relative overflow-hidden group min-h-[300px] md:min-h-full py-8">
+                          <div className="md:col-span-4 flex flex-col items-center justify-center bg-slate-50 border border-slate-200/60 rounded-xl p-6 text-center relative overflow-hidden group min-h-[300px] md:min-h-full py-8 dark:bg-slate-800">
                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-indigo-600"></div>
-                            <span className="text-[10px] font-mono font-extrabold text-slate-400 uppercase tracking-widest">
+                            <span className="text-[10px] font-mono font-extrabold text-slate-400 uppercase tracking-widest dark:text-slate-500">
                               Rank Class
                             </span>
                             <div className="relative mt-4 flex items-center justify-center">
                               <Award className="w-24 h-24 text-cyan-650 dark:text-cyan-400 group-hover:scale-110 transition-transform duration-300" />
-                              <div className="absolute inset-0 flex items-center justify-center -translate-y-2.5 font-mono font-black text-2xl sm:text-3xl text-slate-900 dark:text-slate-50">
+                              <div className="absolute inset-0 flex items-center justify-center -translate-y-2.5 font-mono font-black text-2xl sm:text-3xl text-slate-900 dark:text-slate-400">
                                 {stats.level}
                               </div>
                             </div>
-                            <h3 className="text-xs font-mono font-black uppercase text-slate-900 dark:text-slate-50 mt-4 tracking-wider">
+                            <h3 className="text-xs font-mono font-black uppercase text-slate-900 mt-4 tracking-wider dark:text-slate-400">
                               Level {stats.level}
                             </h3>
                             <h4 className="text-sm sm:text-[15px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider font-display leading-tight mt-1 animate-pulse px-3">
                               {stats.levelName}
                             </h4>
-                            <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-2">
+                            <p className="text-[10px] font-mono text-slate-400 mt-2 dark:text-slate-500">
                               {stats.xp} Accumulated XP
                             </p>
                           </div>
@@ -4207,19 +4215,19 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           <div className="md:col-span-8 flex flex-col gap-4">
                             <div className="flex flex-col gap-1.5">
                               <div className="flex justify-between items-end">
-                                <span className="text-[10px] font-mono uppercase font-black text-slate-450 tracking-wider">
+                                <span className="text-[10px] font-mono uppercase font-black text-slate-450 tracking-wider dark:text-slate-400">
                                   Experience Progression Matrix
                                 </span>
-                                <span className="text-[10px] font-mono text-slate-500">
+                                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                                   <strong>{stats.xpIntoLevel}</strong> / {stats.xpForNextLevel} XP to Level {stats.level + 1}
                                 </span>
                               </div>
-                              <div className="w-full h-4 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full overflow-hidden p-0.5 relative">
+                              <div className="w-full h-4 bg-slate-100 border border-slate-200 rounded-full overflow-hidden p-0.5 relative dark:bg-slate-800 dark:border-slate-800">
                                 <div 
                                   className="h-full bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-full transition-all duration-500" 
                                   style={{ width: `${stats.percentToNextLevel}%` }}
                                 ></div>
-                                <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-slate-600 dark:text-slate-300 font-bold">
+                                <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-slate-600 font-bold dark:text-slate-300">
                                   {stats.percentToNextLevel}%
                                 </div>
                               </div>
@@ -4227,25 +4235,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                             {/* Core Cumulative Scoreboard Row */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-sans">
-                              <div className="bg-slate-50/70 dark:bg-slate-950/20 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/40 text-center">
-                                <Wrench className="w-4 h-4 mx-auto text-slate-500 mb-1" />
-                                <div className="text-[10px] font-mono uppercase text-slate-400 leading-none">Workshop Hours</div>
-                                <div className="text-sm font-black font-mono text-slate-850 dark:text-slate-100 mt-1">{stats.totalHours.toFixed(1)}h</div>
+                              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/50 text-center">
+                                <Wrench className="w-4 h-4 mx-auto text-slate-500 mb-1 dark:text-slate-400" />
+                                <div className="text-[10px] font-mono uppercase text-slate-400 leading-none dark:text-slate-500">Workshop Hours</div>
+                                <div className="text-sm font-black font-mono text-slate-850 mt-1 dark:text-slate-400">{stats.totalHours.toFixed(1)}h</div>
                               </div>
-                              <div className="bg-slate-50/70 dark:bg-slate-950/20 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/40 text-center">
+                              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/50 text-center">
                                 <BookOpen className="w-4 h-4 mx-auto text-cyan-600/85 dark:text-cyan-400 mb-1" />
-                                <div className="text-[10px] font-mono uppercase text-slate-400 leading-none">Journal Logs</div>
-                                <div className="text-sm font-black font-mono text-slate-850 dark:text-slate-100 mt-1">{stats.totalJournals} Logs</div>
+                                <div className="text-[10px] font-mono uppercase text-slate-400 leading-none dark:text-slate-500">Journal Logs</div>
+                                <div className="text-sm font-black font-mono text-slate-850 mt-1 dark:text-slate-400">{stats.totalJournals} Logs</div>
                               </div>
-                              <div className="bg-slate-50/70 dark:bg-slate-950/20 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/40 text-center">
+                              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/50 text-center">
                                 <Award className="w-4 h-4 mx-auto text-pink-500/85 mb-1" />
-                                <div className="text-[10px] font-mono uppercase text-slate-400 leading-none">Trophy Badges</div>
-                                <div className="text-sm font-black font-mono text-slate-850 dark:text-slate-100 mt-1">{stats.badgesUnlocked} Unlocked</div>
+                                <div className="text-[10px] font-mono uppercase text-slate-400 leading-none dark:text-slate-500">Trophy Badges</div>
+                                <div className="text-sm font-black font-mono text-slate-850 mt-1 dark:text-slate-400">{stats.badgesUnlocked} Unlocked</div>
                               </div>
-                              <div className="bg-slate-50/70 dark:bg-slate-950/20 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/40 text-center">
+                              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/50 text-center">
                                 <CheckCircle className="w-4 h-4 mx-auto text-rose-500/85 mb-1" />
-                                <div className="text-[10px] font-mono uppercase text-slate-400 leading-none">Validation Ratio</div>
-                                <div className="text-sm font-black font-mono text-slate-850 dark:text-slate-100 mt-1">
+                                <div className="text-[10px] font-mono uppercase text-slate-400 leading-none dark:text-slate-500">Validation Ratio</div>
+                                <div className="text-sm font-black font-mono text-slate-850 mt-1 dark:text-slate-400">
                                   {stats.totalJournals > 0 
                                     ? `${Math.round((entries.filter(e => e.status === 'Approved' && (e.author.includes(currentUser.name) || e.author.includes(currentUser.schoolEmail))).length / stats.totalJournals) * 100)}%`
                                     : '100%'}
@@ -4253,7 +4261,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                               </div>
                             </div>
 
-                            <p className="text-[10px] font-mono text-slate-400 leading-normal bg-cyan-50/30 dark:bg-cyan-950/10 p-2.5 rounded border border-cyan-100/50 dark:border-cyan-900/20">
+                            <p className="text-[10px] font-mono text-slate-400 leading-normal bg-cyan-50/30 dark:bg-cyan-950/10 p-2.5 rounded border border-cyan-100/50 dark:border-cyan-900/20 dark:text-slate-500">
                               ⚡ <strong>Pro Tip:</strong> Need quick XP multipliers? Ask a Lead Mentor or testMentor to completely Approve your "Pending Review" journal entries on the main hub. Approved entries score <strong>+120 XP extra each!</strong>
                             </p>
 
@@ -4285,21 +4293,21 @@ ${entry.planNextTime || '_No carry-over specified._'}
                               const guildObj = SUBTEAM_GUILDS.find(g => g.id === userGuildId) || SUBTEAM_GUILDS[0];
 
                               return (
-                                <div className="bg-slate-50 dark:bg-slate-950/35 border border-slate-200/60 dark:border-slate-805 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4 relative overflow-hidden group mt-3">
+                                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4 relative overflow-hidden group mt-3 dark:bg-slate-800">
                                   <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-radial from-cyan-500/5 to-transparent pointer-events-none"></div>
                                   
                                   {/* Icon frame */}
-                                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/85 dark:border-slate-800 shadow-sm shrink-0 flex items-center justify-center">
+                                  <div className="p-3 bg-white rounded-xl border border-slate-200/85 shadow-sm shrink-0 flex items-center justify-center dark:bg-slate-900">
                                     {getGamifiedIcon(guildObj.icon, "w-10 h-10")}
                                   </div>
 
                                   <div className="flex-1 flex flex-col gap-1.5 text-center sm:text-left w-full">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 w-full">
                                       <div>
-                                        <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest leading-none">
+                                        <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
                                           My Guild / Division Alignment
                                         </span>
-                                        <h3 className="text-sm font-black text-slate-850 dark:text-slate-100 uppercase tracking-wide flex items-center justify-center sm:justify-start gap-1.5 mt-0.5">
+                                        <h3 className="text-sm font-black text-slate-850 uppercase tracking-wide flex items-center justify-center sm:justify-start gap-1.5 mt-0.5 dark:text-slate-400">
                                           <span>{guildObj.name}</span>
                                         </h3>
                                       </div>
@@ -4312,14 +4320,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                       <h4 className="text-md font-extrabold text-indigo-650 dark:text-indigo-400 uppercase tracking-wide">
                                         🏆 {subRankData.currentRank.title}
                                       </h4>
-                                      <p className="text-[11px] text-slate-500 dark:text-slate-450 italic font-medium leading-relaxed mt-1">
+                                      <p className="text-[11px] text-slate-500 italic font-medium leading-relaxed mt-1 dark:text-slate-400">
                                         "{subRankData.currentRank.explanation}"
                                       </p>
                                     </div>
 
                                     {/* Guild Progress bar */}
                                     <div className="mt-2.5">
-                                      <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mb-1">
+                                      <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mb-1 dark:text-slate-500">
                                         <span>Division XP: <strong>{subRankData.points} XP</strong></span>
                                         {subRankData.nextRank ? (
                                           <span>Next Link: <strong>{(() => {
@@ -4332,7 +4340,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                           <span className="text-amber-500 animate-pulse font-bold">✨ SECRET ZENITH UNLOCKED</span>
                                         )}
                                       </div>
-                                      <div className="w-full h-2 bg-slate-205 dark:bg-slate-900 rounded-full overflow-hidden relative">
+                                      <div className="w-full h-2 bg-slate-205 rounded-full overflow-hidden relative">
                                         <div 
                                           className={`h-full rounded-full transition-all duration-500 ${
                                             subRankData.rankIndex >= guildObj.ranks.length - 1 
@@ -4342,7 +4350,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                           style={{ width: `${subRankData.percentToNext}%` }}
                                         ></div>
                                       </div>
-                                      <p className="text-[8.5px] font-mono text-slate-400 mt-1.5">
+                                      <p className="text-[8.5px] font-mono text-slate-400 mt-1.5 dark:text-slate-500">
                                         💡 Guild XP increase as: <strong>+5 XP</strong> per lab hour + <strong>+12 XP</strong> per journal writeup logged in {guildObj.codename}.
                                       </p>
                                     </div>
@@ -4363,14 +4371,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           exit={{ opacity: 0, y: -10 }}
                           className="flex flex-col gap-5 text-xs font-sans w-full"
                         >
-                          <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-                            <h3 className="text-sm font-black text-slate-850 dark:text-slate-100 uppercase tracking-wide flex items-center gap-1.5">
+                          <div className="border-b border-slate-100 pb-3 dark:border-slate-800">
+                            <h3 className="text-sm font-black text-slate-850 uppercase tracking-wide flex items-center gap-1.5 dark:text-slate-400">
                               <span>Guild & Mentor Career Trees</span>
                               <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-mono text-[9px] font-black rounded uppercase">
                                 5 Specialized Divisions
                               </span>
                             </h3>
-                            <p className="text-[11px] text-slate-450 dark:text-slate-400 mt-1 leading-normal">
+                            <p className="text-[11px] text-slate-450 mt-1 leading-normal dark:text-slate-400">
                               Advance through hierarchical ranks in student or mentor divisions. Earn Guild XP via <strong>laboratory hours (+5 XP/hr)</strong> and <strong>high-fidelity journal entries (+12 XP/log)</strong>.
                             </p>
                           </div>
@@ -4404,9 +4412,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     
                                     const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, currentUser.role, stats.xp);
                                     
-                                    let activeColor = "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-350";
+                                    let activeColor = "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300";
                                     if (isActive) {
-                                      if (g.color === 'slate') activeColor = "border-slate-650 dark:border-slate-500 bg-slate-50 dark:bg-slate-850 ring-2 ring-slate-500/10 text-slate-900 dark:text-slate-50";
+                                      if (g.color === 'slate') activeColor = "border-slate-650 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 ring-2 ring-slate-500/10 text-slate-900 dark:text-slate-400";
                                       if (g.color === 'cyan') activeColor = "border-cyan-550 dark:border-cyan-500 bg-cyan-50/10 dark:bg-cyan-950/20 ring-2 ring-cyan-500/10 text-cyan-750 dark:text-cyan-400";
                                       if (g.color === 'emerald') activeColor = "border-emerald-550 dark:border-emerald-500 bg-emerald-50/10 dark:bg-emerald-950/20 ring-2 ring-emerald-500/10 text-emerald-750 dark:text-emerald-400";
                                       if (g.color === 'amber') activeColor = "border-amber-550 dark:border-amber-500 bg-amber-50/10 dark:bg-amber-950/20 ring-2 ring-amber-500/10 text-amber-750 dark:text-amber-400";
@@ -4432,12 +4440,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                           {isLocked ? (
                                             <>
                                               <span className="text-[10px] font-mono text-rose-550 font-extrabold flex items-center gap-1">🔒 Locked</span>
-                                              <span className="text-[9px] font-mono text-slate-400 mt-0.5">Role Restricted</span>
+                                              <span className="text-[9px] font-mono text-slate-400 mt-0.5 dark:text-slate-500">Role Restricted</span>
                                             </>
                                           ) : (
                                             <>
-                                              <span className="text-[10px] font-mono text-slate-400 font-extrabold truncate">Rank {subStats.currentRank.rank}: {subStats.currentRank.title}</span>
-                                              <span className="text-[9px] font-mono text-slate-500 mt-0.5">{subStats.points} XP accumulated</span>
+                                              <span className="text-[10px] font-mono text-slate-400 font-extrabold truncate dark:text-slate-500">Rank {subStats.currentRank.rank}: {subStats.currentRank.title}</span>
+                                              <span className="text-[9px] font-mono text-slate-500 mt-0.5 dark:text-slate-400">{subStats.points} XP accumulated</span>
                                             </>
                                           )}
                                         </div>
@@ -4467,7 +4475,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                   const isLocked = activeGuild.id === 'Mentoring' ? !isMentorUser : isMentorUser;
                                   
                                   return (
-                                    <div className="bg-slate-50 dark:bg-slate-950/20 border border-slate-201 dark:border-slate-800 rounded-xl p-5 flex flex-col gap-4 w-full">
+                                    <div className="bg-slate-50 border border-slate-201 rounded-xl p-5 flex flex-col gap-4 w-full dark:bg-slate-800">
                                       {isLocked && (
                                         <div className="bg-rose-500/10 border border-rose-500/20 text-rose-750 dark:text-rose-400 p-3.5 rounded-lg text-xs flex items-center gap-2.5 font-medium leading-normal">
                                           <ShieldCheck className="w-5 h-5 text-rose-500 shrink-0" />
@@ -4481,20 +4489,20 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                         </div>
                                       )}
                                       {/* Active Guild Header Card */}
-                                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200/40 dark:border-slate-800/60 pb-3 w-full">
+                                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200/40 pb-3 w-full">
                                         <div className="flex items-center gap-3">
-                                          <div className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-lg shadow-sm">
+                                          <div className="p-2 bg-white border border-slate-200 rounded-lg shadow-sm dark:bg-slate-900 dark:border-slate-800">
                                             {getGamifiedIcon(activeGuild.icon, "w-6 h-6")}
                                           </div>
                                           <div>
-                                            <h4 className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Active Division Selected</h4>
-                                            <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 uppercase">{activeGuild.name}</h3>
+                                            <h4 className="text-[9px] font-black uppercase text-slate-450 tracking-wider dark:text-slate-400">Active Division Selected</h4>
+                                            <h3 className="text-sm font-extrabold text-slate-800 uppercase dark:text-slate-400">{activeGuild.name}</h3>
                                           </div>
                                         </div>
                                         
                                         <div className="text-left sm:text-right flex flex-col items-start sm:items-end">
-                                          <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest">Division Progress</span>
-                                          <span className="text-xs font-mono font-black text-slate-800 dark:text-slate-200">
+                                          <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest dark:text-slate-500">Division Progress</span>
+                                          <span className="text-xs font-mono font-black text-slate-800 dark:text-slate-400">
                                             {guildHours.toFixed(1)}h logged · {guildJournals} journal logs
                                           </span>
                                         </div>
@@ -4502,7 +4510,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                                       {/* Progressive Timeline of Ranks */}
                                       <div className="flex flex-col gap-3 w-full">
-                                        <span className="text-[10px] font-mono uppercase font-black text-slate-400 tracking-wider mb-1">
+                                        <span className="text-[10px] font-mono uppercase font-black text-slate-400 tracking-wider mb-1 dark:text-slate-500">
                                           Division Promotion Ladder (1 to {activeGuild.ranks.length})
                                         </span>
                                         
@@ -4534,8 +4542,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                                   isUnlocked 
                                                     ? 'bg-emerald-500/[0.02] border-emerald-500/25 dark:border-emerald-950/30' 
                                                     : isTeamDiscovered
-                                                      ? 'bg-slate-50/70 border-slate-200 dark:bg-slate-900/15 dark:border-slate-800'
-                                                      : 'bg-transparent border-dashed border-slate-250 dark:border-slate-850 opacity-60'
+                                                      ? 'bg-slate-50/70 border-slate-200 dark:bg-slate-800/15 dark:border-slate-800'
+                                                      : 'bg-transparent border-dashed border-slate-250 dark:border-slate-800 opacity-60'
                                                 }`}
                                               >
                                                 {/* Rank Badge Indicator */}
@@ -4544,7 +4552,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                                     ? 'bg-emerald-100 border-emerald-300 text-emerald-850 dark:bg-emerald-950 dark:border-emerald-905 dark:text-emerald-400' 
                                                     : isTeamDiscovered
                                                       ? 'bg-indigo-50 border-indigo-250 text-indigo-700 dark:bg-indigo-950/50 dark:border-indigo-900 dark:text-indigo-455'
-                                                      : 'bg-slate-100/40 border-slate-205 text-slate-400 dark:bg-slate-900/30 dark:border-slate-800 dark:text-slate-600'
+                                                      : 'bg-slate-100/40 border-slate-205 text-slate-400 dark:bg-slate-800/30 dark:border-slate-800 dark:text-slate-300'
                                                 }`}>
                                                   {isUnlocked ? "✓" : isSecret ? "❓" : r.rank}
                                                 </div>
@@ -4552,7 +4560,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                                 <div className="flex-1 min-w-0">
                                                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 w-full">
                                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                                      <h3 className={`text-xs font-black uppercase tracking-wide truncate ${isUnlocked ? 'text-slate-850 dark:text-slate-100 font-extrabold' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                      <h3 className={`text-xs font-black uppercase tracking-wide truncate ${isUnlocked ? 'text-slate-850 dark:text-slate-300 font-extrabold' : 'text-slate-500 dark:text-slate-400'}`}>
                                                         {isUnlocked ? "🏆 " : ""}{displayedTitle}
                                                       </h3>
                                                       {isUnlocked && (
@@ -4566,7 +4574,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                                         </span>
                                                       )}
                                                       {isSecret && (
-                                                        <span className="text-[8px] bg-slate-100 dark:bg-slate-800 text-slate-550 dark:text-slate-400 font-mono font-black uppercase tracking-wider px-1.5 py-0.2 rounded leading-none border border-slate-200 dark:border-slate-700">
+                                                        <span className="text-[8px] bg-slate-100 text-slate-550 font-mono font-black uppercase tracking-wider px-1.5 py-0.2 rounded leading-none border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800">
                                                           Classified
                                                         </span>
                                                       )}
@@ -4575,13 +4583,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                                     <span className={`text-[9px] font-mono px-1.5 py-0.2 select-none shrink-0 uppercase rounded-sm border ${
                                                       isUnlocked 
                                                         ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-250 dark:border-emerald-900/40 text-emerald-750 dark:text-emerald-400' 
-                                                        : 'bg-slate-105 border-slate-205 text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-500'
+                                                        : 'bg-slate-105 border-slate-205 text-slate-500 dark:bg-slate-800 dark:border-slate-800 dark:text-slate-300'
                                                     }`}>
                                                       Requires {reqPoints} XP
                                                     </span>
                                                   </div>
                                                   
-                                                  <p className={`text-[11px] mt-1.5 leading-normal italic ${isUnlocked ? 'text-slate-650 dark:text-slate-350 font-medium' : isSecret ? 'text-slate-450 dark:text-slate-500 font-light' : 'text-slate-400 dark:text-slate-500 font-normal'}`}>
+                                                  <p className={`text-[11px] mt-1.5 leading-normal italic ${isUnlocked ? 'text-slate-650 dark:text-slate-300 font-medium' : isSecret ? 'text-slate-450 dark:text-slate-300 font-light' : 'text-slate-400 dark:text-slate-300 font-normal'}`}>
                                                     "{displayedDesc}"
                                                   </p>
 
@@ -4619,11 +4627,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           exit={{ opacity: 0, y: -10 }}
                           className="flex flex-col gap-4 text-xs font-sans"
                         >
-                          <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                          <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 dark:border-slate-800">
                             <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
                               FTC Field-Battle Achievement Wall
                             </span>
-                            <span className="text-[10px] font-mono text-slate-500">
+                            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                               Progress: <strong>{stats.badgesUnlocked}</strong> / {badges.length} Badges Earned
                             </span>
                           </div>
@@ -4636,8 +4644,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                   onClick={() => toggleBadge(badge.id)}
                                   className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all duration-300 relative overflow-hidden group select-none cursor-pointer ${
                                     badge.unlocked 
-                                      ? 'bg-slate-50 dark:bg-slate-905 border-cyan-500/40 shadow-sm hover:shadow-cyan-500/10 hover:border-cyan-500/80 ring-1 ring-cyan-500/5' 
-                                      : 'bg-slate-50/40 dark:bg-slate-955/20 border-slate-200/60 dark:border-slate-800/50 opacity-60 hover:opacity-100'
+                                      ? 'bg-slate-50 dark:bg-slate-800 border-cyan-500/40 shadow-sm hover:shadow-cyan-500/10 hover:border-cyan-500/80 ring-1 ring-cyan-500/5' 
+                                      : 'bg-slate-50/40 dark:bg-slate-800/20 border-slate-200/60 dark:border-slate-800/50 opacity-60 hover:opacity-100'
                                   }`}
                                   title={`${badge.name}`}
                                 >
@@ -4649,16 +4657,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     <div className={`p-2 rounded-lg border shrink-0 transition-transform group-hover:scale-110 ${
                                       badge.unlocked 
                                         ? 'bg-gradient-to-br from-cyan-5 to-cyan-100/50 border-cyan-200 dark:from-cyan-950/30 dark:to-teal-950/20 dark:border-cyan-800' 
-                                        : 'bg-slate-200/55 dark:bg-slate-900 border-slate-300 dark:border-slate-800 text-slate-400'
+                                        : 'bg-slate-200/55 dark:bg-slate-800 border-slate-300 dark:border-slate-800 text-slate-400'
                                     }`}>
                                       {badge.unlocked ? (
                                         getGamifiedIcon(badge.icon, "w-5 h-5")
                                       ) : (
-                                        <Lock className="w-5 h-5 text-slate-400 dark:text-slate-650" />
+                                        <Lock className="w-5 h-5 text-slate-400 dark:text-slate-500" />
                                       )}
                                     </div>
                                     <div className="min-w-0">
-                                      <h4 className="font-extrabold text-[12px] text-slate-900 dark:text-slate-100 uppercase tracking-wide truncate">
+                                      <h4 className="font-extrabold text-[12px] text-slate-900 uppercase tracking-wide truncate dark:text-slate-400">
                                         {badge.name}
                                       </h4>
                                       <p className={`text-[10px] text-slate-450 dark:text-slate-400 leading-tight mt-0.5 transition-all duration-300 ${expandedBadges[badge.id] ? '' : 'line-clamp-2'}`}>
@@ -4668,12 +4676,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                   </div>
 
                                   <div className={`mt-3.5 border-t border-slate-105 dark:border-slate-800 pt-2 flex flex-col gap-1 text-[9px] font-mono transition-all duration-300 ${expandedBadges[badge.id] ? 'opacity-100 translate-y-0' : 'opacity-100'}`}>
-                                    <div className={`flex ${expandedBadges[badge.id] ? 'flex-col gap-1 items-start font-mono' : 'justify-between items-center'} text-slate-400 dark:text-slate-500`}>
-                                      <span className="uppercase text-[8px] font-black tracking-wider text-slate-450 dark:text-slate-500">Requirement:</span>
+                                    <div className={`flex ${expandedBadges[badge.id] ? 'flex-col gap-1 items-start font-mono' : 'justify-between items-center'} text-slate-400 dark:text-slate-300`}>
+                                      <span className="uppercase text-[8px] font-black tracking-wider text-slate-450 dark:text-slate-400">Requirement:</span>
                                       <span 
-                                        className={`font-bold transition-all duration-300 text-slate-700 dark:text-slate-350 ${
+                                        className={`font-bold transition-all duration-300 text-slate-700 dark:text-slate-300 ${
                                           expandedBadges[badge.id] 
-                                            ? 'whitespace-normal text-left text-[9.5px] leading-normal bg-slate-100/60 dark:bg-slate-900/40 p-1.5 rounded border border-slate-200/50 dark:border-slate-800/50 w-full mt-0.5' 
+                                            ? 'whitespace-normal text-left text-[9.5px] leading-normal bg-slate-100/60 dark:bg-slate-800/40 p-1.5 rounded border border-slate-200/50 dark:border-slate-800/50 w-full mt-0.5' 
                                             : 'truncate max-w-[110px] text-right'
                                         }`} 
                                         title={badge.reqText}
@@ -4681,9 +4689,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                         {badge.reqText}
                                       </span>
                                     </div>
-                                    <div className="w-full bg-slate-100 dark:bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-800 mt-0.5">
+                                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200/50 mt-0.5 dark:bg-slate-800">
                                       <div 
-                                        className={`h-full rounded-full ${badge.unlocked ? 'bg-cyan-500' : 'bg-slate-350 dark:bg-slate-700'}`} 
+                                        className={`h-full rounded-full ${badge.unlocked ? 'bg-cyan-500' : 'bg-slate-350 dark:bg-slate-800'}`} 
                                         style={{ width: `${badge.progress}%` }}
                                       ></div>
                                     </div>
@@ -4704,11 +4712,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           exit={{ opacity: 0, y: -10 }}
                           className="flex flex-col gap-4 text-xs font-sans"
                         >
-                          <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                          <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 dark:border-slate-800">
                             <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
                               Roboraiders Weekly Team Quests
                             </span>
-                            <span className="text-[10px] font-mono text-slate-500">
+                            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                               Tactical rewards stack dynamically
                             </span>
                           </div>
@@ -4722,7 +4730,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                   className={`p-4 rounded-xl border flex flex-col justify-between transition-all duration-300 relative overflow-hidden group select-none ${
                                     quest.unlocked 
                                       ? 'bg-emerald-500/[0.02] dark:bg-emerald-500/[0.01] border-emerald-500/25 shadow-sm' 
-                                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-800'
                                   }`}
                                 >
                                   {quest.unlocked && (
@@ -4735,29 +4743,29 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     <div className={`p-2.5 rounded-lg border mt-0.5 shrink-0 transition-transform group-hover:rotate-12 ${
                                       quest.unlocked 
                                         ? 'bg-emerald-100/40 border-emerald-250 dark:bg-emerald-950/20 dark:border-emerald-800' 
-                                        : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                                        : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-800'
                                     }`}>
                                       {getGamifiedIcon(quest.icon, "w-4.5 h-4.5")}
                                     </div>
                                     <div className="min-w-0 pr-12">
-                                      <h4 className="font-extrabold text-[12px] text-slate-850 dark:text-slate-100 uppercase tracking-wide">
+                                      <h4 className="font-extrabold text-[12px] text-slate-850 uppercase tracking-wide dark:text-slate-400">
                                         {quest.name}
                                       </h4>
-                                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-1 max-w-sm leading-normal">
+                                      <p className="text-[10.5px] text-slate-500 mt-1 max-w-sm leading-normal dark:text-slate-400">
                                         {quest.description}
                                       </p>
                                     </div>
                                   </div>
 
-                                  <div className="mt-4 border-t border-slate-100 dark:border-slate-800/85 pt-3 flex items-center justify-between gap-4">
+                                  <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between gap-4 dark:border-slate-800">
                                     <div className="flex-1">
-                                      <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-1">
+                                      <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-1 dark:text-slate-500">
                                         <span>Completion:</span>
-                                        <span className="font-bold text-slate-705 dark:text-slate-300">
+                                        <span className="font-bold text-slate-705">
                                           {quest.currentCount} / {quest.targetCount} ({pct}%)
                                         </span>
                                       </div>
-                                      <div className="w-full bg-slate-100 dark:bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-800 relative">
+                                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200/50 relative dark:bg-slate-800">
                                         <div 
                                           className={`h-full rounded-full transition-all duration-500 ${quest.unlocked ? 'bg-emerald-500' : 'bg-cyan-500'}`} 
                                           style={{ width: `${pct}%` }}
@@ -4766,7 +4774,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     </div>
 
                                     <div className="shrink-0 text-center font-mono">
-                                      <div className="text-[8px] text-slate-400 uppercase font-black tracking-wider leading-none">XP AWARD</div>
+                                      <div className="text-[8px] text-slate-400 uppercase font-black tracking-wider leading-none dark:text-slate-500">XP AWARD</div>
                                       <div className={`text-xs font-black mt-1 ${quest.unlocked ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
                                         +{quest.xpReward} XP
                                       </div>
@@ -4786,14 +4794,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
-                          className="flex flex-col gap-4 text-xs font-sans text-slate-850 dark:text-slate-100"
+                          className="flex flex-col gap-4 text-xs font-sans text-slate-850 dark:text-slate-400"
                         >
-                          <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-100 dark:border-slate-800 pb-2 gap-2">
+                          <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-100 pb-2 gap-2 dark:border-slate-800">
                             <div className="flex flex-col">
                               <span className="text-[10px] font-mono uppercase font-black text-slate-455 tracking-wider">
                                 Roboraiders Championship scoreboard
                               </span>
-                              <span className="text-[10px] font-mono text-slate-550 mt-0.5">
+                              <span className="text-[10px] font-mono text-slate-550 mt-0.5 dark:text-slate-300">
                                 Active team scoreboard. Click player to inspect trophy badge case.
                               </span>
                             </div>
@@ -4809,10 +4817,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           <div className="grid grid-cols-1 gap-5 items-start">
                             
                             {/* Scoreboard table index */}
-                            <div className="max-h-[280px] overflow-y-auto border border-slate-250 dark:border-slate-800 rounded-lg bg-slate-50/20 dark:bg-slate-955/20 shadow-inner">
+                            <div className="max-h-[280px] overflow-y-auto border border-slate-250 rounded-lg bg-slate-50/20 shadow-inner dark:border-slate-800">
                               <table className="w-full text-left text-[11px] border-collapse font-sans">
                                 <thead>
-                                  <tr className="border-b border-slate-200 dark:border-slate-800 text-[9px] font-mono uppercase bg-slate-50 dark:bg-slate-900 text-slate-505 tracking-wider">
+                                  <tr className="border-b border-slate-200 text-[9px] font-mono uppercase bg-slate-50 text-slate-505 tracking-wider dark:bg-slate-800 dark:border-slate-800">
                                     <th className="py-2.5 px-3 text-center w-14">Rank</th>
                                     <th className="py-2.5 px-3">Robotics Specialist</th>
                                     <th className="py-2.5 px-2">Subteam Declared</th>
@@ -4825,12 +4833,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     const isSelf = player.account.id === currentUser.id;
                                     const medalColors = [
                                       'bg-amber-100 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300', // #1
-                                      'bg-slate-150 border-slate-300 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200', // #2
+                                      'bg-slate-150 border-slate-300 text-slate-800 dark:bg-slate-800 dark:border-slate-800 dark:text-slate-400', // #2
                                       'bg-orange-100 border-orange-300 text-orange-950 dark:bg-orange-950/40 dark:border-orange-850 dark:text-orange-300', // #3
                                     ];
                                     const currentClass = isSelf 
                                       ? 'bg-cyan-50/40 dark:bg-cyan-950/5 hover:bg-cyan-50/80 dark:hover:bg-cyan-950/15 border-l-2 border-l-cyan-500' 
-                                      : 'border-b border-slate-100 dark:border-slate-800 hover:bg-slate-100/40 dark:hover:bg-slate-800/40';
+                                      : 'border-b border-slate-100 dark:border-slate-800 hover:bg-slate-100/40 dark:hover:bg-slate-600/40';
 
                                     return (
                                       <tr 
@@ -4850,7 +4858,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                         <td className="py-3 px-3">
                                           <div className="flex items-center gap-1.5">
                                             <div className="flex flex-col">
-                                              <span className="font-bold flex items-center gap-1.5 text-slate-900 dark:text-slate-100">
+                                              <span className="font-bold flex items-center gap-1.5 text-slate-900 dark:text-slate-400">
                                                 {player.account.name}
                                                 {isSelf && (
                                                   <span className="bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300 font-mono text-[8px] px-1 rounded uppercase font-black tracking-wide shrink-0">
@@ -4858,14 +4866,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                                   </span>
                                                 )}
                                               </span>
-                                              <span className="text-[9.5px] font-mono text-slate-400 truncate max-w-[170px]">
+                                              <span className="text-[9.5px] font-mono text-slate-400 truncate max-w-[170px] dark:text-slate-500">
                                                 {player.account.schoolEmail}
                                               </span>
                                             </div>
                                           </div>
                                         </td>
                                         <td className="py-3 px-2">
-                                          <span className="font-mono text-[9px] border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-905 px-1.5 py-0.5 rounded truncate max-w-[150px] inline-block text-slate-700 dark:text-slate-350">
+                                          <span className="font-mono text-[9px] border border-slate-200 bg-slate-100/50 px-1.5 py-0.5 rounded truncate max-w-[150px] inline-block text-slate-700 dark:text-slate-300 dark:border-slate-800">
                                             {player.account.primarySubteam}
                                           </span>
                                         </td>
@@ -4878,7 +4886,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                         <td className="py-3 px-3 text-right">
                                           <div className="flex flex-col select-none font-mono">
                                             <span className="font-black text-cyan-650 dark:text-cyan-400">{player.stats.xp} XP</span>
-                                            <span className="text-[9.5px] font-bold text-slate-400 dark:text-slate-500 uppercase">Lv.{player.stats.level}</span>
+                                            <span className="text-[9.5px] font-bold text-slate-400 uppercase dark:text-slate-500">Lv.{player.stats.level}</span>
                                           </div>
                                         </td>
                                       </tr>
@@ -4943,11 +4951,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       animate={{ scale: 1, y: 0, opacity: 1 }}
                       exit={{ scale: 0.95, y: 15, opacity: 0 }}
                       transition={{ type: "spring", damping: 25, stiffness: 350 }}
-                      className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+                      className="relative w-full max-w-lg bg-white border border-slate-205 rounded-xl shadow-2xl overflow-hidden flex flex-col dark:bg-slate-900"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Header */}
-                      <div className="bg-slate-900 text-white px-4 py-3 pb-3 border-b border-slate-950 flex justify-between items-center shrink-0">
+                      <div className="bg-slate-900 text-white px-4 py-3 pb-3 border-b border-slate-950 flex justify-between items-center shrink-0 dark:bg-slate-950">
                         <div className="flex items-center gap-2">
                           <Award className="w-4 h-4 text-pink-500 animate-pulse" />
                           <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
@@ -4957,27 +4965,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         <button
                           type="button"
                           onClick={() => setInspectLeaderboardAccount(null)}
-                          className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                          className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-500"
                         >
                           <X className="w-4 h-4" />
                         </button>
                       </div>
 
                       {/* Body */}
-                      <div className="p-5 flex flex-col gap-4 text-slate-900 dark:text-slate-100 overflow-y-auto max-h-[70vh]">
+                      <div className="p-5 flex flex-col gap-4 text-slate-900 overflow-y-auto max-h-[70vh] dark:text-slate-400">
                         
                         {/* Player General Layout */}
-                        <div className="bg-slate-150/50 dark:bg-slate-950/40 p-4 rounded-xl border border-slate-250 dark:border-slate-800 flex items-center gap-4">
+                        <div className="bg-slate-150/50 p-4 rounded-xl border border-slate-250 flex items-center gap-4 dark:border-slate-800">
                           <div className="bg-brand text-white w-14 h-14 rounded-full flex items-center justify-center font-bold font-mono text-2xl shadow-md border-2 border-white select-none shrink-0">
                             {inspectLeaderboardAccount.name.slice(0, 2).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <h3 className="text-sm font-black text-slate-950 dark:text-slate-50 uppercase flex items-center gap-1.5 truncate">
+                            <h3 className="text-sm font-black text-slate-950 uppercase flex items-center gap-1.5 truncate dark:text-slate-400">
                               {inspectLeaderboardAccount.name}
                             </h3>
-                            <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">{inspectLeaderboardAccount.schoolEmail}</p>
+                            <p className="text-xs text-slate-400 font-mono mt-0.5 truncate dark:text-slate-500">{inspectLeaderboardAccount.schoolEmail}</p>
                             <div className="mt-1.5 flex flex-wrap gap-1.5 text-[9px] font-mono uppercase font-black">
-                              <span className="bg-slate-200 dark:bg-slate-850 px-2 py-0.5 rounded text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-800">
+                              <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-800 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800">
                                 {inspectLeaderboardAccount.primarySubteam}
                               </span>
                               <span className="bg-cyan-105 dark:bg-cyan-950 px-2 py-0.5 rounded text-cyan-800 dark:text-cyan-300 border border-cyan-200/55 dark:border-cyan-850">
@@ -4989,23 +4997,23 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                         {/* Player Accomplishments Row */}
                         <div className="grid grid-cols-3 gap-3 text-xs text-center font-mono">
-                          <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded border border-slate-200 dark:border-slate-800/80">
-                            <span className="text-[9px] text-slate-400 uppercase">Tracked Hours</span>
+                          <div className="bg-slate-50 p-2.5 rounded border border-slate-200 dark:bg-slate-800 dark:border-slate-800">
+                            <span className="text-[9px] text-slate-400 uppercase dark:text-slate-500">Tracked Hours</span>
                             <div className="font-extrabold text-sm text-cyan-600 dark:text-cyan-400 mt-1">{stats.totalHours.toFixed(1)} hrs</div>
                           </div>
-                          <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded border border-slate-200 dark:border-slate-800/85">
-                            <span className="text-[9px] text-slate-400 uppercase">Journal logs</span>
+                          <div className="bg-slate-50 p-2.5 rounded border border-slate-200 dark:bg-slate-800 dark:border-slate-800">
+                            <span className="text-[9px] text-slate-400 uppercase dark:text-slate-500">Journal logs</span>
                             <div className="font-extrabold text-sm text-indigo-650 dark:text-indigo-400 mt-1">{stats.totalJournals} Logs</div>
                           </div>
-                          <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded border border-slate-200 dark:border-slate-800/80">
-                            <span className="text-[9px] text-slate-400 uppercase">Cumulative XP</span>
+                          <div className="bg-slate-50 p-2.5 rounded border border-slate-200 dark:bg-slate-800 dark:border-slate-800">
+                            <span className="text-[9px] text-slate-400 uppercase dark:text-slate-500">Cumulative XP</span>
                             <div className="font-extrabold text-sm text-pink-600 dark:text-pink-400 mt-1">{stats.xp} XP</div>
                           </div>
                         </div>
 
                         {/* Player Trophy badging case */}
                         <div className="flex flex-col gap-2.5">
-                          <span className="text-[9px] font-mono font-black text-slate-450 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-1">
+                          <span className="text-[9px] font-mono font-black text-slate-450 uppercase tracking-widest border-b border-slate-100 pb-1 dark:text-slate-400 dark:border-slate-800">
                             Specialist Badge Collection
                           </span>
                           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -5014,20 +5022,20 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                 key={badge.id}
                                 className={`p-2 rounded-lg border flex items-center gap-2 select-none ${
                                   badge.unlocked 
-                                    ? 'bg-slate-50 dark:bg-slate-905 border-cyan-500/10 shadow-sm' 
-                                    : 'bg-slate-100/45 dark:bg-slate-950/20 border-slate-200/40 dark:border-slate-850 opacity-40'
+                                    ? 'bg-slate-50 dark:bg-slate-800 border-cyan-500/10 shadow-sm' 
+                                    : 'bg-slate-100/45 dark:bg-slate-800/20 border-slate-200/40 dark:border-slate-800 opacity-40'
                                 }`}
                               >
-                                <div className={`p-1.5 rounded shrink-0 border ${badge.unlocked ? 'bg-cyan-100/30 dark:bg-cyan-950/30 border-cyan-200 dark:border-cyan-800 text-cyan-650' : 'bg-slate-250 dark:bg-slate-900 border-slate-300 dark:border-slate-800 text-slate-400'}`}>
+                                <div className={`p-1.5 rounded shrink-0 border ${badge.unlocked ? 'bg-cyan-100/30 dark:bg-cyan-950/30 border-cyan-200 dark:border-cyan-800 text-cyan-650' : 'bg-slate-250 dark:bg-slate-800 border-slate-300 dark:border-slate-800 text-slate-400'}`}>
                                   {badge.unlocked ? (
                                     getGamifiedIcon(badge.icon, "w-3.5 h-3.5")
                                   ) : (
-                                    <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-650" />
+                                    <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                                   )}
                                 </div>
                                 <div className="min-w-0">
-                                  <div className="font-extrabold text-[11px] uppercase truncate text-slate-800 dark:text-slate-200 leading-none">{badge.name}</div>
-                                  <div className="text-[9px] text-slate-450 truncate whitespace-nowrap mt-1">{badge.unlocked ? 'Unlocked Badge' : 'Locked Trophy'}</div>
+                                  <div className="font-extrabold text-[11px] uppercase truncate text-slate-800 leading-none dark:text-slate-400">{badge.name}</div>
+                                  <div className="text-[9px] text-slate-450 truncate whitespace-nowrap mt-1 dark:text-slate-400">{badge.unlocked ? 'Unlocked Badge' : 'Locked Trophy'}</div>
                                 </div>
                               </div>
                             ))}
@@ -5037,11 +5045,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       </div>
 
                       {/* Footer Actions */}
-                      <div className="bg-slate-50 dark:bg-slate-950 p-4 border-t border-slate-105 dark:border-slate-800 flex justify-end gap-2 text-xs shrink-0">
+                      <div className="bg-slate-50 p-4 border-t border-slate-105 flex justify-end gap-2 text-xs shrink-0 dark:bg-slate-800">
                         <button
                           type="button"
                           onClick={() => setInspectLeaderboardAccount(null)}
-                          className="px-4 py-1.5 rounded text-xs font-bold font-mono uppercase bg-slate-200 dark:bg-slate-850 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          className="px-4 py-1.5 rounded text-xs font-bold font-mono uppercase bg-slate-200 text-slate-800 hover:bg-slate-300 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
                         >
                           Close Profile
                         </button>
@@ -5057,29 +5065,29 @@ ${entry.planNextTime || '_No carry-over specified._'}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* CARD 1: TEAM JOURNAL */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-3.5 mb-4">
                   <div className="bg-brand/10 text-brand p-3 rounded-lg group-hover:scale-110 transition-transform">
                     <BookOpen className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                       Team Journal
                     </h3>
-                    <p className="text-[10px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest mt-0.5">
+                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5 dark:text-slate-500">
                       Notebook Compiler &amp; CAD Layouts
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
                   Maintain the official engineering journal. Feed in session planning targets, physical mechanism achievements, photographic schematics, 3D render attachments, and subteam problem-solution structures for competition judges review.
                 </p>
                 
                 {/* Journal Quick Stats */}
-                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800/80 flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-500">Total Notebook Logs:</span>
-                  <strong className="text-slate-800 dark:text-slate-200 bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded font-bold">
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Total Notebook Logs:</span>
+                  <strong className="text-slate-800 bg-slate-200 px-1.5 py-0.5 rounded font-bold dark:bg-slate-800 dark:text-slate-400">
                     {entries.length} Entries
                   </strong>
                 </div>
@@ -5097,29 +5105,29 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* CARD 2: HOUR TRACKER & ATTENDANCE TERMINAL */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-3.5 mb-4">
                   <div className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
                     <Clock className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 dark:text-slate-100 font-display">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 font-display dark:text-slate-400">
                       Hours Tracking &amp; Clock-In
                     </h3>
-                    <p className="text-[10px] font-mono text-slate-404 dark:text-slate-550 uppercase tracking-widest mt-0.5">
+                    <p className="text-[10px] font-mono text-slate-404 uppercase tracking-widest mt-0.5">
                       Attendance Ledger
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-605 dark:text-slate-302 leading-relaxed font-sans mt-2">
+                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
                   Track student contributions and clock-in logs. Check shop occupancy, analyze participation charts broken down by subteam focuses (Design/Build, Automation, Outreach), and compile hour indexes for FIRST awards submission.
                 </p>
                 
                 {/* Time Quick Stats */}
-                <div className="mt-4 bg-slate-50 dark:bg-slate-955 p-3 rounded-lg border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-500">Cumulative Registered Hours:</span>
-                  <strong className="text-slate-800 dark:text-cyan-350 bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded font-bold">
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Cumulative Registered Hours:</span>
+                  <strong className="text-slate-800 dark:text-cyan-350 bg-slate-200 px-1.5 py-0.5 rounded font-bold dark:bg-slate-800 dark:text-slate-400">
                     {timeEntries.reduce((acc, curr) => acc + curr.durationHours, 0).toFixed(1)} hrs
                   </strong>
                 </div>
@@ -5137,14 +5145,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* CARD 3: COMMUNITY OUTREACH EVENTS LEDGER */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-emerald-500/30 group">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-emerald-500/30 group dark:bg-slate-900 dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-3.5 mb-4">
                   <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
                     <Heart className="w-6 h-6 fill-emerald-500/20" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                       Community Outreach Events
                     </h3>
                     <p className="text-[10px] font-mono text-emerald-600 dark:text-emerald-500 uppercase tracking-widest mt-0.5">
@@ -5152,13 +5160,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
                   Record and showcase team-led community robotics exhibitions, STEM teaching labs, FLL workshop drives, and pitch decks. Upload rich action photo proofs and track quantized crowd reach metrics.
                 </p>
                 
                 {/* Outreach Quick Stats */}
-                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800/80 flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-500">Documented Outreach Events:</span>
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Documented Outreach Events:</span>
                   <strong className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded font-bold">
                     {outreachEvents.length} Logs recorded
                   </strong>
@@ -5177,28 +5185,28 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* CARD KANBAN: COLLABORATIVE TEAM KANBAN BOARD */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-3.5 mb-4">
                   <div className="bg-brand/10 text-brand p-3 rounded-lg group-hover:scale-110 transition-transform">
                     <Layers className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                       Collaborative Kanban Board
                     </h3>
-                    <p className="text-[10px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest mt-0.5">
+                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5 dark:text-slate-500">
                       Task Backlog &amp; Progress Sprint
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
                   Draft tasks, assign key subteam members, choose priority levels, and drag &amp; drop tickets through backlog, development, review, and completed lanes to manage and accelerate team velocity.
                 </p>
                 
                 {/* Kanban Quick Stats */}
-                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-500">Tasks in Open Backlog:</span>
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Tasks in Open Backlog:</span>
                   <strong className="text-brand bg-brand/10 border border-brand/25 px-1.5 py-0.5 rounded font-bold">
                     {kanbanTasks.length} Active Tickets
                   </strong>
@@ -5217,28 +5225,28 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* CARD handbook: STUDENT TEAM HANDBOOK */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-3.5 mb-4">
                   <div className="bg-brand/10 text-brand p-3 rounded-lg group-hover:scale-110 transition-transform">
                     <Scroll className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                       Student Team Handbook
                     </h3>
-                    <p className="text-[10px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest mt-0.5">
+                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5 dark:text-slate-500">
                       Rules, Safety Protocols &amp; Conduct Code
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
                   Access the formal 2026-2027 RoboRaiders handbook. Review laboratory safety guidelines, student attendance minimums, and FLL community mentoring hours requirements.
                 </p>
                 
                 {/* Handbook Quick Stats */}
-                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-500">Official Chapters:</span>
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Official Chapters:</span>
                   <strong className="text-brand bg-brand/10 border border-brand/25 px-1.5 py-0.5 rounded font-bold">
                     20 Official Chapters
                   </strong>
@@ -5248,7 +5256,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => setCurrentView('handbook')}
-                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded dark:bg-slate-800 dark:hover:bg-slate-700"
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded dark:bg-slate-950"
                 >
                   <span>Open Handbook</span>
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -5257,14 +5265,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* CARD ledger: GENERAL LEDGER */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-emerald-500/30 group">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-emerald-500/30 group dark:bg-slate-900 dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-3.5 mb-4">
                   <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
                     <DollarSign className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                       General Ledger
                     </h3>
                     <p className="text-[10px] font-mono text-emerald-650 dark:text-emerald-400 uppercase tracking-widest mt-0.5">
@@ -5272,13 +5280,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
                   Track the team's balance sheets, raised funding vs. school allowances, and out-of-pocket reimbursements. Access real-time financial reporting breakdowns, expense pie charts, and funding sources.
                 </p>
                 
                 {/* Ledger Quick Stats */}
-                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-500">Logged Transactions:</span>
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Logged Transactions:</span>
                   <strong className="text-emerald-600 bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 rounded font-bold">
                     {ledgerTransactions.length} items logged
                   </strong>
@@ -5297,14 +5305,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* CARD 3: TEAM DIRECTORY - Available for ALL verified members */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-indigo-500/30 group">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-indigo-500/30 group dark:bg-slate-900 dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-3.5 mb-4">
                   <div className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
                     <Users className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 dark:text-slate-100 font-display">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 font-display dark:text-slate-400">
                       Roster &amp; Approvals Directory
                     </h3>
                     <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-450 uppercase tracking-widest mt-0.5">
@@ -5312,13 +5320,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-605 dark:text-slate-300 leading-relaxed font-sans mt-2">
+                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
                   Browse the comprehensive registered team directory, search primary/secondary subteam focuses, analyze performance level badges, and review real-time member approvals.
                 </p>
 
                 {/* Quick Stats */}
-                <div className="mt-4 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-150 dark:border-slate-800/80 flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-500">Authorized Team Members:</span>
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Authorized Team Members:</span>
                   <strong className="text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded font-bold">
                     {accounts.length} Profiles
                   </strong>
@@ -5340,27 +5348,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
             {isUserAdminOrMentor && (
               <>
                 {/* CARD 4: EMAIL OUTBOX SIMULATOR */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-indigo-550/30 group">
+                <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-indigo-550/30 group dark:bg-slate-900 dark:border-slate-800">
                   <div>
                     <div className="flex items-center gap-3 mb-2.5">
                       <div className="bg-purple-500/10 text-purple-600 dark:text-purple-400 p-2.5 rounded-lg">
                         <Mail className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                           Security Alert System Outbox
                         </h4>
-                        <p className="text-[9px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest leading-none mt-0.5">
+                        <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest leading-none mt-0.5 dark:text-slate-500">
                           Simulated Server Communications
                         </p>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
+                    <p className="text-xs text-slate-500 leading-relaxed font-sans dark:text-slate-400">
                       Inspect outgoing notifications sent by the system (e.g. signup applications, password reset verification links).
                     </p>
                   </div>
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex justify-between items-center text-xs font-mono">
-                    <span className="text-[10px] text-slate-400">Dispatched: {dispatchedEmails.length} Alerts</span>
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs font-mono dark:border-slate-800">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">Dispatched: {dispatchedEmails.length} Alerts</span>
                     <button
                       onClick={() => {
                         setIsApprovalsOpen(true);
@@ -5375,27 +5383,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </div>
 
                 {/* CARD 4.5: XP AUDIT LOG */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-amber-500/30 group">
+                <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-amber-500/30 group dark:bg-slate-900 dark:border-slate-800">
                   <div>
                     <div className="flex items-center gap-3 mb-2.5">
                       <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 p-2.5 rounded-lg">
                         <Scroll className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                           XP Audit Ledger
                         </h4>
-                        <p className="text-[9px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest leading-none mt-0.5">
+                        <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest leading-none mt-0.5 dark:text-slate-500">
                           TEAM-WIDE CONTEXTUAL XP AUDITING
                         </p>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
+                    <p className="text-xs text-slate-500 leading-relaxed font-sans dark:text-slate-400">
                       Audit real-time dynamic sources of earned XP for all students (e.g. timesheets, journal quality metrics, outreach programs, and manual adjustments).
                     </p>
                   </div>
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex justify-between items-center text-xs font-mono">
-                    <span className="text-[10px] text-slate-400">XP Events: {getXPAuditLogs().length} Logs</span>
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs font-mono dark:border-slate-800">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">XP Events: {getXPAuditLogs().length} Logs</span>
                     <button
                       onClick={() => setIsAuditLogOpen(true)}
                       className="text-amber-605 dark:text-amber-450 font-extrabold hover:underline uppercase text-[10px] tracking-wider flex items-center gap-1 cursor-pointer font-sans"
@@ -5407,33 +5415,33 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </div>
 
                 {/* CARD 5: DATABASE BACKUP & SEASON TRANSITION */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-blue-500/25 group md:col-span-2">
+                <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-blue-500/25 group md:col-span-2 dark:bg-slate-900 dark:border-slate-800">
                   <div>
                     <div className="flex items-center gap-3 mb-2.5">
                       <div className="bg-red-500/10 text-red-600 dark:text-red-400 p-2.5 rounded-lg">
                         <Database className="w-5 h-5 animate-pulse" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                           Backup &amp; Season Transition Tools
                         </h4>
-                        <p className="text-[9px] font-mono text-slate-400 dark:text-slate-550 uppercase tracking-widest leading-none mt-0.5">
+                        <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest leading-none mt-0.5 dark:text-slate-500">
                           SYSTEM ADMINISTRATION PANEL • MENTOR-ONLY ACCESS
                         </p>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
+                    <p className="text-xs text-slate-500 leading-relaxed font-sans dark:text-slate-400">
                       Take offline backups of all system databases. Compress, archive, or completely clear journals, timesheets, and kanban cards when transitioning to a new robotics competition season.
                     </p>
                   </div>
-                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-xs font-mono">
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+                  <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-xs font-mono dark:border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider dark:text-slate-500">
                       ⚠️ Data modifications affect live cloud database metrics
                     </span>
                     <div className="flex gap-2">
                       <button
                         onClick={handleDownloadBackup}
-                        className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold px-3 py-1.5 rounded uppercase text-[10px] tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold px-3 py-1.5 rounded uppercase text-[10px] tracking-wider transition-all cursor-pointer flex items-center gap-1 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-600"
                         id="backup-db-trigger"
                       >
                         <span>Download Backup</span>
@@ -5499,6 +5507,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           accounts={accounts}
           events={outreachEvents}
           onUpdateEvents={saveOutreachEventsToLocalStorage}
+          onDeleteEvent={handleDeleteOutreachEvent}
           onPrintPDF={handlePrintOutreachPDF}
         />
       )}
@@ -5510,6 +5519,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           accounts={accounts}
           tasks={kanbanTasks}
           onUpdateTasks={saveKanbanTasksToLocalStorage}
+          onDeleteTask={handleDeleteKanbanTask}
           formatSubteamLabel={formatSubteamLabel}
         />
       )}
@@ -5555,10 +5565,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
               <span className="bg-cyan-605/10 text-cyan-705 dark:text-cyan-400 font-mono text-[9px] font-black uppercase px-2.5 py-1 rounded border border-cyan-500/30 tracking-widest leading-none">
                 ATTENDANCE RECORDS
               </span>
-              <h1 className="text-xl md:text-2xl font-black uppercase text-slate-905 dark:text-slate-50 mt-1.5 tracking-tight font-display">
+              <h1 className="text-xl md:text-2xl font-black uppercase text-slate-905 mt-1.5 tracking-tight font-display">
                 RoboRaiders Time Card
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+              <p className="text-xs text-slate-500 font-sans mt-0.5 dark:text-slate-400">
                 Monitor team participant meters, compile workshop hour indices, and punch active time cards.
               </p>
             </div>
@@ -5578,7 +5588,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </button>
               <button
                 onClick={() => setCurrentView('landing')}
-                className="bg-indigo-600 hover:bg-indigo-500 dark:bg-slate-805 dark:hover:bg-slate-705 text-white font-extrabold px-4 py-2 text-xs rounded transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border-0 outline-none"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-4 py-2 text-xs rounded transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border-0 outline-none"
               >
                 <Grid className="w-3.5 h-3.5" />
                 <span>Back to Hub</span>
@@ -5590,30 +5600,30 @@ ${entry.planNextTime || '_No carry-over specified._'}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 select-none">
             
             {/* Stat: Cumulative Roster Hours */}
-            <div className="md:col-span-3 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800/80 p-5 rounded-xl shadow-xs flex items-center gap-4">
+            <div className="md:col-span-3 bg-white border border-slate-200 p-5 rounded-xl shadow-xs flex items-center gap-4 dark:bg-slate-900 dark:border-slate-800">
               <div className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 p-3.5 rounded-xl shrink-0">
                 <Clock className="w-6 h-6" />
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block leading-none">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block leading-none dark:text-slate-500">
                   Cumulative Team Hours
                 </span>
-                <span className="text-2xl font-black text-slate-850 dark:text-slate-100 mt-1 block">
+                <span className="text-2xl font-black text-slate-850 mt-1 block dark:text-slate-400">
                   {timeEntries.reduce((sum, curr) => sum + curr.durationHours, 0).toFixed(1)} hrs
                 </span>
               </div>
             </div>
 
             {/* Stat: My Logged Hours */}
-            <div className="md:col-span-3 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800/80 p-5 rounded-xl shadow-xs flex items-center gap-4">
+            <div className="md:col-span-3 bg-white border border-slate-200 p-5 rounded-xl shadow-xs flex items-center gap-4 dark:bg-slate-900 dark:border-slate-800">
               <div className="bg-indigo-505/10 text-indigo-622 dark:text-indigo-400 p-3.5 rounded-xl shrink-0">
                 <User className="w-6 h-6" />
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block leading-none">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block leading-none dark:text-slate-500">
                   My Logged Hours
                 </span>
-                <span className="text-2xl font-black text-slate-850 dark:text-slate-100 mt-1 block">
+                <span className="text-2xl font-black text-slate-850 mt-1 block dark:text-slate-400">
                   {timeEntries
                     .filter(t => t.userEmail === currentUser?.schoolEmail)
                     .reduce((sum, curr) => sum + curr.durationHours, 0)
@@ -5623,8 +5633,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* Visual breakdown widget */}
-            <div className="md:col-span-6 bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800/80 p-5 rounded-xl shadow-xs">
-              <h3 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider font-mono mb-3 leading-none">
+            <div className="md:col-span-6 bg-white border border-slate-205 p-5 rounded-xl shadow-xs dark:bg-slate-900">
+              <h3 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider font-mono mb-3 leading-none dark:text-slate-500">
                 Laboratory Output Hours Breakdown by Subteam Group
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
@@ -5637,10 +5647,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   return (
                     <div key={subteam} className="space-y-1">
                       <div className="flex justify-between text-[11px] font-mono leading-none">
-                        <span className="text-slate-600 dark:text-slate-350 font-bold truncate max-w-[155px]">{subteam}</span>
-                        <strong className="text-slate-800 dark:text-slate-100 font-extrabold">{total.toFixed(1)} hrs</strong>
+                        <span className="text-slate-600 font-bold truncate max-w-[155px] dark:text-slate-300">{subteam}</span>
+                        <strong className="text-slate-800 font-extrabold dark:text-slate-400">{total.toFixed(1)} hrs</strong>
                       </div>
-                      <div className="w-full bg-slate-100 dark:bg-slate-800/80 h-1.5 rounded-full overflow-hidden border border-slate-200/40 dark:border-slate-800/40">
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200/40 dark:bg-slate-800">
                         <div 
                           className="bg-cyan-500 h-full rounded-full transition-all duration-300"
                           style={{ width: `${width}%` }}
@@ -5661,9 +5671,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <div className="lg:col-span-5 flex flex-col gap-6">
               
               {/* CARD: LIVE WORKSHOP CLOCK-IN TERMINAL */}
-              <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 shadow-sm">
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm dark:bg-slate-900 dark:border-slate-800">
                 {activeSession ? (
-                  <div className="flex flex-col items-center bg-emerald-500/5 dark:bg-slate-950 p-5 rounded-lg text-center gap-3 border border-emerald-500/20">
+                  <div className="flex flex-col items-center bg-emerald-500/5 p-5 rounded-lg text-center gap-3 border border-emerald-500/20">
                     <div className="relative">
                       <span className="relative flex h-3 w-3 justify-center mb-1">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -5672,7 +5682,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </div>
                     
                     <div>
-                      <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-105">
+                      <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-400">
                         You are CLOCKED IN on Lab Duty
                       </h3>
                       <p className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest mt-0.5 animate-pulse">
@@ -5681,13 +5691,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </div>
 
                     {/* Big glowing elapsed clock ticker */}
-                    <div className="text-4xl font-mono font-black text-slate-900 dark:text-emerald-300 tracking-tight bg-white dark:bg-slate-900 px-6 py-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner flex items-center justify-center my-1 select-none w-full max-w-[260px]">
+                    <div className="text-4xl font-mono font-black text-slate-900 dark:text-emerald-300 tracking-tight bg-white px-6 py-2 rounded-xl border border-slate-200 shadow-inner flex items-center justify-center my-1 select-none w-full max-w-[260px] dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800">
                       {sessionElapsed}
                     </div>
 
                     {/* Task focus statement inline */}
                     <div className="w-full text-left space-y-1">
-                      <label className="block text-[9px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono leading-none">
+                      <label className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-wider font-mono leading-none dark:text-slate-500">
                         Active task focus (editable):
                       </label>
                       <input
@@ -5695,7 +5705,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         value={activeSession.taskDescription}
                         onChange={(e) => handleUpdateActiveSessionTask(e.target.value)}
                         placeholder="What are you currently developing/assembling?"
-                        className="w-full bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700/80 rounded px-2.5 py-1.5 text-xs text-slate-805 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800 outline-none focus:ring-1 focus:ring-emerald-500/50"
+                        className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-805 focus:bg-white dark:focus:bg-slate-800 outline-none focus:ring-1 focus:ring-emerald-500/50 dark:bg-slate-900 dark:border-slate-800"
                       />
                     </div>
 
@@ -5714,7 +5724,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         <Clock className="w-5 h-5 animate-pulse" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 dark:text-slate-100 font-display">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 font-display dark:text-slate-400">
                           Live Active Clock-In
                         </h3>
                         <p className="text-[10px] font-mono text-slate-404 uppercase tracking-widest mt-0.5">
@@ -5724,13 +5734,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </div>
                     
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-555 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      <label className="block text-[10px] font-extrabold text-slate-555 uppercase tracking-wider mb-1">
                         Select Subteam focus of today
                       </label>
                       <select
                         value={clockInSubteam}
                         onChange={(e) => setClockInSubteam(e.target.value as Subteam)}
-                        className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 font-black outline-none focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-brand/40"
+                        className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-black outline-none focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-brand/40 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                       >
                         {ATTENDANCE_SUBTEAMS.map((sub) => (
                           <option key={sub} value={sub}>{sub}</option>
@@ -5739,7 +5749,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-550 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      <label className="block text-[10px] font-extrabold text-slate-550 uppercase tracking-wider mb-1 dark:text-slate-300">
                         What task are you working on today?
                       </label>
                       <input
@@ -5747,7 +5757,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         placeholder="E.g., Mounting chassis dual extrusion rails..."
                         value={clockInDesc}
                         onChange={(e) => setClockInDesc(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800 outline-none"
+                        className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:bg-white dark:focus:bg-slate-800 outline-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                         required
                       />
                     </div>
@@ -5764,14 +5774,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
 
               {/* CARD: PAST MANUAL hours logger */}
-              <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 shadow-sm">
+              <div className="bg-white border border-slate-205 rounded-xl p-5 shadow-sm dark:bg-slate-900">
                 <form onSubmit={handleManualTimeSubmit} className="space-y-4 border-0">
                   <div className="flex items-center gap-3.5 mb-2">
                     <div className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 p-2.5 rounded-lg shrink-0">
                       <PlusCircle className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 font-display">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
                         Add Past Hours Manually
                       </h3>
                       <p className="text-[10px] font-mono text-slate-404 uppercase tracking-widest mt-0.5">
@@ -5782,25 +5792,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                   <div className="grid grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                         Workshop Date
                       </label>
                       <input
                         type="date"
                         value={manualTimeDate}
                         onChange={(e) => setManualTimeDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none"
+                        className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 outline-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                         Select Subteam Focus
                       </label>
                       <select
                         value={manualTimeSubteam}
                         onChange={(e) => setManualTimeSubteam(e.target.value as Subteam)}
-                        className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none cursor-pointer"
+                        className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 outline-none cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                       >
                         {ATTENDANCE_SUBTEAMS.map((sub) => (
                           <option key={sub} value={sub}>{sub}</option>
@@ -5827,7 +5837,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                       Brief Task Details / Contributions
                     </label>
                     <textarea
@@ -5835,7 +5845,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       value={manualTimeDesc}
                       onChange={(e) => setManualTimeDesc(e.target.value)}
                       rows={2}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700/80 rounded p-2 text-xs text-slate-805 dark:text-slate-101 placeholder:text-slate-403 outline-none resize-none font-sans leading-relaxed focus:bg-white dark:focus:bg-slate-800"
+                      className="w-full bg-slate-50 border border-slate-300 rounded p-2 text-xs text-slate-805 placeholder:text-slate-403 outline-none resize-none font-sans leading-relaxed focus:bg-white dark:focus:bg-slate-800 dark:bg-slate-800 dark:border-slate-800"
                       required
                     />
                   </div>
@@ -5853,12 +5863,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* Right hours logs list column */}
-            <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-xl p-5 shadow-xs overflow-hidden flex flex-col gap-4">
+            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-hidden flex flex-col gap-4 dark:bg-slate-900 dark:border-slate-800">
               
               {/* Header with search filters */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-1.5 leading-none">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5 leading-none dark:text-slate-400">
                     <Layers className="w-4 h-4 text-brand" />
                     <span className="text-[#ead9d9]">Time Cards ({filteredTimeEntries.length})</span>
                   </h3>
@@ -5867,20 +5877,20 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 {/* Search */}
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   <div className="relative flex-1 sm:max-w-[180px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                     <input
                       type="text"
                       placeholder="Search name/task..."
                       value={timeSearch}
                       onChange={(e) => setTimeSearch(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-300 dark:border-slate-700 py-2 pl-10 pr-3 rounded text-[11px] outline-none text-slate-850 dark:text-slate-100"
+                      className="w-full bg-slate-50 border border-slate-300 py-2 pl-10 pr-3 rounded text-[11px] outline-none text-slate-850 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
                   
                   <select
                     value={timeSubteamFilter}
                     onChange={(e) => setTimeSubteamFilter(e.target.value as any)}
-                    className="bg-slate-50 dark:bg-slate-850 border border-slate-300 dark:border-slate-700 p-1.5 rounded text-[11px] outline-none font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                    className="bg-slate-50 border border-slate-300 p-1.5 rounded text-[11px] outline-none font-bold text-slate-700 cursor-pointer dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800"
                   >
                     <option value="All">All subteams</option>
                     {ATTENDANCE_SUBTEAMS.map(sub => (
@@ -5892,7 +5902,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
               {/* Scrollable hour log items list */}
               {filteredTimeEntries.length === 0 ? (
-                <div className="bg-slate-50 dark:bg-slate-950 p-8 text-center rounded text-xs text-slate-455 font-mono">
+                <div className="bg-slate-50 p-8 text-center rounded text-xs text-slate-455 font-mono dark:bg-slate-800">
                   🔍 No registered workshop hours align with selected filter targets.
                 </div>
               ) : (
@@ -5905,15 +5915,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     return (
                       <div 
                         key={item.id}
-                        className="border border-slate-150 dark:border-slate-800 rounded-lg p-3.5 bg-slate-50/40 dark:bg-slate-950/20 hover:bg-slate-55 dark:hover:bg-slate-850/30 transition-all flex justify-between items-start gap-3"
+                        className="border border-slate-150 rounded-lg p-3.5 bg-slate-50/40 hover:bg-slate-55 transition-all flex justify-between items-start gap-3"
                       >
                         <div className="space-y-1 w-full min-w-0">
                           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                            <span className="font-extrabold text-slate-900 dark:text-slate-100 text-xs">
+                            <span className="font-extrabold text-slate-900 text-xs dark:text-slate-400">
                               {item.userName}
                             </span>
                             
-                            <span className="font-mono text-[9px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-205 dark:border-slate-800">
+                            <span className="font-mono text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-205 dark:bg-slate-800 dark:text-slate-500">
                               {item.date}
                             </span>
                             
@@ -5922,12 +5932,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             </span>
                           </div>
                           
-                          <p className="text-xs text-slate-650 dark:text-slate-300 font-medium font-sans leading-relaxed tracking-normal break-words mt-1">
+                          <p className="text-xs text-slate-650 font-medium font-sans leading-relaxed tracking-normal break-words mt-1 dark:text-slate-300">
                             {item.taskDescription}
                           </p>
 
-                          <div className="flex items-center gap-1 text-[10px] font-mono text-slate-400  dark:text-slate-500 mt-1.5">
-                            <Clock className="w-3 h-3 text-slate-400" />
+                          <div className="flex items-center gap-1 text-[10px] font-mono text-slate-400 mt-1.5 dark:text-slate-500">
+                            <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                             <span>Shift: <strong>{item.startTime} - {item.endTime}</strong> ({item.durationHours.toFixed(2)} hours logged)</span>
                           </div>
                         </div>
@@ -5936,14 +5946,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           <div className="flex items-center gap-1.5 shrink-0">
                             <button
                               onClick={() => handleEditTimeEntry(item)}
-                              className="bg-slate-100 hover:bg-cyan-100 dark:bg-slate-800 dark:hover:bg-cyan-950/40 p-1.5 rounded text-slate-400 hover:text-cyan-600 dark:text-slate-500 dark:hover:text-cyan-450 transition-all cursor-pointer border-0 outline-none"
+                              className="bg-slate-100 hover:bg-cyan-100 dark:hover:bg-cyan-950/40 p-1.5 rounded text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-450 transition-all cursor-pointer border-0 outline-none dark:bg-slate-800 dark:text-slate-500"
                               title="Edit time card"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDeleteTimeEntry(item.id, item.userName)}
-                              className="bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/40 p-1.5 rounded text-slate-400 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-450 transition-all cursor-pointer border-0 outline-none"
+                              className="bg-slate-100 hover:bg-rose-100 dark:hover:bg-rose-950/40 p-1.5 rounded text-slate-400 hover:text-rose-600 dark:hover:text-rose-450 transition-all cursor-pointer border-0 outline-none dark:bg-slate-800 dark:text-slate-500"
                               title="Rescind hours log"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -5965,13 +5975,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* GOOGLE SITES COMPACT IFRAME TAB MENU */}
       {currentView === 'journal' && (
-        <div className="no-print sm:hidden bg-white border-b border-slate-300 dark:bg-slate-900 dark:border-slate-800 py-2 px-3 flex justify-center gap-1 sticky top-0 z-50">
+        <div className="no-print sm:hidden bg-white border-b border-slate-300 py-2 px-3 flex justify-center gap-1 sticky top-0 z-50 dark:bg-slate-900 dark:border-slate-800">
           <button
             onClick={() => setActiveTab('form')}
             className={`flex-1 py-1.5 px-3 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
               activeTab === 'form' 
                 ? 'bg-brand text-white' 
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
             }`}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -5982,7 +5992,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
             className={`flex-1 py-1.5 px-3 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
               activeTab === 'archive' 
                 ? 'bg-brand text-white' 
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -6003,10 +6013,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </span>
                 <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500">FTC #6567</span>
               </div>
-              <h1 className="text-2xl font-extrabold uppercase text-slate-900 dark:text-white mt-1">
+              <h1 className="text-2xl font-extrabold uppercase text-slate-900 mt-1 dark:text-slate-400">
                 Team Journal
               </h1>
-              <p className="text-xs text-slate-505 dark:text-slate-400">
+              <p className="text-xs text-slate-505">
                 Official team journal logs, planning milestones, and subteam targets.
               </p>
             </div>
@@ -6022,7 +6032,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </button>
               <button
                 onClick={() => setCurrentView('landing')}
-                className="bg-indigo-600 hover:bg-indigo-500 dark:bg-slate-805 dark:hover:bg-slate-705 text-white font-extrabold px-5 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border-0 outline-none"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-5 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border-0 outline-none"
               >
                 <Grid className="w-3.5 h-3.5" />
                 <span>Back to Hub</span>
@@ -6039,9 +6049,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
           } no-print`}
           id="block-journal-form-panel"
         >
-          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-5 relative resize overflow-auto min-h-[400px] md:min-w-[400px]">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-1">
-              <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-widest flex items-center gap-2">
+          <div className="bg-white border border-slate-205 rounded-xl p-5 lg:p-6 shadow-md flex flex-col gap-5 relative resize overflow-auto min-h-[400px] md:min-w-[400px] dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-1 dark:border-slate-800">
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2 dark:text-slate-400">
                 <Layers className="w-4 h-4 text-brand" />
                 <span>{isEditing ? 'Modify Draft Record' : 'Record New Journal Entry'}</span>
               </h2>
@@ -6058,33 +6068,33 @@ ${entry.planNextTime || '_No carry-over specified._'}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Field 1: Subteam */}
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                     Subteam Group <span className="text-brand">*</span>
                   </label>
                   <select
                     value={formSubteam}
                     onChange={(e) => setFormSubteam(e.target.value as Subteam)}
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all"
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     id="input-subteam"
                   >
                     {SUBTEAM_LIST.map((sub) => (
-                      <option key={sub} value={sub} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">{sub}</option>
+                      <option key={sub} value={sub} className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">{sub}</option>
                     ))}
                   </select>
                 </div>
 
                 {/* Field 2: Date */}
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                     Session Date <span className="text-brand">*</span>
                   </label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                     <input
                       type="date"
                       value={formDate}
                       onChange={(e) => setFormDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-855 dark:border-slate-700 rounded pl-10 pr-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 dark:text-slate-100 font-medium transition-all"
+                      className="w-full bg-slate-50 border border-slate-300 rounded pl-10 pr-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                       required
                       id="input-date"
                     />
@@ -6093,19 +6103,19 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                 {/* Field 3: Author Card */}
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1 dark:text-slate-400">
                     Authorized Reporter
                   </label>
-                  <div className="bg-slate-50 dark:bg-slate-850/80 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1 flex items-center justify-between gap-3 text-xs shadow-3xs" id="display-auth-id-card">
+                  <div className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 flex items-center justify-between gap-3 text-xs shadow-3xs dark:bg-slate-800 dark:border-slate-800" id="display-auth-id-card">
                     <div className="flex items-center gap-2 py-0.5">
                       <div className="bg-emerald-500/10 dark:bg-emerald-400/10 p-1 rounded-full text-emerald-600 dark:text-emerald-400 shrink-0">
                         <User className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <div className="font-extrabold text-slate-800 dark:text-slate-100 leading-tight text-[11px] truncate max-w-[120px]">
+                        <div className="font-extrabold text-slate-800 leading-tight text-[11px] truncate max-w-[120px] dark:text-slate-400">
                           {currentUser?.name || formAuthor}
                         </div>
-                        <div className="text-[8px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider leading-none">
+                        <div className="text-[8px] font-mono font-bold text-slate-500 uppercase tracking-wider leading-none dark:text-slate-400">
                           {currentUser?.role === 'mentor' ? 'Coach' : currentUser?.role === 'captain' ? 'Captain' :  'Student Member'}
                         </div>
                       </div>
@@ -6122,7 +6132,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               {/* Row 2: Textareas for Planning and Accomplishing */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* What we planned */}
-                <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
+                <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
                   <label className="block text-[10px] font-extrabold text-red-700 dark:text-red-400 uppercase tracking-wider mb-1">
                     What we planned <span className="text-brand">*</span>
                   </label>
@@ -6131,14 +6141,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Define objectives (e.g., Mount slide brackets, map sensors...)"
                     value={formPlanned}
                     onChange={(e) => setFormPlanned(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize min-h-[80px] font-mono"
+                    className="w-full bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize min-h-[80px] font-mono dark:bg-slate-900 dark:border-slate-800"
                     required
                     id="input-planned"
                   />
                 </div>
 
                 {/* What we accomplished */}
-                <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
+                <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
                   <label className="block text-[10px] font-extrabold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">
                     What we accomplished <span className="text-brand">*</span>
                   </label>
@@ -6147,7 +6157,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Summarize results, mechanisms built/integrated, or autonomous tests passed..."
                     value={formAccomplished}
                     onChange={(e) => setFormAccomplished(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize min-h-[80px] font-mono"
+                    className="w-full bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize min-h-[80px] font-mono dark:bg-slate-900 dark:border-slate-800"
                     required
                     id="input-accomplished"
                   />
@@ -6157,7 +6167,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               {/* Row 3: Problems, Next Plans and Images */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 {/* Problems and Solutions Found (spanning lg:col-span-5) */}
-                <div className="lg:col-span-5 bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded flex flex-col">
+                <div className="lg:col-span-5 bg-slate-50/50 p-2.5 border border-slate-200 rounded flex flex-col dark:border-slate-800">
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="block text-[10px] font-extrabold text-rose-800 dark:text-rose-400 uppercase tracking-wider">
                       Problems and Solutions Found
@@ -6165,7 +6175,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <button
                       type="button"
                       onClick={handleAddProblemField}
-                      className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold px-2 py-0.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+                      className="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded hover:bg-slate-300 transition flex items-center gap-1.5 cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
                       id="btn-add-blocker"
                     >
                       <PlusCircle className="w-3 h-3" />
@@ -6175,8 +6185,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                   <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
                     {formProblemsAndSolutions.map((paragraph, idx) => (
-                      <div key={idx} className="flex gap-2 items-start bg-white dark:bg-slate-800 p-1.5 rounded border border-slate-200 dark:border-slate-700">
-                        <span className="bg-slate-900 dark:bg-slate-950 text-white text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 shrink-0">
+                      <div key={idx} className="flex gap-2 items-start bg-white p-1.5 rounded border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+                        <span className="bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 shrink-0 dark:bg-slate-950">
                           {idx + 1}
                         </span>
                         <textarea
@@ -6184,13 +6194,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           placeholder="Failure observed | Countermeasure/engineering correction applied"
                           value={paragraph}
                           onChange={(e) => handleUpdateProblemField(idx, e.target.value)}
-                          className="flex-1 bg-slate-50 dark:bg-slate-850 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand leading-normal resize min-h-[48px]"
+                          className="flex-1 bg-slate-50 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 focus:ring-1 focus:ring-brand leading-normal resize min-h-[48px] dark:bg-slate-800 dark:text-slate-400"
                           id={`input-problem-${idx}`}
                         />
                         <button
                           type="button"
                           onClick={() => handleRemoveProblemField(idx)}
-                          className="text-slate-400 hover:text-rose-600 p-1 rounded mt-1 cursor-pointer"
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded mt-1 cursor-pointer dark:text-slate-500"
                           id={`btn-remove-problem-${idx}`}
                         >
                           <X className="w-3.5 h-3.5" />
@@ -6201,7 +6211,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </div>
 
                 {/* Plan next time (spanning lg:col-span-3) */}
-                <div className="lg:col-span-3 bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
+                <div className="lg:col-span-3 bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
                   <label className="block text-[10px] font-extrabold text-indigo-800 dark:text-indigo-400 uppercase tracking-wider mb-1">
                     Plan for next time
                   </label>
@@ -6210,14 +6220,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Items to carry over and new objectives..."
                     value={formPlanNextTime}
                     onChange={(e) => setFormPlanNextTime(e.target.value)}
-                    className="w-full min-h-[100px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-slate-100 resize font-mono font-medium"
+                    className="w-full min-h-[100px] bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize font-mono font-medium dark:bg-slate-900 dark:border-slate-800"
                     id="input-next-time"
                   />
                 </div>
 
                 {/* Image upload (spanning lg:col-span-4) */}
-                <div className="lg:col-span-4 border border-slate-200 dark:border-slate-800 rounded p-2.5 bg-slate-50 dark:bg-slate-850/30">
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
+                <div className="lg:col-span-4 border border-slate-200 rounded p-2.5 bg-slate-50 dark:bg-slate-800 dark:border-slate-800">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
                     Image Attachments
                   </label>
 
@@ -6228,8 +6238,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     onClick={() => fileInputRef.current?.click()}
                     className={`border border-dashed rounded p-4 text-center cursor-pointer transition-colors ${
                       isDraggingOver 
-                        ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200' 
-                        : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750'
+                        ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200' 
+                        : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-600'
                     }`}
                     id="image-dropzone"
                   >
@@ -6249,9 +6259,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-1">
-                        <FileUp className="w-6 h-6 text-slate-400 group-hover:text-brand" />
-                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Drag image or browse</span>
-                        <span className="text-[9px] text-slate-400 uppercase tracking-tighter">JPEG, PNG optimized automatically</span>
+                        <FileUp className="w-6 h-6 text-slate-400 group-hover:text-brand dark:text-slate-500" />
+                        <span className="text-xs font-bold text-slate-500 uppercase dark:text-slate-400">Drag image or browse</span>
+                        <span className="text-[9px] text-slate-400 uppercase tracking-tighter dark:text-slate-500">JPEG, PNG optimized automatically</span>
                       </div>
                     )}
                   </div>
@@ -6262,8 +6272,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       {formImages.map((img) => (
                         <div 
                           key={img.id} 
-                          onClick={() => setExpandedImage({ url: img.dataUrl, name: img.name })}
-                          className="group relative border border-slate-300 dark:border-slate-700 rounded aspect-square overflow-hidden bg-slate-200 dark:bg-slate-800 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-brand"
+                          onClick={() => setExpandedImage({ 
+                            images: formImages.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                            currentIndex: formImages.findIndex(i => i.id === img.id)
+                          })}
+                          className="group relative border border-slate-300 rounded aspect-square overflow-hidden bg-slate-200 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-brand dark:bg-slate-800 dark:border-slate-800"
                           title="Click to zoom preview"
                         >
                           <img 
@@ -6291,8 +6304,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
 
               {/* Attendance */}
-              <div className="bg-slate-50/50 dark:bg-slate-850/50 p-2.5 border border-slate-200 dark:border-slate-800 rounded">
-                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
+              <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
                   Attendance
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
@@ -6313,12 +6326,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     placeholder="Or add custom attendee..."
                     value={customAttendee}
                     onChange={(e) => setCustomAttendee(e.target.value)}
-                    className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-xs text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand outline-none"
+                    className="flex-1 bg-white border border-slate-200 rounded p-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-brand outline-none dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                   />
                   <button
                     type="button"
                     onClick={handleAddCustomAttendee}
-                    className="bg-slate-900 dark:bg-slate-700 text-white px-2.5 rounded text-xs font-bold cursor-pointer"
+                    className="bg-slate-900 text-white px-2.5 rounded text-xs font-bold cursor-pointer dark:bg-slate-950"
                   >
                     Add
                   </button>
@@ -6340,10 +6353,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <button
                   type="submit"
                   onClick={() => setSubmissionType('Draft')}
-                  className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold py-2 px-3 rounded text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1"
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold py-2 px-3 rounded text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
                   id="btn-save-draft"
                 >
-                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  <FileText className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                   <span>Keep as Draft</span>
                 </button>
 
@@ -6351,7 +6364,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold py-2 px-3 rounded text-xs uppercase transition-all cursor-pointer"
+                    className="bg-slate-300 hover:bg-slate-400 text-slate-800 font-bold py-2 px-3 rounded text-xs uppercase transition-all cursor-pointer dark:text-slate-400"
                     id="btn-cancel-form"
                   >
                     Cancel
@@ -6371,10 +6384,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
           id="block-archive-and-preview-panel"
         >
           {/* HIGH DENSITY SEARCH & FILTER BOX */}
-          <div className="bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-4 lg:p-5 shadow-sm no-print text-slate-900 dark:text-slate-100">
-            <div className="flex items-center gap-1 px-1 mb-2 border-b border-slate-100 dark:border-slate-800 pb-1 shrink-0">
-              <Search className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+          <div className="bg-white border border-slate-205 rounded-xl p-4 lg:p-5 shadow-sm no-print text-slate-900 dark:bg-slate-900 dark:text-slate-400">
+            <div className="flex items-center gap-1 px-1 mb-2 border-b border-slate-100 pb-1 shrink-0 dark:border-slate-800">
+              <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest dark:text-slate-400">
                 Search &amp; Filter Team Journal
               </span>
             </div>
@@ -6384,12 +6397,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <select
                   value={filters.subteam}
                   onChange={(e) => setFilters({ ...filters, subteam: e.target.value as Subteam | 'All' })}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-755 dark:text-slate-100 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs text-slate-755 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all dark:bg-slate-800 dark:border-slate-800"
                   id="filter-subteam"
                 >
-                  <option value="All" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">All Subteams</option>
+                  <option value="All" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">All Subteams</option>
                   {SUBTEAM_LIST.map((sub) => (
-                    <option key={sub} value={sub} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">{sub}</option>
+                    <option key={sub} value={sub} className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">{sub}</option>
                   ))}
                 </select>
               </div>
@@ -6398,25 +6411,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-750 dark:text-slate-100 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs text-slate-750 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   id="filter-status"
                 >
-                  <option value="All" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-extrabold">All Statuses</option>
-                  <option value="Draft" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">✍️ Drafts</option>
-                  <option value="Pending Review" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold">⏳ Pending Review</option>
-                  <option value="Approved" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold">✅ Approved</option>
-                  <option value="Needs Revision" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold">❌ Needs Revision</option>
+                  <option value="All" className="bg-white text-slate-800 font-extrabold dark:bg-slate-900 dark:text-slate-400">All Statuses</option>
+                  <option value="Draft" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">✍️ Drafts</option>
+                  <option value="Pending Review" className="bg-white text-slate-800 font-semibold dark:bg-slate-900 dark:text-slate-400">⏳ Pending Review</option>
+                  <option value="Approved" className="bg-white text-slate-800 font-semibold dark:bg-slate-900 dark:text-slate-400">✅ Approved</option>
+                  <option value="Needs Revision" className="bg-white text-slate-800 font-semibold dark:bg-slate-900 dark:text-slate-400">❌ Needs Revision</option>
                 </select>
               </div>
 
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                 <input
                   type="text"
                   placeholder="Keyword search..."
                   value={filters.searchQuery}
                   onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 rounded pl-10 pr-2 py-1 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 dark:text-slate-100 transition-all"
+                  className="w-full bg-slate-50 border border-slate-300 rounded pl-10 pr-2 py-1 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   id="filter-query"
                 />
               </div>
@@ -6425,22 +6438,22 @@ ${entry.planNextTime || '_No carry-over specified._'}
             {/* Sub-dates range filters */}
             <div className="grid grid-cols-2 gap-2 mt-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-bold text-slate-400 uppercase shrink-0">From</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase shrink-0 dark:text-slate-500">From</span>
                 <input
                   type="date"
                   value={filters.startDate}
                   onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 text-slate-800 dark:text-slate-150 rounded px-1.5 py-0.5 text-[11px] outline-none"
+                  className="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded px-1.5 py-0.5 text-[11px] outline-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   id="filter-start"
                 />
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-bold text-slate-400 uppercase shrink-0">To</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase shrink-0 dark:text-slate-500">To</span>
                 <input
                   type="date"
                   value={filters.endDate}
                   onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-700 text-slate-800 dark:text-slate-150 rounded px-1.5 py-0.5 text-[11px] outline-none"
+                  className="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded px-1.5 py-0.5 text-[11px] outline-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   id="filter-end"
                 />
               </div>
@@ -6465,20 +6478,20 @@ ${entry.planNextTime || '_No carry-over specified._'}
           <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 overflow-hidden">
             
             {/* ARCHIVE COLUMN (LEFT HALF / spanning 4) */}
-            <div className="col-span-1 md:col-span-4 bg-white border border-slate-205 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-4 flex flex-col overflow-y-auto no-print text-slate-950 dark:text-slate-50 shadow-sm">
-              <div className="flex justify-between items-center bg-slate-100 dark:bg-slate-850 p-2.5 rounded border border-slate-200 dark:border-slate-800 mb-3 shrink-0">
-                <span className="text-[10px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-widest font-mono">
+            <div className="col-span-1 md:col-span-4 bg-white border border-slate-205 rounded-xl p-4 flex flex-col overflow-y-auto no-print text-slate-950 shadow-sm dark:bg-slate-900 dark:text-slate-400">
+              <div className="flex justify-between items-center bg-slate-100 p-2.5 rounded border border-slate-200 mb-3 shrink-0 dark:bg-slate-800 dark:border-slate-800">
+                <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-widest font-mono dark:text-slate-300">
                   Logs Directory
                 </span>
-                <span className="bg-slate-600 dark:bg-slate-755 text-white text-[9px] font-bold px-2 py-0.5 rounded font-mono">
+                <span className="bg-slate-600 text-white text-[9px] font-bold px-2 py-0.5 rounded font-mono">
                   {filteredEntries.length} Records
                 </span>
               </div>
 
               {filteredEntries.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-4 text-center text-slate-400 mt-10">
+                <div className="flex-1 flex flex-col items-center justify-center p-4 text-center text-slate-400 mt-10 dark:text-slate-500">
                   <Database className="w-8 h-8 stroke-1 text-slate-300 mb-1" />
-                  <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">No entries matched</span>
+                  <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400 dark:text-slate-500">No entries matched</span>
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -6499,7 +6512,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         className={`p-2 rounded border cursor-pointer text-left transition-all ${
                           isSelected 
                             ? 'bg-slate-600 dark:bg-slate-800 text-white border-brand shadow-sm' 
-                            : 'bg-slate-50 dark:bg-slate-850/50 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-600 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                         id={`archive-card-${entry.id}`}
                       >
@@ -6542,7 +6555,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                               <span className={`border text-[8px] font-mono font-extrabold px-1 py-0.5 rounded uppercase flex items-center shrink-0 select-none ${
                                 isSelected 
                                   ? 'bg-slate-500/30 text-slate-100 border-transparent' 
-                                  : 'bg-slate-100/90 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                  : 'bg-slate-100/90 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
                               }`}>
                                 ✍️ Draft
                               </span>
@@ -6553,7 +6566,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                               const score = calculateJournalQualityScore(entry);
                               let scoreColor = isSelected 
                                 ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200 font-extrabold' 
-                                : 'bg-slate-105/90 dark:bg-slate-800/60 border-slate-205 dark:border-slate-750 text-slate-700 dark:text-slate-350';
+                                : 'bg-slate-105/90 dark:bg-slate-800/60 border-slate-205 dark:border-slate-800 text-slate-700 dark:text-slate-300';
                               if (score >= 80) {
                                 scoreColor = isSelected 
                                   ? 'bg-cyan-400 text-slate-950 border-cyan-300 font-black' 
@@ -6574,7 +6587,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             <span className={`text-[8.5px] font-mono font-black tracking-tight border px-1.5 py-0.1 select-all rounded ${
                               isSelected 
                                 ? 'bg-black/50 border-white/10 text-white' 
-                                : 'bg-slate-200/50 border-slate-300 dark:border-slate-800 text-slate-800 dark:text-slate-350'
+                                : 'bg-slate-200/50 border-slate-300 dark:border-slate-800 text-slate-800 dark:text-slate-300'
                             }`} title="Uniquely Assigned Reference Code">
                               {getEntryReferenceCode(entry, entries)}
                             </span>
@@ -6584,7 +6597,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           </div>
                         </div>
 
-                        <div className={`text-xs font-bold truncate mt-1 ${isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                        <div className={`text-xs font-bold truncate mt-1 ${isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-300'}`}>
                           {entry.planned}
                         </div>
 
@@ -6606,7 +6619,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           <div className="flex gap-2">
                             {entry.status === 'Approved' ? (
                               <span className={`flex items-center gap-0.5 text-[9px] font-mono select-none font-bold ${
-                                isSelected ? 'text-emerald-300' : 'text-slate-450 dark:text-slate-500'
+                                isSelected ? 'text-emerald-300' : 'text-slate-450 dark:text-slate-300'
                               }`} title="Official Seal - Locked Record">
                                 <Lock className="w-2.5 h-2.5 text-emerald-500" /> SEALED
                               </span>
@@ -6618,7 +6631,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     handleEditInit(entry);
                                   }}
                                   className={`p-0.5 shrink-0 cursor-pointer ${
-                                    isSelected ? 'text-slate-200 hover:text-white' : 'text-slate-400 dark:text-slate-500 hover:text-amber-550'
+                                    isSelected ? 'text-slate-200 hover:text-white' : 'text-slate-400 dark:text-slate-300 hover:text-amber-550'
                                   }`}
                                   title="Edit"
                                   id={`edit-btn-${entry.id}`}
@@ -6631,7 +6644,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     handleDeleteEntry(entry.id);
                                   }}
                                   className={`p-0.5 shrink-0 cursor-pointer ${
-                                    isSelected ? 'text-slate-200 hover:text-rose-300' : 'text-slate-404 dark:text-slate-500 hover:text-rose-650'
+                                    isSelected ? 'text-slate-200 hover:text-rose-300' : 'text-slate-404 dark:text-slate-300 hover:text-rose-650'
                                   }`}
                                   title="Delete"
                                   id={`delete-btn-${entry.id}`}
@@ -6651,12 +6664,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
             {/* EXPANDED LIVE PREVIEW GRID (RIGHT HALF / spanning 8) */}
-            <div className="col-span-1 md:col-span-8 bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-xl p-6 lg:p-8 flex flex-col overflow-y-auto text-slate-900 dark:text-slate-100 shadow-md">
+            <div className="col-span-1 md:col-span-8 bg-white border border-slate-205 rounded-xl p-6 lg:p-8 flex flex-col overflow-y-auto text-slate-900 shadow-md dark:bg-slate-900 dark:text-slate-400">
               {selectedEntry ? (
                 <>
                   {/* UTILITIES PANEL */}
-                  <div className="no-print flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-3 shrink-0">
-                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest font-mono">
+                  <div className="no-print flex items-center justify-between border-b border-slate-200 pb-2 mb-3 shrink-0 dark:border-slate-800">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest font-mono dark:text-slate-400">
                       Journal Entry
                     </span>
 
@@ -6680,27 +6693,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                   {/* NOTEBOOK SPEC SHEET CONTAINER (STANDARDIZED JUDGES TEMPLATE) */}
                   <div 
-                    className="print-page bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 p-4 rounded text-slate-900 dark:text-slate-100 flex-1 flex flex-col gap-4 relative overflow-y-auto print:bg-white print:border-none print:p-0 transition-colors"
+                    className="print-page bg-slate-50 border border-slate-200 p-4 rounded text-slate-900 flex-1 flex flex-col gap-4 relative overflow-y-auto print:bg-white print:border-none print:p-0 transition-colors dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     id="judges-proof-sheet"
                   >
                     
                     {/* FTC Header Plate */}
-                    <div className="border-b-4 border-slate-900 dark:border-slate-100 pb-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="border-b-4 border-slate-900 pb-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono font-black border border-slate-800 dark:border-slate-700 px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 uppercase tracking-wide text-slate-800 dark:text-slate-200">
+                        <span className="text-[10px] font-mono font-black border border-slate-800 px-2 py-0.5 rounded bg-slate-200 uppercase tracking-wide text-slate-800 dark:bg-slate-800 dark:text-slate-400">
                           {selectedEntry.subteam}
                         </span>
-                        <h4 className="text-xs font-black text-slate-950 dark:text-slate-50 uppercase font-display tracking-widest">
+                        <h4 className="text-xs font-black text-slate-950 uppercase font-display tracking-widest dark:text-slate-400">
                           SUBTEAM JOURNAL ENTRY
                         </h4>
                       </div>
 
-                      <div className="text-left sm:text-right text-[10px] font-mono text-slate-600 dark:text-slate-400 flex flex-col gap-0.5">
-                        <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-905 dark:text-slate-100 select-all tracking-wider bg-slate-200/50 dark:bg-slate-800 px-1 rounded">{getEntryReferenceCode(selectedEntry, entries)}</span></div>
+                      <div className="text-left sm:text-right text-[10px] font-mono text-slate-600 flex flex-col gap-0.5 dark:text-slate-300">
+                        <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-905 select-all tracking-wider bg-slate-200/50 px-1 rounded">{getEntryReferenceCode(selectedEntry, entries)}</span></div>
                         <div><strong>DATE:</strong> {selectedEntry.date}</div>
                         <div className="flex items-center gap-1 sm:justify-end">
                           <strong>AUTHOR:</strong>{' '}
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
+                          <span className="font-bold text-slate-800 dark:text-slate-400">
                             {selectedEntry.author}
                           </span>
                           {(() => {
@@ -6747,20 +6760,20 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             </span>
                           </div>
 
-                          <div className="w-full bg-slate-300 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div className="w-full bg-slate-300 rounded-full h-1.5 overflow-hidden">
                             <div className={`${ratingProgressColor} h-1.5 rounded-full transition-all duration-300`} style={{ width: `${score}%` }}></div>
                           </div>
 
                           <div className="flex justify-between items-center text-[10px]">
                             <span className="font-medium">{ratingLabel}</span>
-                            <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">
+                            <span className="font-bold text-slate-900 font-mono dark:text-slate-400">
                               XP Awarded: +{50 + score} XP
                             </span>
                           </div>
 
                           {/* Actionable tip if the score is less than 100 */}
                           {score < 100 && (
-                            <p className="text-[9px] italic opacity-85 border-t border-dashed border-slate-300 dark:border-slate-800 pt-1 mt-0.5 leading-normal">
+                            <p className="text-[9px] italic opacity-85 border-t border-dashed border-slate-300 pt-1 mt-0.5 leading-normal dark:border-slate-800">
                               💡 <strong>Tips to improve QI:</strong> {
                                 score < 25 ? "Provide more descriptive details in planned & accomplished fields (85+ words yields XP)." :
                                 (selectedEntry.problemsAndSolutions?.length || 0) === 0 ? "Document at least 1-2 mechanical/programming challenges & solutions to boost score." :
@@ -6775,43 +6788,43 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     })()}
 
                     {/* Content Fields Map */}
-                    <div className="space-y-6 text-sm text-slate-800">
+                    <div className="space-y-6 text-sm text-slate-800 dark:text-slate-400">
                       
                       {/* What We Planned */}
-                      <div className="bg-white dark:bg-slate-905/60 border border-slate-205 dark:border-slate-830 p-5 lg:p-6 rounded-xl shadow-xs">
-                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 dark:border-slate-800 pb-1.5">
+                      <div className="bg-white border border-slate-205 p-5 lg:p-6 rounded-xl shadow-xs dark:bg-slate-900">
+                        <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 pb-1.5 dark:text-slate-400">
                           What we planned
                         </strong>
-                        <p className="text-slate-900 dark:text-slate-100 leading-relaxed font-medium text-xs lg:text-sm whitespace-pre-wrap">
+                        <p className="text-slate-900 leading-relaxed font-medium text-xs lg:text-sm whitespace-pre-wrap dark:text-slate-400">
                           {selectedEntry.planned}
                         </p>
                       </div>
 
                       {/* What We Accomplished */}
-                      <div className="bg-white dark:bg-slate-905/60 border border-slate-205 dark:border-slate-830 p-5 lg:p-6 rounded-xl shadow-xs">
-                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 dark:border-slate-800 pb-1.5">
+                      <div className="bg-white border border-slate-205 p-5 lg:p-6 rounded-xl shadow-xs dark:bg-slate-900">
+                        <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 pb-1.5 dark:text-slate-400">
                           What we accomplished
                         </strong>
-                        <p className="text-slate-900 dark:text-slate-100 leading-relaxed text-xs lg:text-sm whitespace-pre-wrap">
+                        <p className="text-slate-900 leading-relaxed text-xs lg:text-sm whitespace-pre-wrap dark:text-slate-400">
                           {selectedEntry.accomplished}
                         </p>
                       </div>
 
                       {/* Problems & Solutions (Enumerated list) */}
-                      <div className="bg-white dark:bg-slate-905/60 border border-slate-205 dark:border-slate-830 p-5 lg:p-6 rounded-xl shadow-xs">
-                        <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 dark:border-slate-800 pb-1.5">
+                      <div className="bg-white border border-slate-205 p-5 lg:p-6 rounded-xl shadow-xs dark:bg-slate-900">
+                        <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 pb-1.5 dark:text-slate-400">
                           Problems and solutions found
                         </strong>
                         {selectedEntry.problemsAndSolutions.length === 0 ? (
-                          <p className="text-slate-400 dark:text-slate-500 italic text-xs lg:text-sm">No active blockers recorded.</p>
+                          <p className="text-slate-400 italic text-xs lg:text-sm dark:text-slate-500">No active blockers recorded.</p>
                         ) : (
                           <div className="space-y-3">
                             {selectedEntry.problemsAndSolutions.map((p, idx) => (
                               <div key={idx} className="flex gap-3 items-start pl-0.5">
-                                <span className="bg-slate-900 dark:bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded mt-0.5 shrink-0">
+                                <span className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded mt-0.5 shrink-0 dark:bg-slate-950">
                                   {idx + 1}
                                 </span>
-                                <div className="text-slate-900 dark:text-slate-100 leading-relaxed text-xs lg:text-sm font-medium whitespace-pre-wrap">
+                                <div className="text-slate-900 leading-relaxed text-xs lg:text-sm font-medium whitespace-pre-wrap dark:text-slate-400">
                                   {p}
                                 </div>
                               </div>
@@ -6822,11 +6835,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                       {/* Plan for next time */}
                       {selectedEntry.planNextTime && (
-                        <div className="bg-white dark:bg-slate-905/60 border border-slate-205 dark:border-slate-830 p-5 lg:p-6 rounded-xl shadow-xs">
-                          <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 dark:border-slate-800 pb-1.5">
+                        <div className="bg-white border border-slate-205 p-5 lg:p-6 rounded-xl shadow-xs dark:bg-slate-900">
+                          <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 pb-1.5 dark:text-slate-400">
                             Plan for next time
                           </strong>
-                          <p className="text-slate-900 dark:text-slate-100 leading-relaxed text-xs lg:text-sm whitespace-pre-wrap">
+                          <p className="text-slate-900 leading-relaxed text-xs lg:text-sm whitespace-pre-wrap dark:text-slate-400">
                             {selectedEntry.planNextTime}
                           </p>
                         </div>
@@ -6835,15 +6848,18 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       {/* Notebook imagery */}
                       {selectedEntry.images.length > 0 && (
                         <div className="space-y-1.5">
-                          <strong className="block text-slate-500 dark:text-slate-400 uppercase font-mono tracking-wider text-[10px] font-bold">
+                          <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] font-bold dark:text-slate-400">
                             Session Imagery Proofs (Chassis maps, tests, wiring diagrams)
                           </strong>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {selectedEntry.images.map((img) => (
-                              <div key={img.id} className="border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 rounded p-1 flex flex-col gap-1 ring-1 ring-slate-205 dark:ring-slate-800">
+                              <div key={img.id} className="border border-slate-300 bg-white rounded p-1 flex flex-col gap-1 ring-1 ring-slate-205 dark:ring-slate-800 dark:bg-slate-900 dark:border-slate-800">
                                 <div 
-                                  onClick={() => setExpandedImage({ url: img.dataUrl, name: img.name })}
-                                  className="aspect-[4/3] rounded overflow-hidden bg-slate-100 dark:bg-slate-950 flex items-center justify-center border border-slate-200 dark:border-slate-850 cursor-zoom-in hover:opacity-90 transition-opacity relative group/thumb"
+                                  onClick={() => setExpandedImage({ 
+                                    images: selectedEntry.images.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                                    currentIndex: selectedEntry.images.findIndex(i => i.id === img.id)
+                                  })}
+                                  className="aspect-[4/3] rounded overflow-hidden bg-slate-100 flex items-center justify-center border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity relative group/thumb dark:bg-slate-800 dark:border-slate-800"
                                   title="Click to view expanded image"
                                 >
                                   <img 
@@ -6858,11 +6874,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     </span>
                                   </div>
                                 </div>
-                                <div className="text-[9px] font-mono text-slate-500 dark:text-slate-400 px-1 truncate shrink-0 flex justify-between items-center">
+                                <div className="text-[9px] font-mono text-slate-500 px-1 truncate shrink-0 flex justify-between items-center dark:text-slate-400">
                                   <span className="truncate">📁 {img.name} ({(img.size / 1024).toFixed(1)} KB)</span>
                                   <button
-                                    onClick={() => setExpandedImage({ url: img.dataUrl, name: img.name })}
-                                    className="text-[9px] font-bold text-slate-400 hover:text-brand transition-colors cursor-pointer"
+                                    onClick={() => setExpandedImage({ 
+                                      images: selectedEntry.images.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                                      currentIndex: selectedEntry.images.findIndex(i => i.id === img.id)
+                                    })}
+                                    className="text-[9px] font-bold text-slate-400 hover:text-brand transition-colors cursor-pointer dark:text-slate-500"
                                   >
                                     [ZOOM]
                                   </button>
@@ -6876,25 +6895,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </div>
 
                     {/* Physical signature box designed specifically for judges approval */}
-                    <div className="mt-auto pt-3 border-t border-dashed border-slate-400 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 dark:text-slate-400 gap-2">
+                    <div className="mt-auto pt-3 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2 dark:text-slate-400 dark:border-slate-800">
                       <span>FTC CENTRALIZED LEDGER IDENTIFIER AND PROOF — VERIFIED LOCAL SYNC</span>
                       {selectedEntry.status === 'Approved' ? (
                         <span className="shrink-0 text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center gap-1 uppercase tracking-wider">
                           ✔️ SIGNED OFF BY MENTOR: {selectedEntry.reviewer || 'TESTMENTOR'}
                         </span>
                       ) : (
-                        <span className="shrink-0 border-b border-slate-800 dark:border-slate-500 w-[200px] text-right">SIGNATURE: ___________________</span>
+                        <span className="shrink-0 border-b border-slate-800 w-[200px] text-right">SIGNATURE: ___________________</span>
                       )}
                     </div>
 
                   </div>
 
                   {/* PEER REVIEW & APPRAISAL ACTION CENTER (RENDERS BELOW PROOF SHEET) */}
-                  <div className="bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-850 rounded-lg p-3.5 mt-3 no-print shadow-sm flex flex-col gap-2.5">
-                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-1.5 gap-2 flex-wrap">
+                  <div className="bg-slate-50 border border-slate-300 rounded-lg p-3.5 mt-3 no-print shadow-sm flex flex-col gap-2.5 dark:bg-slate-800 dark:border-slate-800">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 gap-2 flex-wrap dark:border-slate-800">
                       <div className="flex items-center gap-1.5">
                         <Users className="w-4 h-4 text-purple-500 animate-pulse" />
-                        <span className="text-[10px] font-extrabold text-slate-650 dark:text-slate-400 uppercase tracking-widest font-mono">
+                        <span className="text-[10px] font-extrabold text-slate-650 uppercase tracking-widest font-mono dark:text-slate-300">
                           Reviewer Appraisal Office
                         </span>
                       </div>
@@ -6915,7 +6934,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             ⏳ Pending Mentor Review
                           </span>
                         ) : (
-                          <span className="bg-slate-105 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-705 uppercase">
+                          <span className="bg-slate-105 text-slate-700 px-2 py-0.5 rounded border border-slate-300 uppercase dark:text-slate-300 dark:border-slate-800">
                             ✍️ Working Draft (Offline Cache)
                           </span>
                         )}
@@ -6923,8 +6942,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </div>
 
                     {/* INTERACTIVE LIFE-CYCLE CATEGORIZATION DROPDOWN */}
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-2.5 flex flex-col gap-1.5 shadow-sm">
-                      <label htmlFor="lifecycle-status-selector" className="text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400 font-mono uppercase flex items-center justify-between">
+                    <div className="bg-white border border-slate-200 rounded p-2.5 flex flex-col gap-1.5 shadow-sm dark:bg-slate-900 dark:border-slate-800">
+                      <label htmlFor="lifecycle-status-selector" className="text-[10px] font-extrabold tracking-wider text-slate-500 font-mono uppercase flex items-center justify-between dark:text-slate-400">
                         <span>⚙️ Categorize Log Status (Dropdown Menu)</span>
                         <span className="text-[8px] text-purple-605 dark:text-purple-400 font-mono font-bold uppercase select-none">Live Sync</span>
                       </label>
@@ -6932,7 +6951,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         id="lifecycle-status-selector"
                         value={pendingStatus || selectedEntry.status || 'Draft'}
                         onChange={(e) => setPendingStatus(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-2 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-extrabold focus:ring-1 focus:ring-purple-500 outline-none cursor-pointer"
+                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-xs text-slate-900 font-extrabold focus:ring-1 focus:ring-purple-500 outline-none cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                       >
                         <option value="Draft">✍️ Draft (Keeps log as an active working draft)</option>
                         <option value="Pending Review">⏳ Pending Review (Queue for coaching review)</option>
@@ -6978,7 +6997,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           </button>
                           <button
                             onClick={() => setPendingStatus(null)}
-                            className="flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 font-extrabold py-1.5 rounded text-[10px] uppercase tracking-wider transition-all cursor-pointer"
+                            className="flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 font-extrabold py-1.5 rounded text-[10px] uppercase tracking-wider transition-all cursor-pointer dark:text-slate-400"
                           >
                             Cancel
                           </button>
@@ -6988,15 +7007,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                     {/* Historical Mentor Comment details if they exist in the model */}
                     {selectedEntry.reviewNotes && (
-                      <div className="bg-slate-200/50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 p-2.5 rounded text-[11px] leading-relaxed">
-                        <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 font-mono mb-1">
+                      <div className="bg-slate-200/50 border border-slate-300 p-2.5 rounded text-[11px] leading-relaxed dark:border-slate-800">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 font-mono mb-1 dark:text-slate-400">
                           📋 historical appraisal commentary (By {selectedEntry.reviewer || 'Mentor Coach'}):
                         </span>
-                        <p className="text-slate-800 dark:text-slate-100 whitespace-pre-wrap font-mono select-text bg-white dark:bg-slate-950 p-2 rounded border border-slate-200 dark:border-slate-800">
+                        <p className="text-slate-800 whitespace-pre-wrap font-mono select-text bg-white p-2 rounded border border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800">
                           "{selectedEntry.reviewNotes}"
                         </p>
                         {selectedEntry.reviewedAt && (
-                          <span className="block text-[8px] text-slate-500 font-mono mt-1 text-right">
+                          <span className="block text-[8px] text-slate-500 font-mono mt-1 text-right dark:text-slate-400">
                             Verified Timestamp: {new Date(selectedEntry.reviewedAt).toLocaleString()}
                           </span>
                         )}
@@ -7017,14 +7036,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         {canUserApproveEntry(currentUser, selectedEntry) ? (
                           <>
                             <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider font-mono uppercase">
+                              <label className="text-[10px] font-bold text-slate-500 tracking-wider font-mono uppercase dark:text-slate-400">
                                 Action Statement / Appraisal Note (Required for returning/archiving):
                               </label>
                               <textarea
                                 value={reviewNoteInput}
                                 onChange={(e) => setReviewNoteInput(e.target.value)}
                                 placeholder="Add technical comments or specific revisions requested (e.g., 'Verify the encoder ports match wiring diagram' or 'Excellent calculations on gear ratios! Approved.')"
-                                className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-purple-500 placeholder:text-slate-450 dark:placeholder:text-slate-650 h-16 resize-y font-mono"
+                                className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-purple-500 placeholder:text-slate-450 dark:placeholder:text-slate-650 h-16 resize-y font-mono dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                               />
                             </div>
                             
@@ -7050,7 +7069,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           </>
                         ) : (
                           // General student user message
-                          <div className="bg-slate-200/40 dark:bg-slate-850/40 border border-dashed border-slate-300 dark:border-slate-800 p-2.5 rounded text-[10px] text-center text-slate-500 dark:text-slate-450 font-mono font-bold leading-normal">
+                          <div className="bg-slate-200/40 border border-dashed border-slate-300 p-2.5 rounded text-[10px] text-center text-slate-500 font-mono font-bold leading-normal dark:text-slate-400 dark:border-slate-800">
                             {(() => {
                               const authorNorm = selectedEntry.author.toLowerCase().trim();
                               const userNameNorm = (currentUser?.name || '').toLowerCase().trim();
@@ -7072,8 +7091,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   </div>
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-slate-500 gap-2">
-                  <BookOpen className="w-10 h-10 stroke-1 text-slate-300 dark:text-slate-705" />
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 gap-2 dark:text-slate-500">
+                  <BookOpen className="w-10 h-10 stroke-1 text-slate-300" />
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">No Journal Selected</span>
                   <p className="text-[10px] max-w-xs text-slate-400 dark:text-slate-500">
                     Click an archive item on the directory list to preview the judges summary page, print copies, or extract Markdown blocks.
@@ -7108,26 +7127,31 @@ ${entry.planNextTime || '_No carry-over specified._'}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] dark:bg-slate-950"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header Bar */}
               <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2 text-slate-200">
-                  <div className="w-5 h-5 flex items-center justify-center bg-slate-800 rounded p-0.5">
+                  <div className="w-5 h-5 flex items-center justify-center bg-slate-800 rounded p-0.5 dark:bg-slate-950">
                     <RoboraidersLogo className="w-full h-full" />
                   </div>
                   <span className="text-xs font-mono font-bold truncate tracking-tight max-w-[200px] sm:max-w-md text-slate-300">
-                    {expandedImage.name}
+                    {expandedImage.images[expandedImage.currentIndex].name}
                   </span>
+                  {expandedImage.images.length > 1 && (
+                    <span className="text-xs font-mono text-slate-500 ml-2 dark:text-slate-400">
+                      ({expandedImage.currentIndex + 1} of {expandedImage.images.length})
+                    </span>
+                  )}
                 </div>
                 
                 <div className="flex items-center gap-2">
                   {/* Download button */}
                   <a
-                    href={expandedImage.url}
-                    download={expandedImage.name}
-                    className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider border border-slate-800 bg-slate-900 cursor-pointer"
+                    href={expandedImage.images[expandedImage.currentIndex].url}
+                    download={expandedImage.images[expandedImage.currentIndex].name}
+                    className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider border border-slate-800 bg-slate-900 cursor-pointer dark:bg-slate-950 dark:text-slate-500"
                     title="Download original file"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -7137,7 +7161,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   {/* Close button */}
                   <button
                     onClick={() => setExpandedImage(null)}
-                    className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-rose-450 rounded transition-colors border border-slate-800 bg-slate-900 cursor-pointer"
+                    className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-rose-450 rounded transition-colors border border-slate-800 bg-slate-900 cursor-pointer dark:bg-slate-950 dark:text-slate-500"
                     title="Close overlay [ESC]"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -7146,22 +7170,52 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
 
               {/* Viewport Box */}
-              <div className="flex-1 overflow-auto bg-slate-950 p-4 sm:p-6 flex items-center justify-center min-h-[250px]">
+              <div className="flex-1 overflow-auto bg-slate-950 p-4 flex items-center justify-center relative min-h-[50vh] touch-pan-y group">
+                {expandedImage.images.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedImage(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null);
+                    }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 bg-black/50 hover:bg-black text-white rounded-full transition-all md:opacity-0 md:group-hover:opacity-100 z-10 border border-white/10"
+                    title="Previous image"
+                  >
+                    <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </button>
+                )}
+
                 <img
-                  src={expandedImage.url}
-                  alt={expandedImage.name}
-                  className="max-w-full max-h-[60vh] sm:max-h-[70vh] object-contain rounded shadow-lg ring-1 ring-slate-800 select-none cursor-default"
+                  key={expandedImage.images[expandedImage.currentIndex].url}
+                  src={expandedImage.images[expandedImage.currentIndex].url}
+                  alt={expandedImage.images[expandedImage.currentIndex].name}
+                  className="max-w-full max-h-[70vh] sm:max-h-[85vh] object-contain rounded shadow-lg select-none cursor-default animate-fade-in"
                   referrerPolicy="no-referrer"
                 />
+
+                {expandedImage.images.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedImage(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null);
+                    }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 bg-black/50 hover:bg-black text-white rounded-full transition-all md:opacity-0 md:group-hover:opacity-100 z-10 border border-white/10"
+                    title="Next image"
+                  >
+                    <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
+                  </button>
+                )}
               </div>
 
               {/* Specs Footer Bar */}
-              <div className="bg-slate-950/80 px-4 py-2 border-t border-slate-900 flex justify-between items-center text-[10px] font-mono text-slate-400">
-                <div className="flex items-center gap-4">
-                  <span>FORMAT: {expandedImage.url.substring(0, 30).includes('svg') ? 'Vector (SVG)' : 'Compressed Image'}</span>
-                  {expandedImage.url.startsWith('data:') && (
-                    <span>BUFFER SIZE: {Math.round(expandedImage.url.length * 0.75 / 1024)} KB</span>
+              <div className="bg-slate-950/80 px-4 py-2 border-t border-slate-900 flex justify-between items-center text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                <div className="flex items-center gap-4 hidden sm:flex">
+                  <span>FORMAT: {expandedImage.images[expandedImage.currentIndex].url.substring(0, 30).includes('svg') ? 'Vector (SVG)' : 'Compressed Image'}</span>
+                  {expandedImage.images[expandedImage.currentIndex].url.startsWith('data:') && (
+                    <span>BUFFER SIZE: {Math.round(expandedImage.images[expandedImage.currentIndex].url.length * 0.75 / 1024)} KB</span>
                   )}
+                </div>
+                <div className="flex items-center gap-4 sm:hidden">
+                  <span>GALLERY VIEW</span>
                 </div>
                 <button
                   onClick={() => setExpandedImage(null)}
@@ -7190,11 +7244,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+              className="relative w-full max-w-md bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden flex flex-col dark:bg-slate-900 dark:border-slate-800"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-brand" />
                   <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-200">
@@ -7204,7 +7258,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <button
                   type="button"
                   onClick={closeCreateProfileModal}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-500"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -7212,11 +7266,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
               {/* Form Body */}
               <form onSubmit={handleCreateProfile} className="flex flex-col flex-1 overflow-hidden">
-                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-100 overflow-y-auto max-h-[70vh]">
+                <div className="p-5 flex flex-col gap-4 text-slate-800 overflow-y-auto max-h-[70vh] dark:text-slate-400">
                   
                   {/* Name field */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Full Name</span>
                       <span className="text-brand">*</span>
                     </label>
@@ -7226,13 +7280,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       placeholder="e.g. testLeader, Mark Watney"
                       value={newProfileName}
                       onChange={(e) => setNewProfileName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-medium"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
 
                   {/* School Email field */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>School Email</span>
                       <span className="text-brand">*</span>
                     </label>
@@ -7242,13 +7296,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       placeholder="e.g. mwatney@school.edu"
                       value={newProfileEmail}
                       onChange={(e) => setNewProfileEmail(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-855 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-805 transition-all font-medium"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-805 transition-all font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
 
                   {/* School ID (lunch #) field */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>School ID (Lunch #)</span>
                       <span className="text-brand">*</span>
                     </label>
@@ -7258,13 +7312,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       placeholder="e.g. 558291"
                       value={newProfileSchoolId}
                       onChange={(e) => setNewProfileSchoolId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-medium font-mono"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-medium font-mono dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
 
                   {/* Primary Subteam (dropdown, cannot be Inspire or Strategy) */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Primary Subteam</span>
                       <span className="text-brand">*</span>
                     </label>
@@ -7279,86 +7333,86 @@ ${entry.planNextTime || '_No carry-over specified._'}
                            setNewProfileRole('captain');
                         }
                       }}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     >
-                      <option value="Design/Build/Fabrication" className="bg-white dark:bg-slate-900 text-slate-850 text-slate-800 dark:text-slate-100">Design/Build/Fabrication</option>
-                      <option value="Programming" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Programming</option>
-                      <option value="Outreach" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Outreach</option>
-                      <option value="Business & Media" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Business & Media</option>
-                      <option value="Mentor" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold">Coach / Mentor</option>
-                      <option value="Lead/Captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold">Subteam Lead / Captain</option>
+                      <option value="Design/Build/Fabrication" className="bg-white text-slate-850 text-slate-800 dark:bg-slate-900 dark:text-slate-400">Design/Build/Fabrication</option>
+                      <option value="Programming" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Programming</option>
+                      <option value="Outreach" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Outreach</option>
+                      <option value="Business & Media" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Business & Media</option>
+                      <option value="Mentor" className="bg-white text-slate-800 font-bold dark:bg-slate-900 dark:text-slate-400">Coach / Mentor</option>
+                      <option value="Lead/Captain" className="bg-white text-slate-800 font-bold dark:bg-slate-900 dark:text-slate-400">Subteam Lead / Captain</option>
                     </select>
                   </div>
 
                   {/* Secondary Subteam (dropdown, can only be Inspire or Strategy) */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Secondary Subteam</span>
-                      <span className="text-slate-400 font-normal italic font-sans lowercase text-[9px]">(optional)</span>
+                      <span className="text-slate-400 font-normal italic font-sans lowercase text-[9px] dark:text-slate-500">(optional)</span>
                     </label>
                     <select
                       value={newProfileSecondary}
                       onChange={(e) => setNewProfileSecondary(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-855 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-905 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-905 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold dark:bg-slate-800 dark:border-slate-800"
                     >
-                      <option value="None" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">None (No secondary role)</option>
-                      <option value="Inspire" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Inspire</option>
-                      <option value="Strategy" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Strategy</option>
+                      <option value="None" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">None (No secondary role)</option>
+                      <option value="Inspire" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Inspire</option>
+                      <option value="Strategy" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Strategy</option>
                     </select>
                   </div>
 
                   {/* Leadership dropdown */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Leadership Role</span>
                     </label>
                     <select
                       value={newProfileLeadership}
                       onChange={(e) => setNewProfileLeadership(e.target.value as any)}
                       disabled={!isUserAdminOrMentor}
-                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!isUserAdminOrMentor ? 'cursor-not-allowed opacity-75' : ''}`}
+                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-800 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-300 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!isUserAdminOrMentor ? 'cursor-not-allowed opacity-75' : ''}`}
                     >
-                      <option value="None" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">None</option>
-                      <option value="Captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Captain</option>
-                      <option value="Subteam leader" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Subteam leader</option>
+                      <option value="None" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">None</option>
+                      <option value="Captain" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Captain</option>
+                      <option value="Subteam leader" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Subteam leader</option>
                     </select>
                     {!isUserAdminOrMentor && (
-                      <span className="text-[9px] text-slate-400 italic">Only mentors/captains can update the leadership role.</span>
+                      <span className="text-[9px] text-slate-400 italic dark:text-slate-500">Only mentors/captains can update the leadership role.</span>
                     )}
                   </div>
 
                   {/* Account Level / Role dropdown */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Account Level / Role</span>
                     </label>
                     <select
                       value={newProfileRole}
                       onChange={(e) => setNewProfileRole(e.target.value as any)}
                       disabled={!isUserAdminOrMentor}
-                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!isUserAdminOrMentor ? 'cursor-not-allowed opacity-75' : ''}`}
+                      className={`w-full bg-slate-50 border border-slate-300 dark:bg-slate-800 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-300 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold ${!isUserAdminOrMentor ? 'cursor-not-allowed opacity-75' : ''}`}
                     >
-                      <option value="member" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Student Team Member</option>
-                      <option value="captain" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Subteam Lead / Captain</option>
-                      <option value="mentor" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">Coach / Mentor</option>
+                      <option value="member" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Student Team Member</option>
+                      <option value="captain" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Subteam Lead / Captain</option>
+                      <option value="mentor" className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">Coach / Mentor</option>
                       {newProfileRole === 'mentor_captain' as any && (
-                         <option value="mentor_captain" className="bg-white dark:bg-slate-900 text-rose-500 font-bold italic">Mentor / Captain (Legacy - Change Me)</option>
+                         <option value="mentor_captain" className="bg-white text-rose-500 font-bold italic dark:bg-slate-900">Mentor / Captain (Legacy - Change Me)</option>
                       )}
                       
                     </select>
                     {!isUserAdminOrMentor && (
-                      <span className="text-[9px] text-slate-400 italic">Only mentors/captains can update the account level.</span>
+                      <span className="text-[9px] text-slate-400 italic dark:text-slate-500">Only mentors/captains can update the account level.</span>
                     )}
                   </div>
 
                 </div>
 
                 {/* Footer Buttons */}
-                <div className="bg-slate-50 dark:bg-slate-950 p-4 border-t border-slate-200 dark:border-slate-850 flex justify-end gap-2 text-xs shrink-0">
+                <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end gap-2 text-xs shrink-0 dark:bg-slate-800 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={closeCreateProfileModal}
-                    className="px-3.5 py-1.5 rounded text-xs font-bold font-mono uppercase bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    className="px-3.5 py-1.5 rounded text-xs font-bold font-mono uppercase bg-slate-200 text-slate-800 hover:bg-slate-300 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
                   >
                     Cancel
                   </button>
@@ -7392,27 +7446,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: 'spring', duration: 0.4 }}
-              className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded-lg p-5 flex flex-col max-h-[85vh] shadow-2xl relative"
+              className="w-full max-w-2xl bg-white border border-slate-250 rounded-lg p-5 flex flex-col max-h-[85vh] shadow-2xl relative dark:bg-slate-900 dark:border-slate-800"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5 mb-3.5 shrink-0">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3.5 mb-3.5 shrink-0 dark:border-slate-800">
                 <div className="flex items-center gap-2">
                   <div className="bg-purple-100 dark:bg-purple-950/50 p-2 rounded text-purple-700 dark:text-purple-400">
                     <Users className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                    <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider dark:text-slate-400">
                       Workspace Access Approvals
                     </h2>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5 dark:text-slate-400">
                       FTC Team #6567 — Active Identity & Credentials Authority
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setIsApprovalsOpen(false)}
-                  className="p-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+                  className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
                   title="Close panel"
                 >
                   <X className="w-4 h-4" />
@@ -7424,13 +7478,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 
                 {/* Section A: Pending Access Requests */}
                 <div>
-                  <h3 className="text-[11px] font-black text-slate-550 dark:text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 leading-none">
+                  <h3 className="text-[11px] font-black text-slate-550 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 leading-none dark:text-slate-300">
                     <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                     <span>Access Requests ({accounts.filter(a => a.status === 'Pending').length})</span>
                   </h3>
 
                   {accounts.filter(a => a.status === 'Pending').length === 0 ? (
-                    <div className="bg-slate-50 dark:bg-slate-850/50 border border-slate-200/60 dark:border-slate-800/40 rounded p-4 text-center text-slate-500 dark:text-slate-400 font-medium">
+                    <div className="bg-slate-50 border border-slate-200/60 rounded p-4 text-center text-slate-500 font-medium dark:bg-slate-800 dark:text-slate-400">
                       🚀 There are no access requests awaiting mentor evaluation.
                     </div>
                   ) : (
@@ -7442,18 +7496,18 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         >
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-extrabold text-slate-900 dark:text-slate-100 text-sm">{acc.name}</span>
+                              <span className="font-extrabold text-slate-900 text-sm dark:text-slate-400">{acc.name}</span>
                               <span className="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">
                                 {acc.role === 'mentor' || acc.role === 'captain' ? 'Mentor Class' : 'Member Class'}
                               </span>
                             </div>
-                             <div className="text-[11px] text-slate-700 dark:text-slate-350 font-mono mt-1 space-y-0.5">
+                             <div className="text-[11px] text-slate-700 font-mono mt-1 space-y-0.5 dark:text-slate-300">
                               <div>Email: <strong>{acc.schoolEmail}</strong></div>
-                              <div>ID/Lunch #: <strong className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">••••••</strong></div>
+                              <div>ID/Lunch #: <strong className="bg-slate-200 px-1 py-0.5 rounded dark:bg-slate-800">••••••</strong></div>
                               <div>Primary: <strong>{formatSubteamLabel(acc.primarySubteam)}</strong> • Secondary: <strong>{acc.secondarySubteam}</strong></div>
                             </div>
                             <div className="mt-2 flex items-center gap-2">
-                              <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Leadership:</span>
+                              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider dark:text-slate-400">Leadership:</span>
                               {isUserAdminOrMentor ? (
                                 <select
                                   value={acc.leadership || 'None'}
@@ -7463,14 +7517,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
                                     localStorage.setItem('ftc_user_accounts', JSON.stringify(updated));
                                     showToast(`Updated leadership for pending user ${acc.name} to ${e.target.value}.`, 'success');
                                   }}
-                                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5 font-sans font-bold text-[10px] text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand outline-none"
+                                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 font-sans font-bold text-[10px] text-slate-800 focus:ring-1 focus:ring-brand outline-none dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                                 >
                                   <option value="None">None</option>
                                   <option value="Captain">Captain</option>
                                   <option value="Subteam leader">Subteam leader</option>
                                 </select>
                               ) : (
-                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[9px]">
+                                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[9px] dark:bg-slate-800 dark:text-slate-300">
                                   {acc.leadership || 'None'}
                                 </span>
                               )}
@@ -7539,30 +7593,30 @@ FTC #6567 Captains & Mentors`
 
                 {/* Section B: Registered Directory */}
                 <div>
-                  <h3 className="text-[11px] font-black text-slate-550 dark:text-slate-400 uppercase tracking-wider mb-2.5">
+                  <h3 className="text-[11px] font-black text-slate-550 uppercase tracking-wider mb-2.5 dark:text-slate-300">
                     Authorized Team Roster ({accounts.filter(a => a.status !== 'Pending').length})
                   </h3>
 
-                  <div className="border border-slate-200 dark:border-slate-805 rounded-md divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+                  <div className="border border-slate-200 rounded-md divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden dark:border-slate-800">
                     {accounts.filter(a => a.status !== 'Pending').map((acc) => (
                       <div 
                         key={acc.id}
-                        className="p-3 hover:bg-slate-50 dark:hover:bg-slate-850/45 flex justify-between items-center gap-3"
+                        className="p-3 hover:bg-slate-50 flex justify-between items-center gap-3 dark:hover:bg-slate-800"
                       >
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-extrabold text-slate-800 dark:text-slate-100">{acc.name}</span>
-                            <span className="text-slate-400 dark:text-slate-600">•</span>
-                            <span className="text-slate-500 dark:text-slate-400 font-mono text-[10px]">{acc.schoolEmail}</span>
+                            <span className="font-extrabold text-slate-800 dark:text-slate-400">{acc.name}</span>
+                            <span className="text-slate-400 dark:text-slate-500">•</span>
+                            <span className="text-slate-500 font-mono text-[10px] dark:text-slate-400">{acc.schoolEmail}</span>
                           </div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 uppercase tracking-wider font-bold">
+                          <div className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wider font-bold dark:text-slate-400">
                             {acc.role === 'mentor' ? 'Coach / Mentor' : acc.role === 'captain' ? 'Subteam Lead / Captain' :  'Team Member'}
                             <span className="mx-1.5">•</span>
                             Subteam: {formatSubteamLabel(acc.primarySubteam)}
                             {acc.secondarySubteam !== 'None' && ` / ${acc.secondarySubteam}`}
                           </div>
                           <div className="mt-1.5 flex items-center gap-2">
-                            <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Leadership:</span>
+                            <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider dark:text-slate-400">Leadership:</span>
                             {isUserAdminOrMentor ? (
                               <select
                                 value={acc.leadership || 'None'}
@@ -7575,14 +7629,14 @@ FTC #6567 Captains & Mentors`
                                     showToast(`Failed to update leadership status: ${err.message}`, 'danger');
                                   }
                                 }}
-                                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5 font-sans font-bold text-[10px] text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand outline-none"
+                                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 font-sans font-bold text-[10px] text-slate-800 focus:ring-1 focus:ring-brand outline-none dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                               >
                                 <option value="None">None</option>
                                 <option value="Captain">Captain</option>
                                 <option value="Subteam leader">Subteam leader</option>
                               </select>
                             ) : (
-                              <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[9px]">
+                              <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[9px] dark:bg-slate-800 dark:text-slate-300">
                                 {acc.leadership || 'None'}
                               </span>
                             )}
@@ -7646,7 +7700,7 @@ FTC #6567 Captains & Mentors`
                                       showToast(`Failed to send password reset: ${err.message}`, 'danger');
                                     }
                                   }}
-                                  className="p-1 text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-805 rounded transition-all cursor-pointer"
+                                  className="p-1 text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-slate-100 rounded transition-all cursor-pointer dark:text-slate-500 dark:hover:bg-slate-700"
                                   title="Send Password Reset Email"
                                 >
                                   <Mail className="w-3.5 h-3.5" />
@@ -7656,7 +7710,7 @@ FTC #6567 Captains & Mentors`
                               {isUserAdminOrMentor && (
                                 <button
                                   onClick={() => handleStartEditProfile(acc.name)}
-                                  className="p-1 text-slate-400 hover:text-brand dark:hover:text-brand hover:bg-slate-100 dark:hover:bg-slate-805 rounded transition-all cursor-pointer"
+                                  className="p-1 text-slate-400 hover:text-brand dark:hover:text-brand hover:bg-slate-100 rounded transition-all cursor-pointer dark:text-slate-500 dark:hover:bg-slate-700"
                                   title="Edit User Profile"
                                 >
                                   <Edit className="w-3.5 h-3.5" />
@@ -7694,7 +7748,7 @@ FTC #6567 Captains & Mentors`
                 {/* Section C: Simulated System Mail Logs */}
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
                   <div className="flex items-center justify-between mb-2.5">
-                    <h3 className="text-[11px] font-black text-slate-550 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                    <h3 className="text-[11px] font-black text-slate-550 uppercase tracking-wider flex items-center gap-1.5 leading-none dark:text-slate-300">
                       <Mail className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                       <span>Simulated Email Dispatch Logs ({dispatchedEmails.length})</span>
                     </h3>
@@ -7704,7 +7758,7 @@ FTC #6567 Captains & Mentors`
                           setDispatchedEmails([]);
                           showToast('Cleared simulated email logs.', 'info');
                         }}
-                        className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-705 text-slate-500 hover:text-rose-600 dark:hover:text-rose-450 transition-colors cursor-pointer"
+                        className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-rose-600 dark:hover:text-rose-450 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
                         title="Clear Email Log"
                       >
                         Clear Outbox Logs
@@ -7713,7 +7767,7 @@ FTC #6567 Captains & Mentors`
                   </div>
 
                   {dispatchedEmails.length === 0 ? (
-                    <div className="bg-slate-50 dark:bg-slate-850/50 border border-slate-200/60 dark:border-slate-800/40 rounded p-4 text-center text-slate-450 dark:text-slate-450 font-mono text-[10px] leading-relaxed">
+                    <div className="bg-slate-50 border border-slate-200/60 rounded p-4 text-center text-slate-450 font-mono text-[10px] leading-relaxed dark:bg-slate-800 dark:text-slate-400">
                       📬 Outgoing team notifications will log here (e.g. registration request alerts sent to Captains/Mentors, and approval confirmation emails sent to approved student users).
                     </div>
                   ) : (
@@ -7723,7 +7777,7 @@ FTC #6567 Captains & Mentors`
                           key={email.id}
                           className="bg-slate-950 text-slate-250 border border-slate-800 rounded p-3 text-[10px] font-mono leading-relaxed pb-2.5"
                         >
-                          <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400">
+                          <div className="flex flex-col gap-0.5 border-b border-slate-800/60 pb-1.5 mb-1.5 text-slate-400 dark:text-slate-500">
                             <div className="flex justify-between items-center text-[9px]">
                               <div><span className="text-purple-400 font-bold">FROM:</span> {email.from}</div>
                               <span>{new Date(email.timestamp).toLocaleTimeString()}</span>
@@ -7750,10 +7804,10 @@ FTC #6567 Captains & Mentors`
               </div>
 
               {/* Close footer */}
-              <div className="border-t border-slate-100 dark:border-slate-800 pt-3.5 mt-2 flex justify-end shrink-0">
+              <div className="border-t border-slate-100 pt-3.5 mt-2 flex justify-end shrink-0 dark:border-slate-800">
                 <button
                   onClick={() => setIsApprovalsOpen(false)}
-                  className="bg-slate-850 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white dark:text-slate-150 font-extrabold px-4 py-1.5 text-xs rounded transition-all uppercase tracking-wider cursor-pointer"
+                  className="bg-slate-850 hover:bg-slate-800 text-white font-extrabold px-4 py-1.5 text-xs rounded transition-all uppercase tracking-wider cursor-pointer"
                 >
                   Dismiss Panel
                 </button>
@@ -7778,11 +7832,11 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+              className="relative w-full max-w-md bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden flex flex-col dark:bg-slate-900 dark:border-slate-800"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-brand" />
                   <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-200">
@@ -7792,7 +7846,7 @@ FTC #6567 Captains & Mentors`
                 <button
                   type="button"
                   onClick={() => setEditingTimeEntry(null)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-500"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -7800,32 +7854,32 @@ FTC #6567 Captains & Mentors`
 
               {/* Form Body */}
               <form onSubmit={handleUpdateEditTimeEntry} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
-                <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/50 text-[11px] font-mono text-slate-500 dark:text-slate-400 space-y-0.5">
-                  <div>Owner: <strong className="text-slate-805 dark:text-slate-200">{editingTimeEntry.userName}</strong></div>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/50 text-[11px] font-mono text-slate-500 space-y-0.5 dark:bg-slate-800 dark:text-slate-400">
+                  <div>Owner: <strong className="text-slate-805">{editingTimeEntry.userName}</strong></div>
                   <div>Email: <strong>{editingTimeEntry.userEmail}</strong></div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                       Workshop Date
                     </label>
                     <input
                       type="date"
                       value={editTimeDate}
                       onChange={(e) => setEditTimeDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-705 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 outline-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                       Select Subteam Focus
                     </label>
                     <select
                       value={editTimeSubteam}
                       onChange={(e) => setEditTimeSubteam(e.target.value as Subteam)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-705 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none cursor-pointer"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 outline-none cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     >
                       {ATTENDANCE_SUBTEAMS.map((sub) => (
                         <option key={sub} value={sub}>{sub}</option>
@@ -7852,7 +7906,7 @@ FTC #6567 Captains & Mentors`
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
                     Brief Task Details / Contributions
                   </label>
                   <textarea
@@ -7860,7 +7914,7 @@ FTC #6567 Captains & Mentors`
                     value={editTimeDesc}
                     onChange={(e) => setEditTimeDesc(e.target.value)}
                     rows={3}
-                    className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-705 rounded p-2 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none resize-none font-sans leading-relaxed focus:bg-white dark:focus:bg-slate-800"
+                    className="w-full bg-slate-50 border border-slate-300 rounded p-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none resize-none font-sans leading-relaxed focus:bg-white dark:focus:bg-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     required
                   />
                 </div>
@@ -7869,7 +7923,7 @@ FTC #6567 Captains & Mentors`
                   <button
                     type="button"
                     onClick={() => setEditingTimeEntry(null)}
-                    className="px-4 py-2 bg-slate-105 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold text-xs rounded uppercase tracking-wider transition-all cursor-pointer"
+                    className="px-4 py-2 bg-slate-105 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded uppercase tracking-wider transition-all cursor-pointer dark:text-slate-300 dark:hover:bg-slate-600"
                   >
                     Cancel
                   </button>
@@ -7901,11 +7955,11 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+              className="relative w-full max-w-md bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden flex flex-col dark:bg-slate-900 dark:border-slate-800"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
                 <div className="flex items-center gap-2">
                   <Settings className="w-4 h-4 text-brand" />
                   <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-200">
@@ -7915,7 +7969,7 @@ FTC #6567 Captains & Mentors`
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-500"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -7923,14 +7977,14 @@ FTC #6567 Captains & Mentors`
 
               {/* Form Body */}
               <form onSubmit={handleSaveSettings} className="flex flex-col flex-1 overflow-hidden">
-                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-100 overflow-y-auto max-h-[70vh]">
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-sans mb-1 border-b border-slate-150 dark:border-slate-800 pb-3">
+                <div className="p-5 flex flex-col gap-4 text-slate-800 overflow-y-auto max-h-[70vh] dark:text-slate-400">
+                  <p className="text-[11px] text-slate-500 leading-relaxed font-sans mb-1 border-b border-slate-150 pb-3 dark:text-slate-400">
                     Update your local system profile information. Changes to credentials will require you to log in with the new details on subsequent sessions.
                   </p>
 
                   {/* Name field */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Full Name</span>
                       <span className="text-brand">*</span>
                     </label>
@@ -7940,13 +7994,13 @@ FTC #6567 Captains & Mentors`
                       placeholder="Your First & Last Name"
                       value={settingsName}
                       onChange={(e) => setSettingsName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-medium"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
 
                   {/* School Email field */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>School Email Address</span>
                       <span className="text-brand">*</span>
                     </label>
@@ -7956,14 +8010,14 @@ FTC #6567 Captains & Mentors`
                       placeholder="e.g. name@school.edu"
                       value={settingsEmail}
                       onChange={(e) => setSettingsEmail(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-855 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-805 transition-all font-medium"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-805 transition-all font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
 
                   {/* Password / School ID field */}
                   <div className="flex flex-col gap-1">
                     <div className="flex justify-between items-baseline">
-                      <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                      <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                         <span>Password / School ID (Lunch #)</span>
                         <span className="text-brand">*</span>
                       </label>
@@ -7973,7 +8027,7 @@ FTC #6567 Captains & Mentors`
                       disabled
                       placeholder="e.g. 558291"
                       value={settingsSchoolId}
-                      className="w-full bg-slate-100 border border-slate-250 dark:bg-slate-800 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-500 dark:text-slate-405 outline-none transition-all font-medium font-mono cursor-not-allowed animate-none"
+                      className="w-full bg-slate-100 border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-500 outline-none transition-all font-medium font-mono cursor-not-allowed animate-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                     <button
                       type="button"
@@ -7983,25 +8037,25 @@ FTC #6567 Captains & Mentors`
                         setCurrentUser(null);
                         localStorage.removeItem('ftc_current_user');
                       }}
-                      className="mt-1.5 w-full bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-rose-600 dark:text-rose-450 text-[10px] font-black tracking-wider uppercase py-2 px-3 rounded border border-dashed border-rose-300 dark:border-rose-800 flex items-center justify-center gap-1.5 transition-all text-center cursor-pointer"
+                      className="mt-1.5 w-full bg-slate-50 hover:bg-slate-100 text-rose-600 dark:text-rose-450 text-[10px] font-black tracking-wider uppercase py-2 px-3 rounded border border-dashed border-rose-300 dark:border-rose-800 flex items-center justify-center gap-1.5 transition-all text-center cursor-pointer dark:bg-slate-800 dark:hover:bg-slate-700"
                     >
                       <Mail className="w-3.5 h-3.5 animate-pulse text-rose-500" /> <span>Send Password Reset Email to Change Password</span>
                     </button>
-                    <span className="text-[9px] text-slate-450 dark:text-slate-500 leading-normal mt-0.5">
+                    <span className="text-[9px] text-slate-450 leading-normal mt-0.5 dark:text-slate-400">
                       To safeguard account profiles, password (school ID) changes must be initiated via password reset authentication tokens dispatched over email.
                     </span>
                   </div>
 
                   {/* Primary Subteam */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Primary Subteam</span>
                       <span className="text-brand">*</span>
                     </label>
                     <select
                       value={settingsPrimary}
                       onChange={(e) => setSettingsPrimary(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     >
                       <option value="Design/Build/Fabrication">⚙️ Design/Build/Fabrication Subteam</option>
                       <option value="Programming">💻 Programming Subteam</option>
@@ -8018,14 +8072,14 @@ FTC #6567 Captains & Mentors`
 
                   {/* Secondary Subteam */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Secondary Subteam</span>
                       <span className="text-brand">*</span>
                     </label>
                     <select
                       value={settingsSecondary}
                       onChange={(e) => setSettingsSecondary(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     >
                       <option value="None">🚫 None — Primary Focus Only</option>
                       <option value="Inspire">✨ Inspire</option>
@@ -8035,11 +8089,11 @@ FTC #6567 Captains & Mentors`
                 </div>
 
                 {/* Footer buttons */}
-                <div className="bg-slate-50 dark:bg-slate-950 px-5 py-3.5 border-t border-slate-150 dark:border-slate-850 flex justify-end gap-2 shrink-0">
+                <div className="bg-slate-50 px-5 py-3.5 border-t border-slate-150 flex justify-end gap-2 shrink-0 dark:bg-slate-800">
                   <button
                     type="button"
                     onClick={() => setIsSettingsOpen(false)}
-                    className="px-3.5 py-2 hover:bg-slate-200 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer"
+                    className="px-3.5 py-2 hover:bg-slate-200 text-slate-500 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer dark:text-slate-400 dark:hover:bg-slate-600"
                   >
                     Cancel
                   </button>
@@ -8070,10 +8124,10 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-md bg-white dark:bg-slate-900 border-2 border-brand/50 dark:border-brand/40 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+              className="relative w-full max-w-md bg-white border-2 border-brand/50 dark:border-brand/50/40 rounded-lg shadow-2xl overflow-hidden flex flex-col dark:bg-slate-900"
             >
               {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-brand/20 flex justify-between items-center shrink-0">
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-brand/20 flex justify-between items-center shrink-0 dark:bg-slate-950">
                 <div className="flex items-center gap-2">
                   <Lock className="w-4 h-4 text-brand animate-pulse" />
                   <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
@@ -8086,7 +8140,7 @@ FTC #6567 Captains & Mentors`
                     setShowPasswordSetupPrompt(false);
                     showToast("Password configuration postponed. You can change it anytime in Settings.", "info");
                   }}
-                  className="p-1 hover:bg-slate-850 text-slate-450 hover:text-white rounded transition-colors cursor-pointer"
+                  className="p-1 hover:bg-slate-850 text-slate-450 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-400"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -8094,8 +8148,8 @@ FTC #6567 Captains & Mentors`
 
               {/* Form Body */}
               <form onSubmit={handleSetupCustomPassword} className="flex flex-col flex-1">
-                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-100">
-                  <div className="bg-brand/10 text-brand dark:bg-brand/25 dark:text-brand-hover p-4 rounded border border-brand/20">
+                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-400">
+                  <div className="bg-brand/10 text-brand dark:bg-brand/60/25 dark:text-brand/80-hover p-4 rounded border border-brand/20">
                     <p className="text-xs font-bold font-sans flex items-center gap-1.5 uppercase tracking-wide mb-1">
                       👑 Configure Secure Login Password
                     </p>
@@ -8107,7 +8161,7 @@ FTC #6567 Captains & Mentors`
 
                   {/* Password field */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>New Secure Password</span>
                       <span className="text-brand">*</span>
                     </label>
@@ -8117,13 +8171,13 @@ FTC #6567 Captains & Mentors`
                       placeholder="At least 6 characters"
                       value={setupCustomPassword}
                       onChange={(e) => setSetupCustomPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-950 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-mono animate-none"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-950 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-mono animate-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
 
                   {/* Confirm Password field */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
                       <span>Confirm New Password</span>
                       <span className="text-brand">*</span>
                     </label>
@@ -8133,20 +8187,20 @@ FTC #6567 Captains & Mentors`
                       placeholder="Repeat secure password"
                       value={setupConfirmPassword}
                       onChange={(e) => setSetupConfirmPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 dark:bg-slate-850 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-950 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-mono animate-none"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-950 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-mono animate-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
                 </div>
 
                 {/* Footer buttons */}
-                <div className="bg-slate-50 dark:bg-slate-950 px-5 py-3.5 border-t border-slate-150 dark:border-slate-850 flex justify-end gap-2 shrink-0">
+                <div className="bg-slate-50 px-5 py-3.5 border-t border-slate-150 flex justify-end gap-2 shrink-0 dark:bg-slate-800">
                   <button
                     type="button"
                     onClick={() => {
                       setShowPasswordSetupPrompt(false);
                       showToast("Password configuration postponed. You can change it anytime in Settings.", "info");
                     }}
-                    className="px-3.5 py-2 hover:bg-slate-200 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer font-sans"
+                    className="px-3.5 py-2 hover:bg-slate-200 text-slate-500 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer font-sans dark:text-slate-400 dark:hover:bg-slate-600"
                   >
                     Postpone
                   </button>
@@ -8185,27 +8239,27 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: 'spring', duration: 0.4 }}
-              className="w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col max-h-[90vh] shadow-2xl relative animate-none"
+              className="w-full max-w-4xl bg-white border border-slate-200 rounded-xl p-6 flex flex-col max-h-[90vh] shadow-2xl relative animate-none dark:bg-slate-900 dark:border-slate-800"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-4 shrink-0">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4 shrink-0 dark:border-slate-800">
                 <div className="flex items-center gap-3">
                   <div className="bg-amber-100 dark:bg-amber-950/50 p-2.5 rounded-lg text-amber-655 dark:text-amber-400">
                     <Scroll className="w-6 h-6" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-extrabold text-slate-850 dark:text-slate-100 uppercase tracking-widest font-display">
+                    <h2 className="text-sm font-extrabold text-slate-850 uppercase tracking-widest font-display dark:text-slate-400">
                       FTC #6567 XP Auditing Ledger Scribe
                     </h2>
-                    <p className="text-[10px] text-slate-450 dark:text-slate-400 font-mono mt-0.5 uppercase tracking-wide">
+                    <p className="text-[10px] text-slate-450 font-mono mt-0.5 uppercase tracking-wide dark:text-slate-400">
                       Real-Time Verifiable Gamification Traceability Console
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setIsAuditLogOpen(false)}
-                  className="p-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-705 text-slate-500 dark:text-slate-450 transition-colors cursor-pointer"
+                  className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
                   title="Close auditing log"
                 >
                   <X className="w-4 h-4" />
@@ -8213,29 +8267,29 @@ FTC #6567 Captains & Mentors`
               </div>
 
               {/* Filtering Controls */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-805/80 shrink-0 text-xs text-slate-850 dark:text-slate-100">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 p-4 rounded-lg bg-slate-50 border border-slate-100 shrink-0 text-xs text-slate-850 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800">
                 {/* Search Bar */}
                 <div className="flex flex-col gap-1 p-0.5">
-                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Search Records</span>
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Search Records</span>
                   <div className="relative">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
                     <input
                       type="text"
                       value={auditSearch}
                       onChange={(e) => setAuditSearch(e.target.value)}
                       placeholder="Search member, tasks..."
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded pl-10 pr-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 font-medium text-slate-950 dark:text-white text-xs"
+                      className="w-full bg-white border border-slate-200 rounded pl-10 pr-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 font-medium text-slate-950 text-xs dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
                 </div>
 
                 {/* Member selector */}
                 <div className="flex flex-col gap-1 p-0.5">
-                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Filter Student</span>
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Filter Student</span>
                   <select
                     value={auditUserFilter}
                     onChange={(e) => setAuditUserFilter(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-805 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-950 dark:text-white"
+                    className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-950 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                   >
                     <option value="ALL">All Team Members</option>
                     {accounts.filter(a => a.status === 'Approved').sort((a,b) => a.name.localeCompare(b.name)).map(acc => (
@@ -8246,11 +8300,11 @@ FTC #6567 Captains & Mentors`
 
                 {/* XP type selector */}
                 <div className="flex flex-col gap-1 p-0.5">
-                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Action Type</span>
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Action Type</span>
                   <select
                     value={auditTypeFilter}
                     onChange={(e) => setAuditTypeFilter(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-950 dark:text-white"
+                    className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-950 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                   >
                     <option value="ALL">All Event Channels</option>
                     <option value="lab_hours">Lab Timesheet Checkins (10 XP/hr)</option>
@@ -8265,11 +8319,11 @@ FTC #6567 Captains & Mentors`
 
                 {/* Sort selector */}
                 <div className="flex flex-col gap-1 p-0.5">
-                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">Ledger Ordering</span>
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Ledger Ordering</span>
                   <select
                     value={auditSort}
                     onChange={(e) => setAuditSort(e.target.value as any)}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-955 dark:text-white"
+                    className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-amber-500 h-[32px] text-xs font-sans font-bold text-slate-955 dark:bg-slate-900 dark:border-slate-800"
                   >
                     <option value="newest">Timestamp: Newest Action First</option>
                     <option value="oldest">Timestamp: Oldest Action First</option>
@@ -8312,33 +8366,33 @@ FTC #6567 Captains & Mentors`
 
                 return (
                   <>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 shrink-0 text-slate-900 dark:text-white">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 shrink-0 text-slate-900 dark:text-slate-400">
                       <div className="bg-gradient-to-r from-amber-500/10 to-amber-600/5 dark:from-amber-500/10 dark:to-transparent border border-amber-500/15 rounded-lg p-3 text-center">
-                        <span className="text-[9.5px] font-mono text-slate-450 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Audit Scope Net XP</span>
+                        <span className="text-[9.5px] font-mono text-slate-450 uppercase tracking-widest block mb-0.5 dark:text-slate-400">Audit Scope Net XP</span>
                         <strong className="text-base font-black text-amber-505 dark:text-amber-400 font-display leading-none">{totalXP.toLocaleString()} XP</strong>
-                        <span className="text-[8.5px] font-mono text-slate-400 dark:text-slate-500 block mt-1">across filtered logs</span>
+                        <span className="text-[8.5px] font-mono text-slate-400 block mt-1 dark:text-slate-500">across filtered logs</span>
                       </div>
-                      <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-md border border-slate-150 dark:border-slate-805/85 text-center">
-                        <span className="text-[9.5px] font-mono text-slate-450 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Match Records</span>
-                        <strong className="text-base font-black text-slate-800 dark:text-slate-105 font-display leading-none">{filteredLogs.length} events</strong>
-                        <span className="text-[8.5px] font-mono text-slate-400 dark:text-slate-500 block mt-1">{uniqueStudents} unique students</span>
+                      <div className="bg-slate-50 p-2.5 rounded-md border border-slate-150 text-center dark:bg-slate-800">
+                        <span className="text-[9.5px] font-mono text-slate-450 uppercase tracking-widest block mb-0.5 dark:text-slate-400">Match Records</span>
+                        <strong className="text-base font-black text-slate-800 font-display leading-none dark:text-slate-400">{filteredLogs.length} events</strong>
+                        <span className="text-[8.5px] font-mono text-slate-400 block mt-1 dark:text-slate-500">{uniqueStudents} unique students</span>
                       </div>
-                      <div className="bg-slate-50 dark:bg-slate-955 p-2.5 rounded-md border border-slate-150 dark:border-slate-805/85 text-center">
-                        <span className="text-[9.5px] font-mono text-slate-450 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Lab Attendance XP</span>
-                        <strong className="text-base font-black text-slate-800 dark:text-slate-105 font-display leading-none">{totalHoursXP.toLocaleString()} XP</strong>
-                        <span className="text-[8.5px] font-mono text-slate-400 dark:text-slate-500 block mt-1">from active laboratory timesheets</span>
+                      <div className="bg-slate-50 p-2.5 rounded-md border border-slate-150 text-center dark:bg-slate-800">
+                        <span className="text-[9.5px] font-mono text-slate-450 uppercase tracking-widest block mb-0.5 dark:text-slate-400">Lab Attendance XP</span>
+                        <strong className="text-base font-black text-slate-800 font-display leading-none dark:text-slate-400">{totalHoursXP.toLocaleString()} XP</strong>
+                        <span className="text-[8.5px] font-mono text-slate-400 block mt-1 dark:text-slate-500">from active laboratory timesheets</span>
                       </div>
-                      <div className="bg-slate-50 dark:bg-slate-955 p-2.5 rounded-md border border-slate-150 dark:border-slate-805/85 text-center">
-                        <span className="text-[9.5px] font-mono text-slate-455 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Documentation XP</span>
-                        <strong className="text-base font-black text-slate-800 dark:text-slate-105 font-display leading-none">{totalJournalXP.toLocaleString()} XP</strong>
-                        <span className="text-[8.5px] font-mono text-slate-400 dark:text-slate-500 block mt-1">from notebooks, approvals &amp; uploads</span>
+                      <div className="bg-slate-50 p-2.5 rounded-md border border-slate-150 text-center dark:bg-slate-800">
+                        <span className="text-[9.5px] font-mono text-slate-455 uppercase tracking-widest block mb-0.5">Documentation XP</span>
+                        <strong className="text-base font-black text-slate-800 font-display leading-none dark:text-slate-400">{totalJournalXP.toLocaleString()} XP</strong>
+                        <span className="text-[8.5px] font-mono text-slate-400 block mt-1 dark:text-slate-500">from notebooks, approvals &amp; uploads</span>
                       </div>
                     </div>
 
                     {/* Ledger Body */}
-                    <div className="flex-1 overflow-y-auto border border-slate-150 dark:border-slate-800 rounded-lg bg-slate-50/50 dark:bg-slate-950/20 pr-1 divide-y divide-slate-150 dark:divide-slate-800">
+                    <div className="flex-1 overflow-y-auto border border-slate-150 rounded-lg bg-slate-50/50 pr-1 divide-y divide-slate-150 dark:divide-slate-800">
                       {sortedLogs.length === 0 ? (
-                        <div className="py-12 text-center text-slate-400 dark:text-slate-550 font-medium font-sans">
+                        <div className="py-12 text-center text-slate-400 font-medium font-sans dark:text-slate-500">
                           🛑 No matching XP transactions exist in the database with the active filters.
                         </div>
                       ) : (
@@ -8399,7 +8453,7 @@ FTC #6567 Captains & Mentors`
                           return (
                             <div 
                               key={log.id} 
-                              className="p-4 flex flex-col sm:flex-row hover:bg-slate-100/40 dark:hover:bg-slate-900/30 justify-between items-start sm:items-center gap-3 transition-colors text-xs text-slate-800 dark:text-slate-350"
+                              className="p-4 flex flex-col sm:flex-row hover:bg-slate-100/40 justify-between items-start sm:items-center gap-3 transition-colors text-xs text-slate-800 dark:text-slate-400"
                             >
                               <div className="flex gap-3 items-start">
                                 <div className={`${typeColor} p-2 rounded-lg shrink-0 mt-0.5`}>
@@ -8407,27 +8461,27 @@ FTC #6567 Captains & Mentors`
                                 </div>
                                 <div className="space-y-0.5 max-w-xl">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <strong className="font-extrabold text-slate-900 dark:text-slate-100 text-[12px]">{log.userName}</strong>
-                                    <span className="font-mono text-[9px] text-slate-400 truncate max-w-[150px]">{log.userEmail}</span>
+                                    <strong className="font-extrabold text-slate-900 text-[12px] dark:text-slate-400">{log.userName}</strong>
+                                    <span className="font-mono text-[9px] text-slate-400 truncate max-w-[150px] dark:text-slate-500">{log.userEmail}</span>
                                     <span className={`px-1.5 py-0.5 rounded font-mono text-[8px] font-bold uppercase ${typeColor}`}>
                                       {typeLabel}
                                     </span>
                                   </div>
-                                  <p className="font-extrabold text-slate-850 dark:text-slate-200 text-xs mt-1">
+                                  <p className="font-extrabold text-slate-850 text-xs mt-1 dark:text-slate-400">
                                     {log.description}
                                   </p>
                                   {log.details && (
-                                    <p className="font-sans leading-relaxed text-slate-600 dark:text-slate-400 mt-1 italic pr-2 text-[11px]">
+                                    <p className="font-sans leading-relaxed text-slate-600 mt-1 italic pr-2 text-[11px] dark:text-slate-300">
                                       {log.details}
                                     </p>
                                   )}
-                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-1">
+                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-1 dark:text-slate-500">
                                     <Calendar className="w-3 h-3" />
                                     <span>{new Date(log.timestamp).toLocaleString()}</span>
                                     {log.subteam && (
                                       <>
                                         <span>•</span>
-                                        <span className="font-bold text-slate-500">{log.subteam} Subteam</span>
+                                        <span className="font-bold text-slate-500 dark:text-slate-400">{log.subteam} Subteam</span>
                                       </>
                                     )}
                                   </div>
@@ -8453,21 +8507,21 @@ FTC #6567 Captains & Mentors`
               })()}
 
               {/* Action commands */}
-              <div className="mt-5 border-t border-slate-100 dark:border-slate-800 pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0 text-slate-905 dark:text-slate-100">
-                <p className="text-[10px] font-mono text-slate-400 max-w-md">
+              <div className="mt-5 border-t border-slate-100 pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0 text-slate-905 dark:border-slate-800">
+                <p className="text-[10px] font-mono text-slate-400 max-w-md dark:text-slate-500">
                   Disclaimer: This auditing page evaluates ledger transactions from all system subsystems. Values are derived dynamically and updated securely as work is authorized.
                 </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => window.print()}
-                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider rounded cursor-pointer"
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider rounded cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     <span>Print Ledger</span>
                   </button>
                   <button
                     onClick={() => setIsAuditLogOpen(false)}
-                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-6 rounded text-xs transition-all uppercase tracking-wider cursor-pointer"
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-6 rounded text-xs transition-all uppercase tracking-wider cursor-pointer dark:bg-slate-950"
                   >
                     Close Ledger
                   </button>
@@ -8492,7 +8546,7 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-red-500/40 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+              className="relative w-full max-w-lg bg-white border border-red-500/40 rounded-xl shadow-2xl overflow-hidden flex flex-col dark:bg-slate-900"
             >
               {/* Header */}
               <div className="bg-red-955 text-white px-4 py-3.5 border-b border-red-500/20 flex justify-between items-center shrink-0">
@@ -8510,7 +8564,7 @@ FTC #6567 Captains & Mentors`
                       setTransitionConfirmCode('');
                     }
                   }}
-                  className="p-1 hover:bg-red-900/40 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                  className="p-1 hover:bg-red-900/40 text-slate-400 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-500"
                   disabled={isProcessingTransition}
                 >
                   <X className="w-4 h-4" />
@@ -8519,7 +8573,7 @@ FTC #6567 Captains & Mentors`
 
               {/* Form Body */}
               <form onSubmit={handleRunTransition} className="flex flex-col flex-1 overflow-y-auto max-h-[80vh]">
-                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-100">
+                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-400">
                   
                   {/* Safety Alert Warning Banner */}
                   <div className="bg-amber-500/10 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400 p-4 rounded border border-amber-500/20 flex gap-3 text-xs leading-relaxed font-sans">
@@ -8537,13 +8591,13 @@ FTC #6567 Captains & Mentors`
 
                   {/* Options List */}
                   <div className="flex flex-col gap-2.5">
-                    <label className="text-[10px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
                       Select Collections to Clean up:
                     </label>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
                       {/* Journal Entries */}
-                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-205 rounded cursor-pointer select-none dark:bg-slate-800">
                         <input
                           type="checkbox"
                           checked={transitionState.journalEntries}
@@ -8552,13 +8606,13 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-650 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Journal Entry</span>
-                          <span className="text-[10px] text-slate-400">{entries.length} items logged</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">Journal Entry</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{entries.length} items logged</span>
                         </div>
                       </label>
 
                       {/* Time Entries */}
-                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-205 rounded cursor-pointer select-none dark:bg-slate-800">
                         <input
                           type="checkbox"
                           checked={transitionState.timeEntries}
@@ -8567,13 +8621,13 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-650 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Time Clock Entries</span>
-                          <span className="text-[10px] text-slate-400">{timeEntries.length} clock logs</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">Time Clock Entries</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{timeEntries.length} clock logs</span>
                         </div>
                       </label>
 
                       {/* Kanban Tasks */}
-                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-205 rounded cursor-pointer select-none dark:bg-slate-800">
                         <input
                           type="checkbox"
                           checked={transitionState.kanbanTasks}
@@ -8582,13 +8636,13 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Kanban Board Tasks</span>
-                          <span className="text-[10px] text-slate-400">{kanbanTasks.length} tickets</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">Kanban Board Tasks</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{kanbanTasks.length} tickets</span>
                         </div>
                       </label>
 
                       {/* Outreach Events */}
-                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-205 rounded cursor-pointer select-none dark:bg-slate-800">
                         <input
                           type="checkbox"
                           checked={transitionState.outreachEvents}
@@ -8597,13 +8651,13 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Outreach Event Logs</span>
-                          <span className="text-[10px] text-slate-400">{outreachEvents.length} events logged</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">Outreach Event Logs</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{outreachEvents.length} events logged</span>
                         </div>
                       </label>
 
                       {/* XP Adjustments */}
-                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-205 rounded cursor-pointer select-none dark:bg-slate-800">
                         <input
                           type="checkbox"
                           checked={transitionState.xpAdjustments}
@@ -8612,13 +8666,13 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">XP Adjustments</span>
-                          <span className="text-[10px] text-slate-400">{xpAdjustments.length} adjustment records</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">XP Adjustments</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{xpAdjustments.length} adjustment records</span>
                         </div>
                       </label>
 
                       {/* Dispatched Emails */}
-                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-205 rounded cursor-pointer select-none dark:bg-slate-800">
                         <input
                           type="checkbox"
                           checked={transitionState.dispatchedEmails}
@@ -8627,13 +8681,13 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Simulated Outbox Emails</span>
-                          <span className="text-[10px] text-slate-400">{dispatchedEmails.length} logged dispatches</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">Simulated Outbox Emails</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{dispatchedEmails.length} logged dispatches</span>
                         </div>
                       </label>
 
                       {/* General Ledger Transactions */}
-                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/70 border border-slate-205 dark:border-slate-800 rounded cursor-pointer select-none">
+                      <label className="flex items-start gap-2.5 p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-205 rounded cursor-pointer select-none dark:bg-slate-800">
                         <input
                           type="checkbox"
                           checked={transitionState.ledgerTransactions}
@@ -8642,14 +8696,14 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-656 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">General Ledger Logs</span>
-                          <span className="text-[10px] text-slate-400">{ledgerTransactions.length} items logged</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">General Ledger Logs</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{ledgerTransactions.length} items logged</span>
                         </div>
                       </label>
                     </div>
 
                     {/* Separator */}
-                    <div className="border-t border-slate-200 dark:border-slate-800/80 my-2"></div>
+                    <div className="border-t border-slate-200 my-2 dark:border-slate-800"></div>
 
                     {/* Dangerous User Roster Reset Checkboxes */}
                     <div className="flex flex-col gap-2">
@@ -8667,8 +8721,8 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-605 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Reject Core Pending Enrollees</span>
-                          <span className="text-[10px] text-slate-400">Purges currently unapproved enrollees from queue</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">Reject Core Pending Enrollees</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">Purges currently unapproved enrollees from queue</span>
                         </div>
                       </label>
 
@@ -8682,7 +8736,7 @@ FTC #6567 Captains & Mentors`
                           className="mt-0.5 rounded text-red-655 focus:ring-red-500 h-3.5 w-3.5"
                         />
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Wipe Non-Mentor Student Roster Accounts</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-400">Wipe Non-Mentor Student Roster Accounts</span>
                           <span className="text-[10px] text-red-405 font-sans">Deletes student profile logins. Approved coach/mentor accounts remain fully intact!</span>
                         </div>
                       </label>
@@ -8690,12 +8744,12 @@ FTC #6567 Captains & Mentors`
                   </div>
 
                   {/* Confirmation text input box */}
-                  <div className="flex flex-col gap-1.5 mt-2 bg-slate-50 dark:bg-slate-955 p-3.5 rounded border border-slate-200 dark:border-slate-800">
+                  <div className="flex flex-col gap-1.5 mt-2 bg-slate-50 p-3.5 rounded border border-slate-200 dark:bg-slate-800 dark:border-slate-800">
                     <label className="text-[10px] font-mono font-black text-rose-500 uppercase tracking-widest flex items-center gap-1.5">
                       <span>Type Validation Code:</span>
                     </label>
-                    <p className="text-[11px] text-slate-500 leading-none">
-                      Verify action by typing <span className="font-mono font-bold select-all bg-red-100 dark:bg-red-955 text-red-650 dark:text-red-400 px-1 py-0.5 rounded">RESET_SEASON</span> below:
+                    <p className="text-[11px] text-slate-500 leading-none dark:text-slate-400">
+                      Verify action by typing <span className="font-mono font-bold select-all bg-red-100 dark:bg-slate-900 text-red-650 dark:text-red-400 px-1 py-0.5 rounded">RESET_SEASON</span> below:
                     </p>
                     <input
                       type="text"
@@ -8704,13 +8758,13 @@ FTC #6567 Captains & Mentors`
                       placeholder="RESET_SEASON"
                       value={transitionConfirmCode}
                       onChange={(e) => setTransitionConfirmCode(e.target.value)}
-                      className="w-full bg-white dark:bg-slate-850 border border-slate-300 dark:border-slate-800 rounded px-2.5 py-1.5 mt-1 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-red-505 transition-all font-mono"
+                      className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 mt-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-red-505 transition-all font-mono dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                     />
                   </div>
 
                   {/* Real-time progression state */}
                   {transitionProgress && (
-                    <div className="bg-slate-900 text-white p-3 rounded font-mono text-[10px] border border-red-500/30">
+                    <div className="bg-slate-900 text-white p-3 rounded font-mono text-[10px] border border-red-500/30 dark:bg-slate-950">
                       <div className="flex justify-between font-bold text-red-400">
                         <span>Purging Records...</span>
                         <span>{Math.round((transitionProgress.current / transitionProgress.total) * 100)}%</span>
@@ -8721,7 +8775,7 @@ FTC #6567 Captains & Mentors`
                           style={{ width: `${(transitionProgress.current / transitionProgress.total) * 100}%` }}
                         ></div>
                       </div>
-                      <div className="mt-2 text-slate-450 text-[9px] flex justify-between">
+                      <div className="mt-2 text-slate-450 text-[9px] flex justify-between dark:text-slate-400">
                         <span className="truncate">Active Document: {transitionProgress.collection}</span>
                         <span>({transitionProgress.current}/{transitionProgress.total})</span>
                       </div>
@@ -8731,7 +8785,7 @@ FTC #6567 Captains & Mentors`
                 </div>
 
                 {/* Footer buttons */}
-                <div className="bg-slate-50 dark:bg-slate-950 px-5 py-3.5 border-t border-slate-150 dark:border-slate-855 flex justify-end gap-2 shrink-0">
+                <div className="bg-slate-50 px-5 py-3.5 border-t border-slate-150 flex justify-end gap-2 shrink-0 dark:bg-slate-800">
                   <button
                     type="button"
                     onClick={() => {
@@ -8739,7 +8793,7 @@ FTC #6567 Captains & Mentors`
                       setTransitionConfirmCode('');
                     }}
                     disabled={isProcessingTransition}
-                    className="px-3.5 py-2 hover:bg-slate-200 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-405 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer font-sans disabled:opacity-40"
+                    className="px-3.5 py-2 hover:bg-slate-200 text-slate-500 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer font-sans disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-600"
                   >
                     Cancel
                   </button>
@@ -8778,11 +8832,11 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className={`relative w-full ${timeExportShowPreview ? 'max-w-6xl' : 'max-w-xl'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+              className={`relative w-full ${timeExportShowPreview ? 'max-w-6xl' : 'max-w-xl'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-cyan-400" />
                   <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
@@ -8792,7 +8846,7 @@ FTC #6567 Captains & Mentors`
                 <button
                   type="button"
                   onClick={() => setIsTimeExportModalOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-none outline-none"
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-none outline-none dark:text-slate-500"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -8802,7 +8856,7 @@ FTC #6567 Captains & Mentors`
               <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
                 
                 {/* LEFT CONTEXT: FILTERS & DOCUMENT FORM SETTINGS */}
-                <div className="w-full md:w-[380px] p-5 border-r border-slate-200 dark:border-slate-850 overflow-y-auto flex flex-col justify-between h-full bg-slate-50/50 dark:bg-slate-950/20 shrink-0">
+                <div className="w-full md:w-[380px] p-5 border-r border-slate-200 overflow-y-auto flex flex-col justify-between h-full bg-slate-50/50 shrink-0 dark:border-slate-800">
                   <div className="flex flex-col gap-4">
                     <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
                       Generate print-ready official timesheet logs. Define scope alignments, toggle index page inclusions, and choose paper sizes.
@@ -8810,7 +8864,7 @@ FTC #6567 Captains & Mentors`
 
                     {/* Scope Selection */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
                         Report Target Scope
                       </span>
                       <div className="grid grid-cols-3 gap-2">
@@ -8820,7 +8874,7 @@ FTC #6567 Captains & Mentors`
                           className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
                             timeExportScope === 'all'
                               ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-455'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           <Users className="w-3.5 h-3.5" />
@@ -8832,7 +8886,7 @@ FTC #6567 Captains & Mentors`
                           className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
                             timeExportScope === 'members'
                               ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-455'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           <User className="w-3.5 h-3.5" />
@@ -8844,7 +8898,7 @@ FTC #6567 Captains & Mentors`
                           className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
                             timeExportScope === 'subteam'
                               ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-605 dark:text-slate-400'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-605 dark:text-slate-400'
                           }`}
                         >
                           <Layers className="w-3.5 h-3.5" />
@@ -8855,14 +8909,14 @@ FTC #6567 Captains & Mentors`
 
                     {/* Subteam selection options */}
                     {timeExportScope === 'subteam' && (
-                      <div className="bg-slate-50 dark:bg-slate-950/30 p-3 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-1.5 animate-fade-in text-xs">
-                        <label className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col gap-1.5 animate-fade-in text-xs dark:bg-slate-800 dark:border-slate-800">
+                        <label className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
                           Choose Subteam Focus Area
                         </label>
                         <select
                           value={selectedTimeExportSubteam}
                           onChange={(e) => setSelectedTimeExportSubteam(e.target.value as Subteam | 'All')}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-cyan-600 font-mono cursor-pointer"
+                          className="w-full bg-white border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-cyan-600 font-mono cursor-pointer dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                         >
                           <option value="All">All Focus Areas</option>
                           {ATTENDANCE_SUBTEAMS.map((sub) => (
@@ -8874,9 +8928,9 @@ FTC #6567 Captains & Mentors`
 
                 {/* Member selection checklist options */}
                 {timeExportScope === 'members' && (
-                  <div className="bg-slate-50 dark:bg-slate-950/30 p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-3 animate-fade-in">
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex flex-col gap-3 animate-fade-in dark:bg-slate-800 dark:border-slate-800">
                     <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                      <span className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
                         Roster Participants Check-List
                       </span>
                       <div className="flex gap-2">
@@ -8891,21 +8945,21 @@ FTC #6567 Captains & Mentors`
                             );
                             setSelectedTimeExportMembers(allEmails);
                           }}
-                          className="text-[9px] font-mono uppercase bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 px-2 py-1 rounded cursor-pointer"
+                          className="text-[9px] font-mono uppercase bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded cursor-pointer dark:bg-slate-800 dark:hover:bg-slate-500"
                         >
                           Select All
                         </button>
                         <button
                           type="button"
                           onClick={() => setSelectedTimeExportMembers([])}
-                          className="text-[9px] font-mono uppercase bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 px-2 py-1 rounded cursor-pointer"
+                          className="text-[9px] font-mono uppercase bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded cursor-pointer dark:bg-slate-800 dark:hover:bg-slate-500"
                         >
                           Clear
                         </button>
                       </div>
                     </div>
 
-                    <div className="max-h-[160px] overflow-y-auto border border-slate-200 dark:border-slate-800 rounded bg-white dark:bg-slate-900 p-2 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                    <div className="max-h-[160px] overflow-y-auto border border-slate-200 rounded bg-white p-2 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5 dark:bg-slate-900 dark:border-slate-800">
                       {Array.from(
                         new Map(
                           [
@@ -8920,7 +8974,7 @@ FTC #6567 Captains & Mentors`
                           return (
                             <label
                               key={member.email}
-                              className="flex items-center gap-2 px-1.5 py-1 hover:bg-slate-50 dark:hover:bg-slate-850 rounded cursor-pointer select-none text-xs text-slate-700 dark:text-slate-300 transition-colors"
+                              className="flex items-center gap-2 px-1.5 py-1 hover:bg-slate-50 rounded cursor-pointer select-none text-xs text-slate-700 transition-colors dark:text-slate-300 dark:hover:bg-slate-800"
                             >
                               <input
                                 type="checkbox"
@@ -8932,11 +8986,11 @@ FTC #6567 Captains & Mentors`
                                     setSelectedTimeExportMembers(prev => prev.filter(email => email !== member.email));
                                   }
                                 }}
-                                className="rounded border-slate-300 text-brand focus:ring-brand cursor-pointer"
+                                className="rounded border-slate-300 text-brand focus:ring-brand cursor-pointer dark:border-slate-800"
                               />
                               <div className="flex flex-col min-w-0">
                                 <span className="font-bold truncate">{member.name}</span>
-                                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono truncate leading-none mt-0.5">{member.email}</span>
+                                <span className="text-[9px] text-slate-400 font-mono truncate leading-none mt-0.5 dark:text-slate-500">{member.email}</span>
                               </div>
                             </label>
                           );
@@ -8946,31 +9000,31 @@ FTC #6567 Captains & Mentors`
                 )}
 
                 {/* Print Layout & Formatting Settings */}
-                <div className="bg-slate-50 dark:bg-slate-950/30 p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-3 animate-fade-in">
-                  <span className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex flex-col gap-3 animate-fade-in dark:bg-slate-800 dark:border-slate-800">
+                  <span className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
                     Print Layout & Formatting
                   </span>
                   
                   <div className="flex flex-col gap-2">
-                    <label className="flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-900 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none">
+                    <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none dark:hover:bg-slate-700">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Show Visual Preview</span>
-                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowPreview ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowPreview ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
                         <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowPreview ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
                       </div>
                       <input type="checkbox" className="hidden" checked={timeExportShowPreview} onChange={(e) => setTimeExportShowPreview(e.target.checked)} />
                     </label>
 
-                    <label className="flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-900 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none">
+                    <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none dark:hover:bg-slate-700">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Title Cover</span>
-                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowCover ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowCover ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
                         <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowCover ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
                       </div>
                       <input type="checkbox" className="hidden" checked={timeExportShowCover} onChange={(e) => setTimeExportShowCover(e.target.checked)} />
                     </label>
 
-                    <label className="flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-900 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none">
+                    <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none dark:hover:bg-slate-700">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Table of Contents</span>
-                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowTOC ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowTOC ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
                         <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowTOC ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
                       </div>
                       <input type="checkbox" className="hidden" checked={timeExportShowTOC} onChange={(e) => setTimeExportShowTOC(e.target.checked)} />
@@ -8978,13 +9032,13 @@ FTC #6567 Captains & Mentors`
                   </div>
 
                   <div className="flex flex-col gap-1.5 mt-2">
-                    <label className="text-[9px] font-mono font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                    <label className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
                       Paper Size
                     </label>
                     <select
                       value={timeExportPaperSize}
                       onChange={(e) => setTimeExportPaperSize(e.target.value as 'letter' | 'a4' | 'legal')}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-cyan-600 font-mono cursor-pointer"
+                      className="w-full bg-white border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-cyan-600 font-mono cursor-pointer dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                     >
                       <option value="letter">US Letter (8.5" x 11")</option>
                       <option value="a4">A4 (210 x 297 mm)</option>
@@ -8994,7 +9048,7 @@ FTC #6567 Captains & Mentors`
                 </div>
 
                 {/* Score Live counter and disclaimer */}
-                <div className="bg-slate-100 dark:bg-slate-850/50 p-3.5 rounded-md border border-slate-200 dark:border-slate-800 flex flex-col gap-1 text-slate-800 dark:text-slate-200 text-xs">
+                <div className="bg-slate-100 p-3.5 rounded-md border border-slate-200 flex flex-col gap-1 text-slate-800 text-xs dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800">
                   {(() => {
                     let matchingEntries = [];
                     if (timeExportScope === 'all') {
@@ -9010,21 +9064,21 @@ FTC #6567 Captains & Mentors`
                     return (
                       <div className="flex flex-col gap-1 gap-y-1.5">
                         <div className="flex justify-between items-center font-mono">
-                          <span className="text-slate-500 dark:text-slate-450 uppercase font-black tracking-wider text-[9px]">Matched Records:</span>
+                          <span className="text-slate-500 uppercase font-black tracking-wider text-[9px] dark:text-slate-400">Matched Records:</span>
                           <span className="font-extrabold text-cyan-600 dark:text-cyan-400">
                             {matchingEntries.length} Records
                           </span>
                         </div>
                         <div className="flex justify-between items-center font-mono">
-                          <span className="text-slate-500 dark:text-slate-450 uppercase font-black tracking-wider text-[9px]">Cumulative Time:</span>
-                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                          <span className="text-slate-500 uppercase font-black tracking-wider text-[9px] dark:text-slate-400">Cumulative Time:</span>
+                          <span className="font-bold text-slate-900 dark:text-slate-400">
                             {totalHr.toFixed(2)} Hours
                           </span>
                         </div>
                       </div>
                     );
                   })()}
-                  <p className="text-[9px] text-slate-400 font-mono dark:text-slate-500 leading-normal border-t border-slate-200 dark:border-slate-800 pt-2.5 mt-1.5">
+                  <p className="text-[9px] text-slate-400 font-mono leading-normal border-t border-slate-200 pt-2.5 mt-1.5 dark:text-slate-500 dark:border-slate-800">
                     * The system compiles individual records per page if selecting members, or a unified report for team/subteams. Choose "Save as PDF" to generate the printable document.
                   </p>
                 </div>
@@ -9033,15 +9087,15 @@ FTC #6567 Captains & Mentors`
 
             {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
             {timeExportShowPreview && (
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 dark:bg-slate-950/70 select-none pb-12">
-                <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-2 sticky top-0 bg-slate-100 dark:bg-slate-900 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10">
+              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 select-none pb-12">
+                <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10 dark:bg-slate-800 dark:border-slate-800">
                   <div className="flex items-center gap-1.5">
                     <LayoutTemplate className="w-4 h-4 text-cyan-500 animate-[pulse_3s_infinite]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
                       Live Timesheets Format: <span className="text-cyan-600 dark:text-cyan-400 underline">{timeExportPaperSize.toUpperCase()}</span>
                     </span>
                   </div>
-                  <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
+                  <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
                     SCALED PREVIEW
                   </span>
                 </div>
@@ -9058,7 +9112,7 @@ FTC #6567 Captains & Mentors`
 
                   if (matchingEntries.length === 0) {
                     return (
-                      <div className="my-12 text-center p-8 border border-dashed border-slate-300 dark:border-slate-850 rounded bg-white dark:bg-slate-900 max-w-sm text-slate-400">
+                      <div className="my-12 text-center p-8 border border-dashed border-slate-300 rounded bg-white max-w-sm text-slate-400 dark:bg-slate-900 dark:text-slate-500 dark:border-slate-800">
                         <AlertTriangle className="w-8 h-8 text-cyan-500 mx-auto mb-2" />
                         <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Matched</p>
                         <p className="text-[10px] mt-1 leading-normal italic">Modify your Scope & Profile options on the left to inspect visual time sheets.</p>
@@ -9074,12 +9128,12 @@ FTC #6567 Captains & Mentors`
                       
                       {/* Cover Page Preview */}
                       {timeExportShowCover && (
-                        <div className="bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-lg w-[380px] p-8 flex flex-col items-center justify-center text-slate-950 dark:text-slate-100 overflow-hidden relative" style={{ aspectRatio: paperAspectRatio }}>
+                        <div className="bg-white border border-slate-350 shadow-lg w-[380px] p-8 flex flex-col items-center justify-center text-slate-950 overflow-hidden relative dark:bg-slate-900 dark:text-slate-400" style={{ aspectRatio: paperAspectRatio }}>
                           <h1 className="text-xl font-black uppercase max-w-[250px] text-center mb-2">Time Records Report</h1>
                           <div className="w-16 h-1 bg-cyan-500 mb-6"></div>
-                          <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest text-center">FTC Team 6567</p>
-                          <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest mt-1 text-center">{new Date().toLocaleDateString()}</p>
-                          <div className="mt-8 text-[8px] text-slate-500 font-mono text-center border p-2 border-slate-200 dark:border-slate-800">
+                          <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest text-center dark:text-slate-400">FTC Team 6567</p>
+                          <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest mt-1 text-center dark:text-slate-500">{new Date().toLocaleDateString()}</p>
+                          <div className="mt-8 text-[8px] text-slate-500 font-mono text-center border p-2 border-slate-200 dark:text-slate-400 dark:border-slate-800">
                             <strong>SCOPE:</strong> {timeExportScope.toUpperCase()}<br/>
                             <strong>TOTAL TIME:</strong> {totalHr.toFixed(2)} HOURS
                           </div>
@@ -9088,18 +9142,18 @@ FTC #6567 Captains & Mentors`
 
                       {/* TOC Page Preview */}
                       {timeExportShowTOC && (
-                        <div className="bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-lg w-[380px] p-6 flex flex-col text-slate-950 dark:text-slate-100 overflow-hidden relative" style={{ aspectRatio: paperAspectRatio }}>
-                          <h2 className="text-sm font-black uppercase border-b border-slate-950 dark:border-slate-100 pb-2 mb-4">Table of Contents</h2>
+                        <div className="bg-white border border-slate-350 shadow-lg w-[380px] p-6 flex flex-col text-slate-950 overflow-hidden relative dark:bg-slate-900 dark:text-slate-400" style={{ aspectRatio: paperAspectRatio }}>
+                          <h2 className="text-sm font-black uppercase border-b border-slate-950 pb-2 mb-4">Table of Contents</h2>
                           <div className="flex flex-col gap-2 font-mono text-[9px]">
-                            <div className="flex justify-between border-b border-dashed border-slate-300 dark:border-slate-700 pb-1">
+                            <div className="flex justify-between border-b border-dashed border-slate-300 pb-1 dark:border-slate-800">
                               <span>1. Summary Overview</span>
                               <span>1</span>
                             </div>
-                            <div className="flex justify-between border-b border-dashed border-slate-300 dark:border-slate-700 pb-1">
+                            <div className="flex justify-between border-b border-dashed border-slate-300 pb-1 dark:border-slate-800">
                               <span>2. Detailed Time Entries</span>
                               <span>2</span>
                             </div>
-                            <div className="flex justify-between border-b border-dashed border-slate-300 dark:border-slate-700 pb-1 text-slate-400">
+                            <div className="flex justify-between border-b border-dashed border-slate-300 pb-1 text-slate-400 dark:text-slate-500 dark:border-slate-800">
                               <span>3. Signatures & Approvals</span>
                               <span>{timeExportScope === 'members' ? 3 : 5}</span>
                             </div>
@@ -9107,12 +9161,12 @@ FTC #6567 Captains & Mentors`
                         </div>
                       )}
 
-                      <div className="bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-lg w-[380px] p-5 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative" style={{ aspectRatio: paperAspectRatio }}>
-                        <div className="border border-slate-900/10 dark:border-slate-100/5 flex-grow p-3.5 flex flex-col justify-between min-h-0 text-[10px]">
+                      <div className="bg-white border border-slate-350 shadow-lg w-[380px] p-5 flex flex-col justify-between text-slate-950 overflow-hidden relative dark:bg-slate-900 dark:text-slate-400" style={{ aspectRatio: paperAspectRatio }}>
+                        <div className="border border-slate-900/10 flex-grow p-3.5 flex flex-col justify-between min-h-0 text-[10px]">
                           <div>
                             <div className="border-b border-slate-950 pb-2 mb-3 flex justify-between items-start">
                               <div>
-                                <span className="text-[7px] font-mono font-black border border-slate-950 px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 uppercase tracking-wide">
+                                <span className="text-[7px] font-mono font-black border border-slate-950 px-1 py-0.5 rounded bg-slate-100 uppercase tracking-wide dark:bg-slate-800">
                                   FTC TIME ROSTER
                                 </span>
                                 <h4 className="text-[10px] font-extrabold uppercase mt-1 leading-tight max-w-[160px] truncate font-sans">
@@ -9121,7 +9175,7 @@ FTC #6567 Captains & Mentors`
                                   {timeExportScope === 'subteam' && `${selectedTimeExportSubteam} Subteam`}
                                 </h4>
                               </div>
-                              <div className="text-right text-[7px] font-mono leading-tight text-slate-500">
+                              <div className="text-right text-[7px] font-mono leading-tight text-slate-500 dark:text-slate-400">
                                 <div><strong>RECORDS:</strong> {matchingEntries.length} items</div>
                                 <div><strong>TIME:</strong> {totalHr.toFixed(2)} hrs</div>
                                 <div><strong>DIV:</strong> FTC #6567</div>
@@ -9131,7 +9185,7 @@ FTC #6567 Captains & Mentors`
                             <div className="overflow-hidden min-h-0">
                               <table className="w-full text-left text-[8px] font-sans border-collapse mt-1">
                                 <thead>
-                                  <tr className="border-b border-slate-955 text-[7px] uppercase font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-905">
+                                  <tr className="border-b border-slate-955 text-[7px] uppercase font-mono text-slate-500 bg-slate-50 dark:bg-slate-800 dark:text-slate-400">
                                     <th className="py-1 px-0.5">Date</th>
                                     <th className="py-1 px-0.5">Member</th>
                                     <th className="py-1 px-0.5 text-right">Hrs</th>
@@ -9139,15 +9193,15 @@ FTC #6567 Captains & Mentors`
                                 </thead>
                                 <tbody>
                                   {matchingEntries.slice(0, 5).map((e) => (
-                                    <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800/55">
+                                    <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800">
                                       <td className="py-1.5 px-0.5 font-mono text-[7px]">{e.date}</td>
                                       <td className="py-1.5 px-0.5 font-bold truncate max-w-[80px]">{e.userName}</td>
-                                      <td className="py-1.5 px-0.5 text-right font-mono font-bold text-slate-955 dark:text-slate-200">{e.durationHours.toFixed(1)} h</td>
+                                      <td className="py-1.5 px-0.5 text-right font-mono font-bold text-slate-955">{e.durationHours.toFixed(1)} h</td>
                                     </tr>
                                   ))}
                                   {matchingEntries.length > 5 && (
                                     <tr>
-                                      <td colSpan={3} className="py-1.5 text-center text-slate-400 italic font-mono text-[7px]">
+                                      <td colSpan={3} className="py-1.5 text-center text-slate-400 italic font-mono text-[7px] dark:text-slate-500">
                                         + {matchingEntries.length - 5} additional logged records below...
                                       </td>
                                     </tr>
@@ -9157,7 +9211,7 @@ FTC #6567 Captains & Mentors`
                             </div>
                           </div>
 
-                          <div className="border-t border-dashed border-slate-300 dark:border-slate-850 pt-2 flex justify-end text-[6.5px] font-mono text-slate-505">
+                          <div className="border-t border-dashed border-slate-300 pt-2 flex justify-end text-[6.5px] font-mono text-slate-505 dark:border-slate-800">
                             <span className="border-b border-slate-900/30 w-32 pb-0.5 text-right uppercase">
                               {timeExportScope === 'members' ? 'MEMBER SIGNATURE' : 'MENTOR VERIFIER'}
                             </span>
@@ -9173,11 +9227,11 @@ FTC #6567 Captains & Mentors`
           </div>
 
           {/* Action buttons */}
-              <div className="bg-slate-50 dark:bg-slate-950 p-4 border-t border-slate-105 dark:border-slate-850 flex justify-end gap-2 text-xs shrink-0">
+              <div className="bg-slate-50 p-4 border-t border-slate-105 flex justify-end gap-2 text-xs shrink-0 dark:bg-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsTimeExportModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded text-xs font-bold font-mono uppercase bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 rounded text-xs font-bold font-mono uppercase bg-slate-200 text-slate-800 hover:bg-slate-300 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
                 >
                   Close
                 </button>
@@ -9210,11 +9264,11 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className={`relative w-full ${exportShowPreview ? 'max-w-6xl' : 'max-w-lg'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+              className={`relative w-full ${exportShowPreview ? 'max-w-6xl' : 'max-w-lg'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-brand" />
                   <span className="text-xs font-mono font-extrabold uppercase tracking-wider">
@@ -9224,17 +9278,17 @@ FTC #6567 Captains & Mentors`
                 <button
                   type="button"
                   onClick={() => setIsExportModalOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none"
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none dark:text-slate-500"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Grid split-container when showPreview is enabled */}
-              <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40 dark:bg-slate-950/20">
+              <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40">
                 
                 {/* CONFIGURATION COLUMN */}
-                <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900">
+                <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900 dark:border-slate-800">
                   <div className="flex flex-col gap-4">
                     <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
                       Compile engineering logs into high-fidelity structured print pages optimized for notebook presentation binder reviews.
@@ -9242,7 +9296,7 @@ FTC #6567 Captains & Mentors`
 
                     {/* Scope Selection */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-505 uppercase tracking-wider">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
                         Export Range
                       </span>
                       <div className="grid grid-cols-2 gap-2">
@@ -9251,8 +9305,8 @@ FTC #6567 Captains & Mentors`
                           onClick={() => setExportScope('all')}
                           className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
                             exportScope === 'all'
-                              ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                              ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           <Layers className="w-4 h-4" />
@@ -9263,8 +9317,8 @@ FTC #6567 Captains & Mentors`
                           onClick={() => setExportScope('filtered')}
                           className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
                             exportScope === 'filtered'
-                              ? 'border-brand bg-brand-light text-brand dark:bg-brand-dark/15 dark:text-red-200'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                              ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200'
+                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           <Settings className="w-4 h-4" />
@@ -9280,17 +9334,17 @@ FTC #6567 Captains & Mentors`
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden space-y-3 bg-slate-50 dark:bg-slate-950/30 p-3 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col"
+                          className="overflow-hidden space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col dark:bg-slate-800 dark:border-slate-800"
                         >
                           {/* Subteam select */}
                           <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                            <label className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest dark:text-slate-500">
                               Subteam Category
                             </label>
                             <select
                               value={exportSubteam}
                               onChange={(e) => setExportSubteam(e.target.value as Subteam | 'All')}
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
+                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand font-mono dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                             >
                               <option value="All">All Subteams</option>
                               {SUBTEAM_LIST.map((sub) => (
@@ -9301,13 +9355,13 @@ FTC #6567 Captains & Mentors`
 
                           {/* Status select */}
                           <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                            <label className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest dark:text-slate-500">
                               Review Status
                             </label>
                             <select
                               value={exportStatus}
                               onChange={(e) => setExportStatus(e.target.value)}
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand font-mono"
+                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand font-mono dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                             >
                               <option value="All">All Statuses</option>
                               <option value="Draft">Draft</option>
@@ -9322,7 +9376,7 @@ FTC #6567 Captains & Mentors`
 
                     {/* Paper Sizing Formats */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-505 uppercase tracking-wider">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
                         Paper Dimensions Format
                       </span>
                       <div className="grid grid-cols-3 gap-1 tracking-tight">
@@ -9331,7 +9385,7 @@ FTC #6567 Captains & Mentors`
                             key={sz}
                             type="button"
                             onClick={() => setExportPaperSize(sz)}
-                            className={`py-1.5 px-1 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                            className={`py-1.5 px-1 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
                               exportPaperSize === sz
                                 ? 'border-amber-500 bg-amber-500/5 dark:bg-amber-600/10 text-amber-600 dark:text-amber-400 font-extrabold'
                                 : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
@@ -9347,46 +9401,46 @@ FTC #6567 Captains & Mentors`
                     </div>
 
                     {/* Document Contents Elements (TOC, Cover, etc) */}
-                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/20 border border-slate-150 dark:border-slate-805">
-                      <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">
+                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 border border-slate-150 dark:bg-slate-800">
+                      <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block mb-1 dark:text-slate-500">
                         Select Notebook Sheets
                       </span>
                       
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
                         <input
                           type="checkbox"
                           checked={exportShowCover}
                           onChange={(e) => setExportShowCover(e.target.checked)}
-                          className="rounded border-slate-300 text-brand focus:ring-brand"
+                          className="rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-800"
                         />
                         <span>Include Cover Title Banner</span>
                       </label>
 
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
                         <input
                           type="checkbox"
                           checked={exportShowTOC}
                           onChange={(e) => setExportShowTOC(e.target.checked)}
-                          className="rounded border-slate-300 text-brand focus:ring-brand"
+                          className="rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-800"
                         />
                         <span>Include Table of Contents</span>
                       </label>
 
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none border-t border-slate-250 dark:border-slate-800 pt-2.5 mt-0.5">
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none border-t border-slate-250 pt-2.5 mt-0.5 dark:text-slate-300 dark:border-slate-800">
                         <input
                           type="checkbox"
                           checked={exportShowPreview}
                           onChange={(e) => setExportShowPreview(e.target.checked)}
-                          className="rounded border-slate-300 text-brand focus:ring-brand"
+                          className="rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-800"
                         />
                         <span className="font-bold flex items-center gap-1">Live Page Preview Frame <Sparkles className="w-3 h-3 text-amber-500" /></span>
                       </label>
                     </div>
 
                     {/* Dynamic counter info */}
-                    <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded border border-slate-200 dark:border-slate-800 flex flex-col gap-1.5 text-slate-800 dark:text-slate-200">
+                    <div className="bg-slate-50 p-3 rounded border border-slate-200 flex flex-col gap-1.5 text-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800">
                       <div className="flex justify-between items-center text-xs font-mono">
-                        <span className="text-slate-400 dark:text-slate-500 uppercase font-black tracking-wider text-[9px]">Calculated Pages:</span>
+                        <span className="text-slate-400 uppercase font-black tracking-wider text-[9px] dark:text-slate-500">Calculated Pages:</span>
                         <span className="font-extrabold text-brand dark:text-red-405">
                           {(() => {
                             const filteredCount = exportScope === 'all' 
@@ -9405,11 +9459,11 @@ FTC #6567 Captains & Mentors`
                   </div>
 
                   {/* Actions inside column */}
-                  <div className="pt-4 mt-4 border-t border-slate-105 dark:border-slate-800 flex justify-end gap-2 text-xs shrink-0">
+                  <div className="pt-4 mt-4 border-t border-slate-105 flex justify-end gap-2 text-xs shrink-0">
                     <button
                       type="button"
                       onClick={() => setIsExportModalOpen(false)}
-                      className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
                     >
                       Close
                     </button>
@@ -9426,15 +9480,15 @@ FTC #6567 Captains & Mentors`
 
                 {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
                 {exportShowPreview ? (
-                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 dark:bg-slate-950/40 select-none pb-12">
-                    <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-2 sticky top-0 bg-slate-100 dark:bg-slate-900/90 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0">
+                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 select-none pb-12 dark:bg-slate-800">
+                    <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 dark:bg-slate-800 dark:border-slate-800">
                       <div className="flex items-center gap-1.5">
                         <LayoutTemplate className="w-4 h-4 text-amber-500 animate-[pulse_3s_infinite]" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
                           Live Scribe Sheets Format: <span className="text-amber-550 dark:text-amber-400 underline uppercase">{exportPaperSize}</span>
                         </span>
                       </div>
-                      <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
+                      <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
                         SCALED PREVIEW
                       </span>
                     </div>
@@ -9463,7 +9517,7 @@ FTC #6567 Captains & Mentors`
 
                       if (totalPages === 0) {
                         return (
-                          <div className="my-12 text-center p-8 border border-dashed border-slate-300 dark:border-slate-800 rounded bg-white dark:bg-slate-900 max-w-sm text-slate-400">
+                          <div className="my-12 text-center p-8 border border-dashed border-slate-300 rounded bg-white max-w-sm text-slate-400 dark:bg-slate-900 dark:text-slate-500 dark:border-slate-800">
                             <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
                             <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Selected</p>
                             <p className="text-[10px] mt-1 leading-normal italic">Modify your Targeted filters above to see visual compiled journal sheets.</p>
@@ -9481,27 +9535,27 @@ FTC #6567 Captains & Mentors`
                             const thisPage = currentPageNum++;
                             return (
                               <div className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
-                                  <div className="border border-slate-900/30 dark:border-slate-100/10 flex-1 p-4 flex flex-col justify-between">
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
+                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-300 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                  <div className="border border-slate-900/30 flex-1 p-4 flex flex-col justify-between">
                                     <div className="text-center my-auto py-8">
-                                      <div className="w-12 h-12 mb-4 border-2 border-slate-950 dark:border-slate-100 flex items-center justify-center rounded-full mx-auto">
+                                      <div className="w-12 h-12 mb-4 border-2 border-slate-950 flex items-center justify-center rounded-full mx-auto">
                                         <span className="font-extrabold text-sm tracking-tighter">RR</span>
                                       </div>
-                                      <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none text-slate-950 dark:text-slate-100">
+                                      <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none text-slate-950 dark:text-slate-400">
                                         RoboRaiders Team Portal
                                       </h3>
-                                      <p className="text-[7px] font-mono uppercase tracking-widest text-slate-500 mt-1">
+                                      <p className="text-[7px] font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
                                         Official Engineering Notebook
                                       </p>
                                       
-                                      <div className="w-12 h-0.5 bg-slate-950 dark:bg-slate-100 my-3 mx-auto"></div>
+                                      <div className="w-12 h-0.5 bg-slate-950 my-3 mx-auto"></div>
                                       
-                                      <p className="text-[9px] font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                                      <p className="text-[9px] font-extrabold text-slate-800 uppercase tracking-wide dark:text-slate-400">
                                         FIRST Tech Challenge Team #6567
                                       </p>
                                     </div>
-                                    <div className="border-t border-dashed border-slate-350 dark:border-slate-800 pt-3 flex justify-between items-end text-[7px] font-mono text-slate-500 leading-none">
+                                    <div className="border-t border-dashed border-slate-350 pt-3 flex justify-between items-end text-[7px] font-mono text-slate-500 leading-none dark:text-slate-400">
                                       <div>
                                         <p>TYPE: Compiled Ledger</p>
                                         <p className="mt-0.5">PAPER: {exportPaperSize.toUpperCase()}</p>
@@ -9523,15 +9577,15 @@ FTC #6567 Captains & Mentors`
                             const startingPageIndex = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + 1;
                             return (
                               <div className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (TABLE OF CONTENTS)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-100 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (TABLE OF CONTENTS)</span>
+                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-300 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
                                   <div className="border-b border-slate-950 dark:border-white pb-1.5 mb-3 flex justify-between items-baseline">
-                                    <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-white">Table of Contents</h4>
-                                    <span className="text-[7.5px] font-mono text-slate-450 uppercase tracking-wider">FTC #6567 Binder</span>
+                                    <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-slate-400">Table of Contents</h4>
+                                    <span className="text-[7.5px] font-mono text-slate-450 uppercase tracking-wider dark:text-slate-400">FTC #6567 Binder</span>
                                   </div>
                                   
                                   <div className="flex-1 overflow-hidden space-y-2">
-                                    <div className="grid grid-cols-12 text-[7px] font-mono font-extrabold border-b border-slate-400 text-slate-500 pb-1">
+                                    <div className="grid grid-cols-12 text-[7px] font-mono font-extrabold border-b border-slate-400 text-slate-500 pb-1 dark:text-slate-400 dark:border-slate-800">
                                       <span className="col-span-3">REF ID</span>
                                       <span className="col-span-3">DATE</span>
                                       <span className="col-span-4">SUBTEAM</span>
@@ -9539,21 +9593,21 @@ FTC #6567 Captains & Mentors`
                                     </div>
                                     <div className="divide-y divide-slate-100 dark:divide-slate-800 flex flex-col gap-1.5 pt-1 overflow-hidden">
                                       {sortedPreview.slice(0, 10).map((entry, idx) => (
-                                        <div key={entry.id} className="grid grid-cols-12 text-[7px] font-sans text-slate-800 dark:text-slate-200 pt-1">
-                                          <span className="col-span-3 font-mono font-bold text-slate-950 dark:text-slate-100 truncate">{getEntryReferenceCode(entry, entries)}</span>
-                                          <span className="col-span-3 font-mono text-slate-500">{entry.date}</span>
+                                        <div key={entry.id} className="grid grid-cols-12 text-[7px] font-sans text-slate-800 pt-1 dark:text-slate-400">
+                                          <span className="col-span-3 font-mono font-bold text-slate-950 truncate dark:text-slate-400">{getEntryReferenceCode(entry, entries)}</span>
+                                          <span className="col-span-3 font-mono text-slate-500 dark:text-slate-400">{entry.date}</span>
                                           <span className="col-span-4 font-mono uppercase truncate text-slate-600 dark:text-slate-300">{entry.subteam}</span>
                                           <span className="col-span-2 text-right font-mono font-bold text-amber-600 dark:text-amber-400">{idx + startingPageIndex}</span>
                                         </div>
                                       ))}
                                       {sortedPreview.length > 10 && (
-                                        <p className="text-[6.5px] font-mono italic text-slate-550 pt-1 text-center font-bold">
+                                        <p className="text-[6.5px] font-mono italic text-slate-550 pt-1 text-center font-bold dark:text-slate-300">
                                           ... and {sortedPreview.length - 10} more sheets listed in index ...
                                         </p>
                                       )}
                                     </div>
                                   </div>
-                                  <div className="mt-auto pt-2 border-t border-slate-100 dark:border-slate-800 text-center text-[6px] font-mono text-slate-400">
+                                  <div className="mt-auto pt-2 border-t border-slate-100 text-center text-[6px] font-mono text-slate-400 dark:text-slate-500 dark:border-slate-800">
                                     FTC #6567 ROBOAID LEDGER
                                   </div>
                                 </div>
@@ -9566,16 +9620,16 @@ FTC #6567 Captains & Mentors`
                             const thisPage = currentPageNum++;
                             return (
                               <div key={entry.id} className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} ({entry.subteam} LOG)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-200 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} ({entry.subteam} LOG)</span>
+                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-400 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
                                   
                                   {/* Header */}
-                                  <div className="border-b-2 border-slate-950 dark:border-slate-200 pb-1 flex justify-between items-start text-[7.5px] font-mono text-slate-700 dark:text-slate-200 shrink-0">
+                                  <div className="border-b-2 border-slate-950 pb-1 flex justify-between items-start text-[7.5px] font-mono text-slate-700 shrink-0 dark:text-slate-300">
                                     <div className="flex flex-col">
-                                      <span className="font-sans font-black uppercase text-[8px] text-slate-950 dark:text-white truncate max-w-[150px] leading-tight">
+                                      <span className="font-sans font-black uppercase text-[8px] text-slate-950 truncate max-w-[150px] leading-tight dark:text-slate-400">
                                         {formatSubteamLabel(entry.subteam)} Log
                                       </span>
-                                      <span className="text-[6.5px] font-bold text-slate-400 leading-none mt-0.5">Author: {entry.author.split('(')[0]}</span>
+                                      <span className="text-[6.5px] font-bold text-slate-400 leading-none mt-0.5 dark:text-slate-500">Author: {entry.author.split('(')[0]}</span>
                                     </div>
                                     <div className="text-right text-[6.5px] font-bold whitespace-nowrap leading-none space-y-0.5">
                                       <div>{getEntryReferenceCode(entry, entries)}</div>
@@ -9584,24 +9638,24 @@ FTC #6567 Captains & Mentors`
                                   </div>
 
                                   {/* Log Content mock-up */}
-                                  <div className="flex-1 mt-2.5 overflow-hidden flex flex-col gap-2 text-[7px] text-slate-950 dark:text-slate-100 font-sans pr-1">
-                                    <div className="border border-slate-200 dark:border-slate-800 rounded p-1.5 bg-slate-50/50 dark:bg-slate-950/20">
-                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 dark:border-slate-800 pb-0.5 mb-1 leading-none">What We Planned</strong>
-                                      <p className="line-clamp-2 italic text-slate-700 dark:text-slate-355">{entry.planned}</p>
+                                  <div className="flex-1 mt-2.5 overflow-hidden flex flex-col gap-2 text-[7px] text-slate-950 font-sans pr-1 dark:text-slate-400">
+                                    <div className="border border-slate-200 rounded p-1.5 bg-slate-50/50 dark:border-slate-800">
+                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 pb-0.5 mb-1 leading-none dark:text-slate-500 dark:border-slate-800">What We Planned</strong>
+                                      <p className="line-clamp-2 italic text-slate-700 dark:text-slate-300">{entry.planned}</p>
                                     </div>
 
-                                    <div className="border border-slate-200 dark:border-slate-800 rounded p-1.5 bg-slate-50/50 dark:bg-slate-950/20">
-                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 dark:border-slate-800 pb-0.5 mb-1 leading-none">What We Accomplished</strong>
-                                      <p className="line-clamp-3 leading-normal text-slate-800 dark:text-slate-100">{entry.accomplished}</p>
+                                    <div className="border border-slate-200 rounded p-1.5 bg-slate-50/50 dark:border-slate-800">
+                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 pb-0.5 mb-1 leading-none dark:text-slate-500 dark:border-slate-800">What We Accomplished</strong>
+                                      <p className="line-clamp-3 leading-normal text-slate-800 dark:text-slate-400">{entry.accomplished}</p>
                                     </div>
 
-                                    <div className="border border-slate-200 dark:border-slate-800 rounded p-1.5 bg-slate-50/50 dark:bg-slate-950/20">
-                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 dark:border-slate-800 pb-0.5 mb-1 leading-none">Problems and Solutions</strong>
-                                      <p className="line-clamp-2 leading-tight text-slate-800 dark:text-slate-100">{entry.problemsAndSolutions[0] || 'No core blockers faced.'}</p>
+                                    <div className="border border-slate-200 rounded p-1.5 bg-slate-50/50 dark:border-slate-800">
+                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 pb-0.5 mb-1 leading-none dark:text-slate-500 dark:border-slate-800">Problems and Solutions</strong>
+                                      <p className="line-clamp-2 leading-tight text-slate-800 dark:text-slate-400">{entry.problemsAndSolutions[0] || 'No core blockers faced.'}</p>
                                     </div>
 
                                     {entry.images && entry.images.length > 0 && (
-                                      <div className="border border-slate-200 dark:border-slate-800 rounded p-1 flex items-center justify-between bg-emerald-500/5 mt-0.5 text-[6.5px] leading-none shrink-0 text-emerald-600 dark:text-emerald-400">
+                                      <div className="border border-slate-200 rounded p-1 flex items-center justify-between bg-emerald-500/5 mt-0.5 text-[6.5px] leading-none shrink-0 text-emerald-600 dark:text-emerald-400 dark:border-slate-800">
                                         <div className="flex items-center gap-1">
                                           <span className="p-0.5 bg-emerald-100 dark:bg-emerald-900 rounded font-mono font-bold uppercase">MEDIA</span>
                                           <span className="font-medium italic">Includes {entry.images.length} high-fidelity schematic uploads</span>
@@ -9618,9 +9672,9 @@ FTC #6567 Captains & Mentors`
                     })()}
                   </div>
                 ) : (
-                  <div className="flex-1 bg-slate-50 dark:bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                    <LayoutTemplate className="w-12 h-12 text-slate-300 dark:text-slate-800 mb-3" />
-                    <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500">Preview Closed</p>
+                  <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                    <LayoutTemplate className="w-12 h-12 text-slate-300 mb-3" />
+                    <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preview Closed</p>
                     <p className="text-[10px] mt-1 italic max-w-xs leading-normal">
                       Enable the "Live Page Preview Frame" switch in the configuration column on the left to see sheets dynamic sizing and alignment in real-time.
                     </p>
@@ -9647,11 +9701,11 @@ FTC #6567 Captains & Mentors`
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className={`relative w-full ${outreachExportShowPreview ? 'max-w-6xl' : 'max-w-md'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+              className={`relative w-full ${outreachExportShowPreview ? 'max-w-6xl' : 'max-w-md'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-500" />
                   <span className="text-xs font-mono font-extrabold uppercase tracking-wider">
@@ -9661,22 +9715,22 @@ FTC #6567 Captains & Mentors`
                 <button
                   type="button"
                   onClick={() => setIsOutreachExportModalOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none"
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none dark:text-slate-500"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Grid split-container when showPreview is enabled */}
-              <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40 dark:bg-slate-950/20">
+              <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40">
                 
                 {/* CONFIGURATION COLUMN */}
-                <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900">
+                <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900 dark:border-slate-800">
                   <div className="flex flex-col gap-4">
                     
                     {/* Paper Sizing Formats */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-505 uppercase tracking-wider">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
                         Paper Dimensions Format
                       </span>
                       <div className="grid grid-cols-3 gap-1 tracking-tight">
@@ -9685,7 +9739,7 @@ FTC #6567 Captains & Mentors`
                             key={sz}
                             type="button"
                             onClick={() => setOutreachExportPaperSize(sz)}
-                            className={`py-1.5 px-1 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                            className={`py-1.5 px-1 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
                               outreachExportPaperSize === sz
                                 ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 font-extrabold'
                                 : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
@@ -9701,37 +9755,37 @@ FTC #6567 Captains & Mentors`
                     </div>
 
                     {/* Document Contents Elements (TOC, Cover, etc) */}
-                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/20 border border-slate-150 dark:border-slate-805">
-                      <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">
+                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 border border-slate-150 dark:bg-slate-800">
+                      <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block mb-1 dark:text-slate-500">
                         Select Notebook Sheets
                       </span>
                       
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
                         <input
                           type="checkbox"
                           checked={outreachExportShowCover}
                           onChange={(e) => setOutreachExportShowCover(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
                         />
                         <span>Include Cover Title Banner</span>
                       </label>
 
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
                         <input
                           type="checkbox"
                           checked={outreachExportShowTOC}
                           onChange={(e) => setOutreachExportShowTOC(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
                         />
                         <span>Include Table of Contents</span>
                       </label>
 
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none border-t border-slate-250 dark:border-slate-800 pt-2.5 mt-0.5">
+                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none border-t border-slate-250 pt-2.5 mt-0.5 dark:text-slate-300 dark:border-slate-800">
                         <input
                           type="checkbox"
                           checked={outreachExportShowPreview}
                           onChange={(e) => setOutreachExportShowPreview(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
                         />
                         <span className="font-bold flex items-center gap-1">Live Page Preview Frame <Sparkles className="w-3 h-3 text-emerald-500" /></span>
                       </label>
@@ -9739,11 +9793,11 @@ FTC #6567 Captains & Mentors`
                   </div>
 
                   {/* Actions inside column */}
-                  <div className="pt-4 mt-4 border-t border-slate-105 dark:border-slate-800 flex justify-end gap-2 text-xs shrink-0">
+                  <div className="pt-4 mt-4 border-t border-slate-105 flex justify-end gap-2 text-xs shrink-0">
                     <button
                       type="button"
                       onClick={() => setIsOutreachExportModalOpen(false)}
-                      className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
                     >
                       Close
                     </button>
@@ -9764,15 +9818,15 @@ FTC #6567 Captains & Mentors`
 
                 {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
                 {outreachExportShowPreview ? (
-                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 dark:bg-slate-950/40 select-none pb-12">
-                    <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-2 sticky top-0 bg-slate-100 dark:bg-slate-900/90 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0">
+                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 select-none pb-12 dark:bg-slate-800">
+                    <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 dark:bg-slate-800 dark:border-slate-800">
                       <div className="flex items-center gap-1.5">
                         <LayoutTemplate className="w-4 h-4 text-emerald-500 animate-[pulse_3s_infinite]" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
                           Live Outreach Portfolio Format: <span className="text-emerald-550 dark:text-emerald-400 underline uppercase">{outreachExportPaperSize}</span>
                         </span>
                       </div>
-                      <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
+                      <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
                         SCALED PREVIEW
                       </span>
                     </div>
@@ -9783,7 +9837,7 @@ FTC #6567 Captains & Mentors`
 
                       if (totalPages === 0) {
                         return (
-                          <div className="my-12 text-center p-8 border border-dashed border-slate-300 dark:border-slate-800 rounded bg-white dark:bg-slate-900 max-w-sm text-slate-400">
+                          <div className="my-12 text-center p-8 border border-dashed border-slate-300 rounded bg-white max-w-sm text-slate-400 dark:bg-slate-900 dark:text-slate-500 dark:border-slate-800">
                             <AlertTriangle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
                             <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Selected</p>
                           </div>
@@ -9800,8 +9854,8 @@ FTC #6567 Captains & Mentors`
                             const thisPage = currentPageNum++;
                             return (
                               <div className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-100 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
+                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-300 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
                                   <div className="border-4 border-double border-slate-900/30 flex-1 p-4 flex flex-col justify-between">
                                     <div className="text-center my-auto py-8">
                                       <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none">
@@ -9827,15 +9881,15 @@ FTC #6567 Captains & Mentors`
                             const thisPage = currentPageNum++;
                             return (
                               <div className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (SUMMARY LIST)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-100 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (SUMMARY LIST)</span>
+                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-300 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
                                   <div className="border-b border-slate-950 dark:border-white pb-1.5 mb-3 flex justify-between items-baseline">
-                                    <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-white">Summary Table</h4>
+                                    <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-slate-400">Summary Table</h4>
                                   </div>
                                   <div className="flex-1 overflow-hidden">
                                      <div className="text-[7.5px] font-sans">
                                        {(outreachEventsToPrint || []).slice(0, 10).map((entry, idx) => (
-                                         <div key={entry.id} className="border-b border-slate-300 dark:border-slate-800 py-1 font-mono text-slate-700 dark:text-slate-300 flex justify-between truncate">
+                                         <div key={entry.id} className="border-b border-slate-300 py-1 font-mono text-slate-700 flex justify-between truncate dark:text-slate-300 dark:border-slate-800">
                                             <span>{entry.date} - {entry.title}</span>
                                             <span>{entry.hoursLogged}h</span>
                                          </div>
@@ -9852,10 +9906,10 @@ FTC #6567 Captains & Mentors`
                             const thisPage = currentPageNum++;
                             return (
                               <div key={entry.id} className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} ({entry.title.substring(0, 10)}...)</span>
-                                <div className={`bg-white dark:bg-slate-900 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-200 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
-                                  <div className="border-b-2 border-slate-950 dark:border-slate-200 pb-1 flex justify-between items-start text-[7.5px] font-mono shrink-0">
-                                    <span className="font-sans font-black uppercase text-[8px] text-slate-950 dark:text-white truncate max-w-[150px] leading-tight">
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} ({entry.title.substring(0, 10)}...)</span>
+                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-400 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
+                                  <div className="border-b-2 border-slate-950 pb-1 flex justify-between items-start text-[7.5px] font-mono shrink-0">
+                                    <span className="font-sans font-black uppercase text-[8px] text-slate-950 truncate max-w-[150px] leading-tight dark:text-slate-400">
                                       {entry.title}
                                     </span>
                                     <div className="text-right text-[6.5px] font-bold whitespace-nowrap leading-none space-y-0.5">
@@ -9863,7 +9917,7 @@ FTC #6567 Captains & Mentors`
                                       <div>{entry.hoursLogged} hrs</div>
                                     </div>
                                   </div>
-                                  <div className="flex-1 mt-2.5 overflow-hidden text-[7px] text-slate-950 dark:text-slate-100 font-sans pr-1 leading-normal">
+                                  <div className="flex-1 mt-2.5 overflow-hidden text-[7px] text-slate-950 font-sans pr-1 leading-normal dark:text-slate-400">
                                     {entry.description}
                                   </div>
                                 </div>
@@ -9875,9 +9929,9 @@ FTC #6567 Captains & Mentors`
                     })()}
                   </div>
                 ) : (
-                  <div className="flex-1 bg-slate-50 dark:bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                    <LayoutTemplate className="w-12 h-12 text-slate-300 dark:text-slate-800 mb-3" />
-                    <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500">Preview Closed</p>
+                  <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                    <LayoutTemplate className="w-12 h-12 text-slate-300 mb-3" />
+                    <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preview Closed</p>
                     <p className="text-[10px] mt-1 italic max-w-xs leading-normal">
                       Enable the "Live Page Preview Frame" switch in the configuration column on the left to see sheets dynamic sizing and alignment in real-time.
                     </p>
@@ -9958,18 +10012,18 @@ FTC #6567 Captains & Mentors`
                 Arena promotion unlocked
               </span>
 
-              <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mt-4 leading-none uppercase tracking-wider font-mono">
+              <h2 className="text-sm font-bold text-slate-500 mt-4 leading-none uppercase tracking-wider font-mono dark:text-slate-400">
                 Level {levelUpData.level} Achieved!
               </h2>
 
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-50 mt-1 uppercase font-display leading-tight tracking-tight px-2 drop-shadow-sm">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1 uppercase font-display leading-tight tracking-tight px-2 drop-shadow-sm dark:text-slate-400">
                 {levelUpData.levelName}
               </h1>
 
               <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent my-4"></div>
 
-              <p className="text-xs sm:text-[13px] leading-relaxed font-sans text-slate-600 dark:text-slate-400 max-w-sm px-2">
-                Congratulations, <strong className="text-slate-800 dark:text-slate-200">{currentUser?.name}</strong>! Your technical contributions, notebook logs, and laboratory hour accumulations have elevated your rank in the RoboRaiders Championship Arena.
+              <p className="text-xs sm:text-[13px] leading-relaxed font-sans text-slate-600 max-w-sm px-2 dark:text-slate-300">
+                Congratulations, <strong className="text-slate-800 dark:text-slate-400">{currentUser?.name}</strong>! Your technical contributions, notebook logs, and laboratory hour accumulations have elevated your rank in the RoboRaiders Championship Arena.
               </p>
 
               {/* Progress Seal Plate */}
@@ -9980,8 +10034,8 @@ FTC #6567 Captains & Mentors`
                   {levelUpData.level}
                 </div>
                 <div className="text-left font-sans">
-                  <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider block leading-none">Guild Standing</span>
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase mt-1 block leading-none truncate max-w-[170px]">{levelUpData.levelName}</span>
+                  <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider block leading-none dark:text-slate-500">Guild Standing</span>
+                  <span className="text-xs font-bold text-slate-800 uppercase mt-1 block leading-none truncate max-w-[170px] dark:text-slate-400">{levelUpData.levelName}</span>
                 </div>
               </div>
 
@@ -10003,7 +10057,7 @@ FTC #6567 Captains & Mentors`
 
       {/* Dynamic Batch Print Container - ONLY printed, completely invisible on screen, styles strictly adjusted for print */}
       {entriesToPrint && entriesToPrint.length > 0 && (
-        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
+        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans dark:bg-slate-900">
           
           {/* Dynamic page sizing for print based on paper format selection */}
           <style dangerouslySetInnerHTML={{__html: `
@@ -10027,23 +10081,23 @@ FTC #6567 Captains & Mentors`
           {/* TITLE PAGE */}
           {exportShowCover && (
             <div 
-              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12 dark:bg-slate-900"
               style={{ pageBreakAfter: 'always', minHeight: exportPaperSize === 'legal' ? '300mm' : '240mm' }}
             >
               <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
                 <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
                   <span className="font-extrabold text-2xl tracking-tighter">RR</span>
                 </div>
-                <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-950 mb-2">
+                <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-950 mb-2 dark:text-slate-400">
                   RoboRaiders Team Portal
                 </h1>
-                <p className="text-sm font-mono uppercase tracking-widest text-slate-600 mb-8">
+                <p className="text-sm font-mono uppercase tracking-widest text-slate-600 mb-8 dark:text-slate-300">
                   Official Engineering Notebook
                 </p>
                 
                 <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
                 
-                <p className="text-base font-extrabold text-slate-800 uppercase tracking-wide">
+                <p className="text-base font-extrabold text-slate-800 uppercase tracking-wide dark:text-slate-400">
                   FIRST Tech Challenge Team #6567
                 </p>
               </div>
@@ -10067,22 +10121,22 @@ FTC #6567 Captains & Mentors`
           {/* TABLE OF CONTENTS */}
           {exportShowTOC && (
             <div 
-              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
               style={{ pageBreakAfter: 'always', minHeight: exportPaperSize === 'legal' ? '300mm' : '240mm' }}
             >
               <div className="border-b-4 border-slate-950 pb-4 mb-6">
-                <h2 className="text-2xl font-black uppercase tracking-wider text-slate-950 font-display">
+                <h2 className="text-2xl font-black uppercase tracking-wider text-slate-950 font-display dark:text-slate-400">
                   Table of Contents
                 </h2>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
                   FTC #6567 Compiled Notebook Binder
                 </p>
               </div>
 
               <div className="flex-1 mt-4">
-                <table className="w-full text-left text-xs text-slate-800">
+                <table className="w-full text-left text-xs text-slate-800 dark:text-slate-400">
                   <thead>
-                    <tr className="border-b-2 border-slate-950 font-mono font-bold text-slate-500 uppercase text-[10px]">
+                    <tr className="border-b-2 border-slate-950 font-mono font-bold text-slate-500 uppercase text-[10px] dark:text-slate-400">
                       <th className="py-2 pr-4 w-1/6">REF ID</th>
                       <th className="py-2 pr-4 w-1/6">DATE</th>
                       <th className="py-2 pr-4 w-1/4">AUTHOR</th>
@@ -10095,11 +10149,11 @@ FTC #6567 Captains & Mentors`
                       const startingPageIndex = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + 1;
                       return (
                         <tr key={entry.id} className="align-top">
-                          <td className="py-3 pr-4 font-mono font-bold text-slate-950">{getEntryReferenceCode(entry, entries)}</td>
+                          <td className="py-3 pr-4 font-mono font-bold text-slate-950 dark:text-slate-400">{getEntryReferenceCode(entry, entries)}</td>
                           <td className="py-3 pr-4 font-mono">{entry.date}</td>
-                          <td className="py-3 pr-4 font-semibold text-slate-900">{entry.author}</td>
-                          <td className="py-3 pr-4 text-slate-750 font-mono text-[10px] uppercase">{entry.subteam}</td>
-                          <td className="py-3 text-right font-mono text-slate-500 font-bold">{idx + startingPageIndex}</td>
+                          <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-slate-400">{entry.author}</td>
+                          <td className="py-3 pr-4 text-slate-750 font-mono text-[10px] uppercase dark:text-slate-400">{entry.subteam}</td>
+                          <td className="py-3 text-right font-mono text-slate-500 font-bold dark:text-slate-400">{idx + startingPageIndex}</td>
                         </tr>
                       );
                     })}
@@ -10107,7 +10161,7 @@ FTC #6567 Captains & Mentors`
                 </table>
               </div>
 
-              <div className="mt-auto border-t border-slate-300 pt-4 text-center text-[10px] font-mono text-slate-400">
+              <div className="mt-auto border-t border-slate-300 pt-4 text-center text-[10px] font-mono text-slate-400 dark:text-slate-500 dark:border-slate-800">
               </div>
             </div>
           )}
@@ -10124,20 +10178,20 @@ FTC #6567 Captains & Mentors`
                 {/* FTC Header Plate */}
                 <div className="border-b-4 border-slate-950 pb-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950">
+                    <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950 dark:bg-slate-800 dark:text-slate-400">
                       {entry.subteam}
                     </span>
-                    <h4 className="text-xs font-black text-slate-950 uppercase font-display tracking-widest">
+                    <h4 className="text-xs font-black text-slate-950 uppercase font-display tracking-widest dark:text-slate-400">
                       SUBTEAM JOURNAL ENTRY
                     </h4>
                   </div>
 
-                  <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 flex flex-col gap-0.5">
-                    <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-950 select-all tracking-wider bg-slate-100 px-1 rounded">{getEntryReferenceCode(entry, entries)}</span></div>
+                  <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 flex flex-col gap-0.5 dark:text-slate-300">
+                    <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-950 select-all tracking-wider bg-slate-100 px-1 rounded dark:bg-slate-800 dark:text-slate-400">{getEntryReferenceCode(entry, entries)}</span></div>
                     <div><strong>DATE:</strong> {entry.date}</div>
                     <div className="flex items-center gap-1 sm:justify-end">
                       <strong>AUTHOR:</strong>{' '}
-                      <span className="font-bold text-slate-950">
+                      <span className="font-bold text-slate-950 dark:text-slate-400">
                         {entry.author}
                       </span>
                       {(() => {
@@ -10156,35 +10210,35 @@ FTC #6567 Captains & Mentors`
                 </div>
 
                 {/* Content Fields Map */}
-                <div className="space-y-3.5 text-xs text-slate-950">
+                <div className="space-y-3.5 text-xs text-slate-950 dark:text-slate-400">
                   
                   {/* What We Planned */}
-                  <div className="bg-white border border-slate-300 p-3 rounded">
-                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5">
+                  <div className="bg-white border border-slate-300 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
+                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5 dark:text-slate-400 dark:border-slate-800">
                       What we planned
                     </strong>
-                    <p className="text-slate-950 leading-normal font-medium text-[11px] whitespace-pre-wrap">
+                    <p className="text-slate-950 leading-normal font-medium text-[11px] whitespace-pre-wrap dark:text-slate-400">
                       {entry.planned}
                     </p>
                   </div>
 
                   {/* What We Accomplished */}
-                  <div className="bg-white border border-slate-300 p-3 rounded">
-                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5">
+                  <div className="bg-white border border-slate-300 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
+                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5 dark:text-slate-400 dark:border-slate-800">
                       What we accomplished
                     </strong>
-                    <p className="text-slate-950 leading-normal text-[11px] whitespace-pre-wrap">
+                    <p className="text-slate-950 leading-normal text-[11px] whitespace-pre-wrap dark:text-slate-400">
                       {entry.accomplished}
                     </p>
                   </div>
 
                   {/* Problems & Solutions */}
-                  <div className="bg-white border border-slate-300 p-3 rounded">
-                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1.5 font-bold border-b border-slate-200 pb-0.5">
+                  <div className="bg-white border border-slate-300 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
+                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1.5 font-bold border-b border-slate-200 pb-0.5 dark:text-slate-400 dark:border-slate-800">
                       Problems and solutions found
                     </strong>
                     {entry.problemsAndSolutions.length === 0 ? (
-                      <p className="text-slate-400 italic text-[11px]">No active blockers recorded.</p>
+                      <p className="text-slate-400 italic text-[11px] dark:text-slate-500">No active blockers recorded.</p>
                     ) : (
                       <div className="space-y-2.5">
                         {entry.problemsAndSolutions.map((p, idx) => (
@@ -10192,7 +10246,7 @@ FTC #6567 Captains & Mentors`
                             <span className="bg-slate-950 text-white text-[9px] font-bold px-1.5 rounded mt-0.5 shrink-0">
                               {idx + 1}
                             </span>
-                            <div className="text-slate-950 leading-normal text-[11px] font-medium whitespace-pre-wrap">
+                            <div className="text-slate-950 leading-normal text-[11px] font-medium whitespace-pre-wrap dark:text-slate-400">
                               {p}
                             </div>
                           </div>
@@ -10203,11 +10257,11 @@ FTC #6567 Captains & Mentors`
 
                   {/* Plan for next time */}
                   {entry.planNextTime && (
-                    <div className="bg-white border border-slate-300 p-3 rounded">
-                      <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5">
+                    <div className="bg-white border border-slate-300 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
+                      <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5 dark:text-slate-400 dark:border-slate-800">
                         Plan for next time
                       </strong>
-                      <p className="text-slate-950 leading-normal text-[11px] whitespace-pre-wrap">
+                      <p className="text-slate-950 leading-normal text-[11px] whitespace-pre-wrap dark:text-slate-400">
                         {entry.planNextTime}
                       </p>
                     </div>
@@ -10216,13 +10270,13 @@ FTC #6567 Captains & Mentors`
                   {/* Notebook imagery */}
                   {entry.images.length > 0 && (
                     <div className="space-y-1.5">
-                      <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] font-bold">
+                      <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] font-bold dark:text-slate-400">
                         Session Imagery Proofs (Chassis maps, tests, wiring diagrams)
                       </strong>
                       <div className="grid grid-cols-2 gap-2">
                         {entry.images.map((img) => (
-                          <div key={img.id} className="border border-slate-300 bg-white rounded p-1 flex flex-col gap-1">
-                            <div className="aspect-[4/3] rounded overflow-hidden bg-slate-100 flex items-center justify-center border border-slate-200">
+                          <div key={img.id} className="border border-slate-300 bg-white rounded p-1 flex flex-col gap-1 dark:bg-slate-900 dark:border-slate-800">
+                            <div className="aspect-[4/3] rounded overflow-hidden bg-slate-100 flex items-center justify-center border border-slate-200 dark:bg-slate-800 dark:border-slate-800">
                               <img 
                                 src={img.dataUrl} 
                                 alt={img.name} 
@@ -10230,7 +10284,7 @@ FTC #6567 Captains & Mentors`
                                 referrerPolicy="no-referrer"
                               />
                             </div>
-                            <div className="text-[9px] font-mono text-slate-550 px-1 truncate shrink-0">
+                            <div className="text-[9px] font-mono text-slate-550 px-1 truncate shrink-0 dark:text-slate-300">
                               📁 {img.name} ({(img.size / 1024).toFixed(1)} KB)
                             </div>
                           </div>
@@ -10242,7 +10296,7 @@ FTC #6567 Captains & Mentors`
                 </div>
 
                 {/* Physical signature box */}
-                <div className="mt-auto pt-3 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2">
+                <div className="mt-auto pt-3 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2 dark:text-slate-400 dark:border-slate-800">
                   <span>FTC CENTRALIZED LEDGER IDENTIFIER AND PROOF — VERIFIED LOCAL SYNC</span>
                   {entry.status === 'Approved' ? (
                     <span className="shrink-0 text-emerald-700 font-extrabold flex items-center gap-1 uppercase tracking-wider">
@@ -10261,12 +10315,12 @@ FTC #6567 Captains & Mentors`
 
       {/* Dynamic Time Sheets Print Container - ONLY printed, completely invisible on screen, styles adjusted for print */}
       {timeEntriesToPrint && timeEntriesToPrint.length > 0 && (
-        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
+        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans dark:bg-slate-900">
           
           {/* TITLE COVER PAGE */}
           {timeExportShowCover && (
             <div 
-              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12 dark:bg-slate-900"
               style={{ pageBreakAfter: 'always', minHeight: timeExportPaperSize === 'legal' ? '300mm' : '240mm' }}
             >
               <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
@@ -10276,19 +10330,19 @@ FTC #6567 Captains & Mentors`
                 <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
                   RoboRaiders Team Portal
                 </h1>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8">
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8 dark:text-slate-300">
                   Time Records Report
                 </p>
                 
                 <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
                 
-                <p className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                <p className="text-sm font-bold text-slate-800 uppercase tracking-wide dark:text-slate-400">
                   FIRST Tech Challenge Team #6567
                 </p>
               </div>
 
               <div className="mt-auto border-t-2 border-slate-950 pt-6">
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700">
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700 dark:text-slate-300">
                   <div>
                     <p><strong>DOCUMENT TYPE:</strong> Time Ledger</p>
                     <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
@@ -10306,7 +10360,7 @@ FTC #6567 Captains & Mentors`
           {/* TABLE OF CONTENTS / SUMMARY LOG */}
           {timeExportShowTOC && (
             <div 
-              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
               style={{ pageBreakAfter: 'always', minHeight: timeExportPaperSize === 'legal' ? '300mm' : '240mm' }}
             >
               <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -10314,19 +10368,19 @@ FTC #6567 Captains & Mentors`
                   <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
                     Summary Table
                   </h2>
-                  <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                  <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
                     FTC #6567 Time Ledger Index
                   </p>
                 </div>
-                <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5">
-                  <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950">{timeEntriesToPrint.length} Records</span></div>
-                  <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
+                <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5 dark:text-slate-300">
+                  <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950 dark:text-slate-400">{timeEntriesToPrint.length} Records</span></div>
+                  <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded dark:text-slate-400 dark:border-slate-800">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
                 </div>
               </div>
 
               <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
                 <thead>
-                  <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100">
+                  <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100 dark:bg-slate-800 dark:text-slate-300">
                     <th className="py-2.5 px-2">Date</th>
                     <th className="py-2.5 px-2">Team Member</th>
                     <th className="py-2.5 px-2">Subteam</th>
@@ -10335,7 +10389,7 @@ FTC #6567 Captains & Mentors`
                 </thead>
                 <tbody>
                   {timeEntriesToPrint.slice(0, 45).map((ev, index) => (
-                    <tr key={ev.id} className="border-b border-slate-300">
+                    <tr key={ev.id} className="border-b border-slate-300 dark:border-slate-800">
                       <td className="py-3 px-2 font-mono">{ev.date}</td>
                       <td className="py-3 px-2 font-bold">{ev.userName}</td>
                       <td className="py-3 px-2 font-mono text-[9px] uppercase">{ev.subteam}</td>
@@ -10344,7 +10398,7 @@ FTC #6567 Captains & Mentors`
                   ))}
                   {timeEntriesToPrint.length > 45 && (
                     <tr>
-                      <td colSpan={4} className="py-4 text-center italic text-xs text-slate-500">
+                      <td colSpan={4} className="py-4 text-center italic text-xs text-slate-500 dark:text-slate-400">
                         ... and {timeEntriesToPrint.length - 45} more records enclosed ...
                       </td>
                     </tr>
@@ -10352,8 +10406,8 @@ FTC #6567 Captains & Mentors`
                 </tbody>
               </table>
 
-              <div className="mt-auto border-t border-slate-400 pt-6">
-                <div className="flex justify-between text-[11px] font-mono text-slate-600">
+              <div className="mt-auto border-t border-slate-400 pt-6 dark:border-slate-800">
+                <div className="flex justify-between text-[11px] font-mono text-slate-600 dark:text-slate-300">
                   <span>FTC #6567 TIME BINDER INDEX SUMMARY</span>
                   <span>SIGNED VERIFIED BY CAPTAIN: _________________</span>
                 </div>
@@ -10366,7 +10420,7 @@ FTC #6567 Captains & Mentors`
             <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950 animate-none">
+                  <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950 animate-none dark:bg-slate-800 dark:text-slate-400">
                     ROBORAIDERS TIME LEDGER
                   </span>
                 </div>
@@ -10377,10 +10431,10 @@ FTC #6567 Captains & Mentors`
                 </h1>
               </div>
 
-              <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5">
+              <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5 dark:text-slate-300">
                 <div><strong>GENERATED:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>
-                <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950">{timeEntriesToPrint.length} Records</span></div>
-                <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
+                <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950 dark:text-slate-400">{timeEntriesToPrint.length} Records</span></div>
+                <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded dark:text-slate-400 dark:border-slate-800">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
                 <div><strong>TEAM NUMBER:</strong> FTC #6567</div>
               </div>
             </div>
@@ -10406,25 +10460,25 @@ FTC #6567 Captains & Mentors`
                 return (
                   <div 
                     key={email} 
-                    className={`pb-6 mb-8 border-b border-dashed border-slate-300 text-slate-900 dark:text-slate-100 ${
+                    className={`pb-6 mb-8 border-b border-dashed border-slate-300 text-slate-900 dark:text-slate-300 ${
                       gIdx < Object.keys(grouped).length - 1 ? 'break-after-page' : ''
                     }`}
                     style={{ pageBreakAfter: gIdx < Object.keys(grouped).length - 1 ? 'always' : 'auto' }}
                   >
                     <div className="flex justify-between items-end border-b border-slate-950 pb-2 mb-4">
                       <div>
-                        <h2 className="text-base font-black text-slate-950 uppercase">{userName}</h2>
-                        <p className="text-[10px] text-slate-500 font-mono tracking-wide">{email}</p>
+                        <h2 className="text-base font-black text-slate-950 uppercase dark:text-slate-400">{userName}</h2>
+                        <p className="text-[10px] text-slate-500 font-mono tracking-wide dark:text-slate-400">{email}</p>
                       </div>
                       <div className="text-right text-[10px] font-mono">
                         <div><strong>SUBTEAM Focus:</strong> <span className="font-bold">{userEntries[0]?.subteam}</span></div>
-                        <div><strong>INDIVIDUAL STRENGTH:</strong> <span className="font-extrabold text-slate-950 dark:text-slate-200">{totalHours.toFixed(2)} Hours</span></div>
+                        <div><strong>INDIVIDUAL STRENGTH:</strong> <span className="font-extrabold text-slate-950 dark:text-slate-400">{totalHours.toFixed(2)} Hours</span></div>
                       </div>
                     </div>
 
                     <table className="w-full text-left text-[11px] font-sans border-collapse">
                       <thead>
-                        <tr className="border-b border-slate-950 text-[10px] uppercase font-mono text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900">
+                        <tr className="border-b border-slate-950 text-[10px] uppercase font-mono text-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-slate-300">
                           <th className="py-2 px-1">Date</th>
                           <th className="py-2 px-1">Subteam Focus</th>
                           <th className="py-2 px-1">Shift Period</th>
@@ -10437,15 +10491,15 @@ FTC #6567 Captains & Mentors`
                           <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800">
                             <td className="py-3 px-1 font-mono whitespace-nowrap">{e.date}</td>
                             <td className="py-3 px-1 font-medium">{e.subteam}</td>
-                            <td className="py-3 px-1 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">{e.startTime} - {e.endTime}</td>
+                            <td className="py-3 px-1 font-mono text-slate-500 whitespace-nowrap dark:text-slate-400">{e.startTime} - {e.endTime}</td>
                             <td className="py-3 px-1 text-right font-bold whitespace-nowrap">{e.durationHours.toFixed(2)} hrs</td>
-                            <td className="py-3 px-1.5 pl-4 break-words text-slate-800 dark:text-slate-200 leading-relaxed max-w-xs">{e.taskDescription}</td>
+                            <td className="py-3 px-1.5 pl-4 break-words text-slate-800 leading-relaxed max-w-xs dark:text-slate-400">{e.taskDescription}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
 
-                    <div className="mt-8 flex justify-end text-[9px] font-mono text-slate-500">
+                    <div className="mt-8 flex justify-end text-[9px] font-mono text-slate-500 dark:text-slate-400">
                       <span className="border-b border-slate-955 w-44 text-right">MEMBER SIGNATURE: _________________</span>
                     </div>
                   </div>
@@ -10457,7 +10511,7 @@ FTC #6567 Captains & Mentors`
             <div className="space-y-4">
               <table className="w-full text-left text-[11px] font-sans border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-955 text-[10px] uppercase font-mono text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900">
+                  <tr className="border-b border-slate-955 text-[10px] uppercase font-mono text-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-slate-300">
                     <th className="py-2 px-1">Date</th>
                     <th className="py-2 px-1">Team Participant</th>
                     <th className="py-2 px-1">Subteam Focus Area</th>
@@ -10470,17 +10524,17 @@ FTC #6567 Captains & Mentors`
                   {timeEntriesToPrint.sort((a,b) => a.date.localeCompare(b.date) || a.userName.localeCompare(b.userName)).map((e) => (
                     <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800">
                       <td className="py-3 px-1 font-mono whitespace-nowrap">{e.date}</td>
-                      <td className="py-3 px-1 font-bold text-slate-955 dark:text-slate-200">{e.userName}</td>
+                      <td className="py-3 px-1 font-bold text-slate-955">{e.userName}</td>
                       <td className="py-3 px-1 font-medium">{e.subteam}</td>
-                      <td className="py-3 px-1 text-center font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">{e.startTime} – {e.endTime}</td>
+                      <td className="py-3 px-1 text-center font-mono text-slate-500 whitespace-nowrap dark:text-slate-400">{e.startTime} – {e.endTime}</td>
                       <td className="py-3 px-1 text-right font-bold whitespace-nowrap">{e.durationHours.toFixed(2)} hr</td>
-                      <td className="py-3 px-3 pl-4 text-slate-800 dark:text-slate-200 leading-relaxed break-words max-w-md">{e.taskDescription}</td>
+                      <td className="py-3 px-3 pl-4 text-slate-800 leading-relaxed break-words max-w-md dark:text-slate-400">{e.taskDescription}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
 
-              <div className="pt-8 flex justify-end text-[9px] font-mono text-slate-500">
+              <div className="pt-8 flex justify-end text-[9px] font-mono text-slate-500 dark:text-slate-400">
                 <span className="border-b border-slate-950 w-52 text-right">MENTOR/CAPTAIN REVIEWER SIGNATURE: _________________</span>
               </div>
             </div>
@@ -10491,12 +10545,12 @@ FTC #6567 Captains & Mentors`
 
       {/* Dynamic Outreach Events Print Container - ONLY printed, completely invisible on screen, styles adjusted for print */}
       {outreachEventsToPrint && outreachEventsToPrint.length > 0 && (
-        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans">
+        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans dark:bg-slate-900">
           
           {/* TITLE COVER PAGE */}
           {outreachExportShowCover && (
             <div 
-              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12 dark:bg-slate-900"
               style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
             >
               <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
@@ -10506,22 +10560,22 @@ FTC #6567 Captains & Mentors`
                 <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
                   RoboRaiders Team Portal
                 </h1>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8">
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8 dark:text-slate-300">
                   Community Outreach & Impact Portfolio
                 </p>
                 
                 <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
                 
-                <p className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                <p className="text-sm font-bold text-slate-800 uppercase tracking-wide dark:text-slate-400">
                   FIRST Tech Challenge Team #6567
                 </p>
-                <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest mt-2">
+                <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest mt-2 dark:text-slate-400">
                   {outreachPrintSubtitle}
                 </p>
               </div>
 
               <div className="mt-auto border-t-2 border-slate-950 pt-6">
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700">
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700 dark:text-slate-300">
                   <div>
                     <p><strong>DOCUMENT TYPE:</strong> Community Impact Portfolio</p>
                     <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
@@ -10538,21 +10592,21 @@ FTC #6567 Captains & Mentors`
           {/* TABLE OF CONTENTS / SUMMARY LOG */}
           {outreachExportShowTOC && (
             <div 
-              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
               style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
             >
               <div className="border-b-4 border-slate-950 pb-4 mb-6">
                 <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
                   Summary Table of Events
                 </h2>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
                   FTC #6567 Community Engagement Index
                 </p>
               </div>
 
               <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
                 <thead>
-                  <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100">
+                  <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100 dark:bg-slate-800 dark:text-slate-300">
                     <th className="py-2.5 px-2">Date</th>
                     <th className="py-2.5 px-2">Campaign Initiative Title</th>
                     <th className="py-2.5 px-2">Location Venue</th>
@@ -10562,26 +10616,26 @@ FTC #6567 Captains & Mentors`
               </thead>
               <tbody>
                 {outreachEventsToPrint.map((ev, index) => (
-                  <tr key={ev.id} className="border-b border-slate-300">
+                  <tr key={ev.id} className="border-b border-slate-300 dark:border-slate-800">
                     <td className="py-3 px-2 font-mono">{ev.date}</td>
                     <td className="py-3 px-2 font-bold">
                       <div>{ev.title}</div>
                       {(ev.reachedChildren !== undefined || ev.reachedAdults !== undefined) && (
-                        <div className="text-[9px] text-slate-500 font-mono font-normal mt-0.5">
+                        <div className="text-[9px] text-slate-500 font-mono font-normal mt-0.5 dark:text-slate-400">
                           Reach: {ev.reachedChildren || 0} children (under 18) / {ev.reachedAdults || 0} adults (18+)
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-2 text-slate-700">{ev.location}</td>
+                    <td className="py-3 px-2 text-slate-700 dark:text-slate-300">{ev.location}</td>
                     <td className="py-3 px-2 text-right font-extrabold">{ev.hoursLogged} hrs</td>
-                    <td className="py-3 px-2 text-right font-mono text-slate-600">{ev.participants ? ev.participants.length : 0}</td>
+                    <td className="py-3 px-2 text-right font-mono text-slate-600 dark:text-slate-300">{ev.participants ? ev.participants.length : 0}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            <div className="mt-auto border-t border-slate-400 pt-6">
-              <div className="flex justify-between text-[11px] font-mono text-slate-600">
+            <div className="mt-auto border-t border-slate-400 pt-6 dark:border-slate-800">
+              <div className="flex justify-between text-[11px] font-mono text-slate-600 dark:text-slate-300">
                 <span>FTC #6567 OUTREACH BINDER LEDGER INDEX SUMMARY</span>
                 <span>SIGNED VERIFIED BY CAPTAIN: _________________</span>
               </div>
@@ -10594,63 +10648,63 @@ FTC #6567 Captains & Mentors`
             return (
               <div 
                 key={ev.id}
-                className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+                className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
                 style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
               >
                 {/* Header card info */}
                 <div className="border-b-4 border-slate-950 pb-4 mb-6 flex justify-between items-start">
                   <div className="space-y-1">
-                    <span className="text-[10px] font-mono font-black border border-slate-950 px-2.5 py-0.5 rounded bg-slate-100 uppercase tracking-wide">
+                    <span className="text-[10px] font-mono font-black border border-slate-950 px-2.5 py-0.5 rounded bg-slate-100 uppercase tracking-wide dark:bg-slate-800">
                       FTC Community Initiative Record
                     </span>
-                    <h2 className="text-2xl font-extrabold uppercase font-display tracking-tight text-slate-950 mt-1">
+                    <h2 className="text-2xl font-extrabold uppercase font-display tracking-tight text-slate-950 mt-1 dark:text-slate-400">
                       {ev.title}
                     </h2>
                   </div>
                   <div className="text-right text-[10px] font-mono text-slate-705">
                     <div><strong>DATE:</strong> {ev.date}</div>
                     <div><strong>LOCATION:</strong> {ev.location}</div>
-                    <div><strong>HOURS DEVOTED:</strong> <span className="font-extrabold text-slate-950">{ev.hoursLogged} hrs</span></div>
+                    <div><strong>HOURS DEVOTED:</strong> <span className="font-extrabold text-slate-950 dark:text-slate-400">{ev.hoursLogged} hrs</span></div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
                   {/* Campaign Impact Description */}
-                  <div className="bg-white border border-slate-300 p-4 rounded-xl">
-                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1">
+                  <div className="bg-white border border-slate-300 p-4 rounded-xl dark:bg-slate-900 dark:border-slate-800">
+                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1 dark:text-slate-300 dark:border-slate-800">
                       1. Workshop Objective & Community Experience Narrative
                     </strong>
-                    <p className="text-slate-900 leading-relaxed text-[11.5px] font-medium whitespace-pre-wrap">
+                    <p className="text-slate-900 leading-relaxed text-[11.5px] font-medium whitespace-pre-wrap dark:text-slate-400">
                       {ev.description}
                     </p>
                   </div>
 
                   {/* Impact & Alignment Metrics */}
-                  <div className="bg-white border border-slate-300 p-4 rounded-xl">
-                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1">
+                  <div className="bg-white border border-slate-300 p-4 rounded-xl dark:bg-slate-900 dark:border-slate-800">
+                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1 dark:text-slate-300 dark:border-slate-800">
                       2. Quantifiably Measured Impact & Target Demographics
                     </strong>
                     {(ev.reachedChildren !== undefined || ev.reachedAdults !== undefined) && (
-                      <div className="mb-3 text-[11px] font-mono text-slate-900 border-b border-slate-100 pb-2">
+                      <div className="mb-3 text-[11px] font-mono text-slate-900 border-b border-slate-100 pb-2 dark:text-slate-400 dark:border-slate-800">
                         <strong className="text-slate-505">DIRECT ESTIMATED REACH:</strong>
                         <div className="flex gap-4 mt-1 font-extrabold">
-                          <span>👧 Children (under 18): <span className="text-slate-950 font-black">{ev.reachedChildren || 0}</span></span>
-                          <span>👨 Adults (18+): <span className="text-slate-950 font-black">{ev.reachedAdults || 0}</span></span>
+                          <span>👧 Children (under 18): <span className="text-slate-950 font-black dark:text-slate-400">{ev.reachedChildren || 0}</span></span>
+                          <span>👨 Adults (18+): <span className="text-slate-950 font-black dark:text-slate-400">{ev.reachedAdults || 0}</span></span>
                         </div>
                       </div>
                     )}
                     {ev.impactMetrics ? (
-                      <p className="text-slate-900 font-bold font-mono tracking-normal leading-relaxed text-xs whitespace-pre-wrap">
+                      <p className="text-slate-900 font-bold font-mono tracking-normal leading-relaxed text-xs whitespace-pre-wrap dark:text-slate-400">
                         {ev.impactMetrics}
                       </p>
                     ) : (
-                      <p className="text-slate-400 italic text-[11px] font-mono">No specific event metrics logged.</p>
+                      <p className="text-slate-400 italic text-[11px] font-mono dark:text-slate-500">No specific event metrics logged.</p>
                     )}
                   </div>
 
                   {/* Tagged Active Participants */}
-                  <div className="bg-white border border-slate-300 p-4 rounded-xl">
-                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1">
+                  <div className="bg-white border border-slate-300 p-4 rounded-xl dark:bg-slate-900 dark:border-slate-800">
+                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1 dark:text-slate-300 dark:border-slate-800">
                       3. Registered Representing Team Members
                     </strong>
                     {ev.participants && ev.participants.length > 0 ? (
@@ -10658,27 +10712,27 @@ FTC #6567 Captains & Mentors`
                         {ev.participants.map((name, idx) => (
                           <span 
                             key={idx} 
-                            className="bg-slate-100 border border-slate-300 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono"
+                            className="bg-slate-100 border border-slate-300 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                           >
                             👤 {name}
                           </span>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-slate-400 italic text-[11.2px] font-mono">No representatives registered for this event.</p>
+                      <p className="text-slate-400 italic text-[11.2px] font-mono dark:text-slate-500">No representatives registered for this event.</p>
                     )}
                   </div>
 
                   {/* Attachment proofs */}
                   {ev.images && ev.images.length > 0 && (
                     <div className="space-y-2 mt-2">
-                      <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] font-black">
+                      <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] font-black dark:text-slate-300">
                         4. Photographical Verification Attachment & Interactive Proofs
                       </strong>
                       <div className="grid grid-cols-2 gap-3.5">
                         {ev.images.map((img) => (
-                          <div key={img.id} className="border border-slate-300 bg-white rounded-lg p-1.5 flex flex-col gap-1.5">
-                            <div className="aspect-[4/3] rounded-md overflow-hidden bg-slate-50 flex items-center justify-center border border-slate-250">
+                          <div key={img.id} className="border border-slate-300 bg-white rounded-lg p-1.5 flex flex-col gap-1.5 dark:bg-slate-900 dark:border-slate-800">
+                            <div className="aspect-[4/3] rounded-md overflow-hidden bg-slate-50 flex items-center justify-center border border-slate-250 dark:bg-slate-800 dark:border-slate-800">
                               <img 
                                 src={img.dataUrl} 
                                 alt={img.name} 
@@ -10686,7 +10740,7 @@ FTC #6567 Captains & Mentors`
                                 referrerPolicy="no-referrer"
                               />
                             </div>
-                            <div className="text-[9px] font-mono text-slate-500 px-1 truncate shrink-0">
+                            <div className="text-[9px] font-mono text-slate-500 px-1 truncate shrink-0 dark:text-slate-400">
                               📁 {img.name} ({(img.size / 1024).toFixed(1)} KB)
                             </div>
                           </div>
@@ -10697,7 +10751,7 @@ FTC #6567 Captains & Mentors`
                 </div>
 
                 {/* Proof sign off signature line */}
-                <div className="mt-auto pt-4 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2">
+                <div className="mt-auto pt-4 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2 dark:text-slate-400 dark:border-slate-800">
                   <span>FTC #6567 OUTREACH BINDER INTEGRITY STAMP — VERIFIES LOCAL SYNCHED LEDGERS</span>
                   <span className="shrink-0 font-bold border-b border-slate-950 w-64 text-right">
                     VERIFIED BY MENTOR SIGNATURE: _________________

@@ -240,19 +240,19 @@ export default function MemberDirectory({
 
   return (
     <>
-    <div className={`flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors p-4 md:p-6 ${isRosterExportModalOpen ? 'print:hidden' : ''}`} id="member-approvals-directory-viewport">
+    <div className={`flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-300 transition-colors p-4 md:p-6 ${isRosterExportModalOpen ? 'print:hidden' : ''}`} id="member-approvals-directory-viewport">
       
       {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200 dark:border-slate-900 no-print">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200 no-print dark:border-slate-800">
         <div>
           <span className="bg-indigo-600/10 text-indigo-700 dark:text-indigo-400 font-mono text-[9px] font-black uppercase px-2.5 py-1 rounded border border-indigo-500/20 tracking-widest leading-none">
             TEAM ROSTER & SECURITY CONTROLS
           </span>
-          <h1 className="text-xl md:text-2xl font-black uppercase text-slate-900 dark:text-slate-50 mt-1.5 tracking-tight font-display flex items-center gap-2">
+          <h1 className="text-xl md:text-2xl font-black uppercase text-slate-900 mt-1.5 tracking-tight font-display flex items-center gap-2 dark:text-slate-400">
             <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             <span>RoboRaiders Roster Directory & Approvals</span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+          <p className="text-xs text-slate-500 font-sans mt-0.5 dark:text-slate-400">
             Audit registered student team credentials, approve incoming pending accounts, and analyze itemized XP source logs.
           </p>
         </div>
@@ -268,7 +268,7 @@ export default function MemberDirectory({
           </button>
           <button
             onClick={handleExportRoster}
-            className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold px-3 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md border border-slate-350 dark:border-slate-700"
+            className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold px-3 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md border border-slate-350 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
             title="Export Roster to CSV"
           >
             <Download className="w-4 h-4" />
@@ -276,7 +276,7 @@ export default function MemberDirectory({
           </button>
           <button
             onClick={onBack}
-            className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold px-4 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md border border-slate-350 dark:border-slate-700"
+            className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold px-4 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md border border-slate-350 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
           >
             <ChevronLeft className="w-4 h-4" />
             <span>Back to Hub</span>
@@ -291,14 +291,14 @@ export default function MemberDirectory({
           
           {/* Section 1: Pending Access Requests for Mentors */}
           {isMentorOrCaptain && (
-            <div className="bg-white dark:bg-slate-900 border border-amber-300/40 dark:border-amber-900/30 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-black text-slate-800 dark:text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <div className="bg-white border border-amber-300/40 dark:border-amber-900/30 rounded-xl p-5 shadow-sm dark:bg-slate-900">
+              <h3 className="text-sm font-black text-slate-800 dark:text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-1.5 dark:text-slate-400">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
                 <span>Pending Access Approval Requests ({pendingRequests.length})</span>
               </h3>
 
               {pendingRequests.length === 0 ? (
-                <div className="bg-amber-500/[0.02] border border-amber-505/10 rounded-lg p-5 text-center text-xs text-slate-500 dark:text-slate-400 italic font-medium">
+                <div className="bg-amber-500/[0.02] border border-amber-505/10 rounded-lg p-5 text-center text-xs text-slate-500 italic font-medium dark:text-slate-400">
                   🎉 Good job! There are no student login registrations waiting for verification.
                 </div>
               ) : (
@@ -310,23 +310,23 @@ export default function MemberDirectory({
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-extrabold text-slate-900 dark:text-slate-50 text-sm">{acc.name}</span>
-                          <span className="bg-amber-100 dark:bg-amber-955/40 text-amber-800 dark:text-amber-305 font-mono text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
+                          <span className="font-extrabold text-slate-900 text-sm dark:text-slate-400">{acc.name}</span>
+                          <span className="bg-amber-100 dark:bg-slate-900/40 text-amber-800 dark:text-amber-305 font-mono text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
                             Pending Approval
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono space-y-0.5">
-                          <div>School Email: <strong className="text-slate-800 dark:text-slate-205">{acc.schoolEmail}</strong></div>
+                        <div className="text-[11px] text-slate-600 font-mono space-y-0.5 dark:text-slate-300">
+                          <div>School Email: <strong className="text-slate-800 dark:text-slate-400">{acc.schoolEmail}</strong></div>
                           <div>Role Declared: <strong>{acc.role === 'member' ? 'Student Specialist' : acc.role}</strong></div>
                           <div>Primary Subteam Area: <strong>{formatSubteamLabel(acc.primarySubteam)}</strong></div>
                           {acc.secondarySubteam !== 'None' && <div>Secondary Focus: <strong>{formatSubteamLabel(acc.secondarySubteam)}</strong></div>}
                         </div>
-                        <div className="mt-2.5 flex items-center gap-1.5 pt-1.5 border-t border-amber-100 dark:border-amber-955 text-xs text-slate-550 dark:text-slate-400">
+                        <div className="mt-2.5 flex items-center gap-1.5 pt-1.5 border-t border-amber-100 dark:border-amber-955 text-xs text-slate-550 dark:text-slate-300">
                           <span className="font-bold">Initial Leadership Status:</span>
                           <select
                             value={acc.leadership || 'None'}
                             onChange={(e) => onUpdateLeadership(acc.id, e.target.value as any)}
-                            className="bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-1.5 py-0.5 font-sans font-bold text-[10px] text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-brand outline-none"
+                            className="bg-white border border-slate-300 rounded px-1.5 py-0.5 font-sans font-bold text-[10px] text-slate-800 focus:ring-1 focus:ring-brand outline-none dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                           >
                             <option value="None">None</option>
                             <option value="Captain">Captain</option>
@@ -367,9 +367,9 @@ export default function MemberDirectory({
           )}
 
           {/* Section 2: Searchable & Filterable Active Team Directory */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm dark:bg-slate-900 dark:border-slate-800">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-              <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2 dark:text-slate-400">
                 <Users className="w-4 h-4 text-indigo-500" />
                 <span>Authorized Active Team Directory ({filteredRoster.length})</span>
               </h3>
@@ -390,12 +390,12 @@ export default function MemberDirectory({
             </div>
 
             {/* Filter controls panel */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5 p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200 dark:border-slate-805 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs dark:bg-slate-800 dark:border-slate-800">
               
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-wider">Search Member</label>
+                <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-wider dark:text-slate-500">Search Member</label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 pointer-events-none">
+                  <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 pointer-events-none dark:text-slate-500">
                     <Search className="w-3.5 h-3.5" />
                   </span>
                   <input
@@ -403,17 +403,17 @@ export default function MemberDirectory({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search name or school email..."
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 pl-8 pr-3 py-1.5 rounded text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full bg-white border border-slate-250 pl-8 pr-3 py-1.5 rounded text-xs text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                   />
                 </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-wider">Filter Subteam Focus</label>
+                <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-wider dark:text-slate-500">Filter Subteam Focus</label>
                 <select
                   value={filterSubteam}
                   onChange={(e) => setFilterSubteam(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 px-2.5 py-1.5 rounded text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                  className="w-full bg-white border border-slate-250 px-2.5 py-1.5 rounded text-xs text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 font-mono dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                 >
                   <option value="All">All Subteams</option>
                   <option value="Design/Build/Fabrication">Design &amp; Build</option>
@@ -426,11 +426,11 @@ export default function MemberDirectory({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-wider">Filter Team Role</label>
+                <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-wider dark:text-slate-500">Filter Team Role</label>
                 <select
                   value={filterRole}
                   onChange={(e) => setFilterRole(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 px-2.5 py-1.5 rounded text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                  className="w-full bg-white border border-slate-250 px-2.5 py-1.5 rounded text-xs text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 font-mono dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                 >
                   <option value="All">All Roles</option>
                   <option value="member">Student Specialists</option>
@@ -443,7 +443,7 @@ export default function MemberDirectory({
 
             {/* Directory Cards List */}
             {filteredRoster.length === 0 ? (
-              <div className="bg-slate-50 dark:bg-slate-950 p-8 border border-slate-250 dark:border-slate-805 text-center text-slate-500 dark:text-slate-400 italic rounded-lg">
+              <div className="bg-slate-50 p-8 border border-slate-250 text-center text-slate-500 italic rounded-lg dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800">
                 ❌ No registered team members matched the current filter conditions. Try adjusting search queries.
               </div>
             ) : (
@@ -459,13 +459,13 @@ export default function MemberDirectory({
                       className={`border p-4 rounded-xl cursor-pointer transition-all flex flex-col justify-between hover:shadow-md ${
                         isSelected 
                           ? 'border-indigo-500 bg-indigo-500/[0.03] dark:bg-indigo-950/10' 
-                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800'
                       }`}
                     >
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-slate-900 dark:text-slate-100 text-sm leading-tight hover:underline">
+                            <span className="font-extrabold text-slate-900 text-sm leading-tight hover:underline dark:text-slate-400">
                               {acc.name}
                             </span>
                             {isMentorOrCaptain && (
@@ -474,7 +474,7 @@ export default function MemberDirectory({
                                   e.stopPropagation();
                                   onDeleteUser(acc.id, acc.name);
                                 }}
-                                className="p-1 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-slate-300 hover:text-rose-600 dark:text-slate-600 dark:hover:text-rose-400 rounded transition-all cursor-pointer"
+                                className="p-1 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-all cursor-pointer"
                                 title="Delete User"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -492,13 +492,13 @@ export default function MemberDirectory({
                           </span>
                         </div>
                         
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mb-2 truncate">
+                        <div className="text-[10px] text-slate-500 font-mono mb-2 truncate dark:text-slate-400">
                           {acc.schoolEmail}
                         </div>
 
                         {/* Badges and tags */}
                         <div className="space-y-1 text-[10.5px]">
-                          <div className="flex items-center gap-1 text-slate-705 dark:text-slate-300">
+                          <div className="flex items-center gap-1 text-slate-705">
                             <span className="font-semibold text-slate-405">Subteam:</span>
                             <span className="font-bold">{formatSubteamLabel(acc.primarySubteam)}</span>
                           </div>
@@ -514,7 +514,7 @@ export default function MemberDirectory({
                       </div>
 
                       {/* Gamified Rank and XP */}
-                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-805 flex justify-between items-center text-xs">
+                      <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs dark:border-slate-800">
                         <div className="flex items-center gap-1">
                           <Award className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                           <span className="font-mono font-bold text-[10px] text-slate-500 dark:text-slate-400">
@@ -534,12 +534,12 @@ export default function MemberDirectory({
         </div>
 
         {/* RIGHT ONE-THIRD PANEL: DETAIL VIEW & ITEMISED XP AUDIT LEDGER */}
-        <div className="lg:col-span-4 lg:sticky lg:top-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm">
+        <div className="lg:col-span-4 lg:sticky lg:top-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm dark:bg-slate-900 dark:border-slate-800">
           {!selectedUserForAudit ? (
-            <div className="text-center py-10 text-slate-400">
-              <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+            <div className="text-center py-10 text-slate-400 dark:text-slate-500">
+              <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 mb-2" />
               <p className="text-xs font-bold uppercase tracking-wider">No Profile Selected</p>
-              <p className="text-[11px] text-slate-500 mt-1">Select any verified member card from the directory list on the left to dissect their dynamic XP source ledger and profile details.</p>
+              <p className="text-[11px] text-slate-500 mt-1 dark:text-slate-400">Select any verified member card from the directory list on the left to dissect their dynamic XP source ledger and profile details.</p>
             </div>
           ) : (
             (() => {
@@ -551,7 +551,7 @@ export default function MemberDirectory({
               return (
                 <div className="space-y-5">
                   {/* Miniature Profile Header */}
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div className="border-b border-slate-100 pb-4 dark:border-slate-800">
                     <div className="flex items-center gap-1.5 flex-wrap justify-between">
                       <span className="bg-indigo-600 text-white font-mono text-[9px] font-black uppercase px-2 py-0.5 rounded tracking-wider">
                         Participant Detail Class
@@ -560,7 +560,7 @@ export default function MemberDirectory({
                         <div className="flex gap-2">
                           <button
                             onClick={() => onStartEditProfile(selectedUserForAudit.name)}
-                            className="text-slate-500 hover:text-brand dark:hover:text-amber-400 font-bold transition-all text-[11px] uppercase tracking-wider flex items-center gap-1 cursor-pointer border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-950 font-mono"
+                            className="text-slate-500 hover:text-brand dark:hover:text-amber-400 font-bold transition-all text-[11px] uppercase tracking-wider flex items-center gap-1 cursor-pointer border border-slate-200 px-2 py-0.5 rounded bg-slate-50 font-mono dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                             title="Modify account role, names or registered subteams"
                           >
                             <Edit className="w-3 h-3" />
@@ -570,17 +570,17 @@ export default function MemberDirectory({
                       )}
                     </div>
                     
-                    <h2 className="text-lg font-black text-slate-900 dark:text-slate-50 mt-2 hover:underline">
+                    <h2 className="text-lg font-black text-slate-900 mt-2 hover:underline dark:text-slate-400">
                       {selectedUserForAudit.name}
                     </h2>
-                    <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5">{selectedUserForAudit.schoolEmail}</p>
+                    <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5 dark:text-slate-500">{selectedUserForAudit.schoolEmail}</p>
 
                     <div className="mt-3 flex flex-wrap gap-1.5 items-center select-none text-[10px] tracking-wide">
-                      <span className="bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-350 font-bold border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded">
+                      <span className="bg-slate-100 text-slate-700 font-bold border border-slate-200 px-2 py-0.5 rounded dark:bg-slate-800 dark:text-slate-300 dark:border-slate-800">
                         Subteam: {formatSubteamLabel(selectedUserForAudit.primarySubteam)}
                       </span>
                       {selectedUserForAudit.secondarySubteam !== 'None' && (
-                        <span className="bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded">
+                        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded dark:bg-slate-800 dark:text-slate-400">
                           Sec: {formatSubteamLabel(selectedUserForAudit.secondarySubteam)}
                         </span>
                       )}
@@ -594,9 +594,9 @@ export default function MemberDirectory({
                   </div>
 
                   {/* Level Progress Visual Bar */}
-                  <div className="bg-slate-50 dark:bg-slate-955 p-3 rounded-lg border border-slate-150 dark:border-slate-800 select-none">
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-150 select-none dark:bg-slate-800">
                     <div className="flex justify-between items-center text-xs mb-1.5">
-                      <span className="font-black text-slate-800 dark:text-slate-300 uppercase tracking-tight">
+                      <span className="font-black text-slate-800 uppercase tracking-tight dark:text-slate-400">
                         {selectedGamified.stats.levelName}
                       </span>
                       <strong className="text-indigo-600 dark:text-indigo-400">
@@ -605,14 +605,14 @@ export default function MemberDirectory({
                     </div>
                     
                     {/* Visual bar */}
-                    <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden shadow-inner">
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden shadow-inner dark:bg-slate-800">
                       <div 
                         className="bg-indigo-650 h-full rounded-full transition-all duration-500 ease-out" 
                         style={{ width: `${selectedGamified.stats.percentToNextLevel}%` }}
                       ></div>
                     </div>
 
-                    <div className="flex justify-between text-[9px] font-mono text-slate-400 mt-1.5">
+                    <div className="flex justify-between text-[9px] font-mono text-slate-400 mt-1.5 dark:text-slate-500">
                       <span>{selectedGamified.stats.xpIntoLevel} / {selectedGamified.stats.xpForNextLevel} XP</span>
                       <span>{selectedGamified.stats.percentToNextLevel}% PROGRESS TO LVL {selectedGamified.stats.level + 1}</span>
                     </div>
@@ -620,8 +620,8 @@ export default function MemberDirectory({
 
                   {/* ITEMISED XP AUDIT LOG FOR MENTORS */}
                   <div className="text-xs space-y-3.5">
-                    <div className="flex items-center justify-between border-b border-slate-205 dark:border-slate-800 pb-1">
-                      <h3 className="font-mono font-black uppercase text-slate-400 tracking-wider text-[10px]">
+                    <div className="flex items-center justify-between border-b border-slate-205 pb-1">
+                      <h3 className="font-mono font-black uppercase text-slate-400 tracking-wider text-[10px] dark:text-slate-500">
                         🔮 Itemized XP Source ledger
                       </h3>
                       <span className="font-mono font-extrabold text-indigo-600 dark:text-indigo-400 text-[10px] bg-indigo-500/10 px-1.5 py-0.5 rounded">
@@ -635,17 +635,17 @@ export default function MemberDirectory({
                       {/* Section A: Lab Hours shifts */}
                       {auditData.hoursLogs.length > 0 && (
                         <div className="space-y-1.5">
-                          <span className="text-[9px] font-mono font-extrabold uppercase text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                          <span className="text-[9px] font-mono font-extrabold uppercase text-slate-400 flex items-center gap-1 dark:text-slate-500">
                             <Clock className="w-3 h-3 text-cyan-500" />
                             <span>Attendance Sheet Logouts ({auditData.hoursLogs.length})</span>
                           </span>
                           
-                          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-805 overflow-hidden">
+                          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 overflow-hidden dark:border-slate-800">
                             {auditData.hoursLogs.map(item => (
-                              <div key={item.id} className="p-2 bg-slate-50/50 dark:bg-slate-950/20 flex justify-between items-start text-[10.5px] leading-tight">
+                              <div key={item.id} className="p-2 bg-slate-50/50 flex justify-between items-start text-[10.5px] leading-tight">
                                 <div className="space-y-0.5 pr-2.5">
-                                  <strong className="text-slate-650 dark:text-slate-300 font-mono text-[9px]">{item.date}</strong>
-                                  <p className="text-slate-500 text-[10px] font-sans">{item.description}</p>
+                                  <strong className="text-slate-650 font-mono text-[9px] dark:text-slate-300">{item.date}</strong>
+                                  <p className="text-slate-500 text-[10px] font-sans dark:text-slate-400">{item.description}</p>
                                 </div>
                                 <span className="font-bold text-cyan-600 dark:text-cyan-400 shrink-0 font-mono">
                                   +{item.xp} XP
@@ -659,30 +659,30 @@ export default function MemberDirectory({
                       {/* Section B: Engineering Logs Journals */}
                       {auditData.journalLogs.length > 0 && (
                         <div className="space-y-1.5">
-                          <span className="text-[9px] font-mono font-extrabold uppercase text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                          <span className="text-[9px] font-mono font-extrabold uppercase text-slate-400 flex items-center gap-1 dark:text-slate-500">
                             <BookOpen className="w-3 h-3 text-brand" />
                             <span>Engineering Journal Publishes ({auditData.journalLogs.length})</span>
                           </span>
 
-                          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-805 overflow-hidden">
+                          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 overflow-hidden dark:border-slate-800">
                             {auditData.journalLogs.map(item => (
-                              <div key={item.id} className="p-2 bg-slate-50/50 dark:bg-slate-950/20 flex flex-col gap-1 text-[10.5px]">
+                              <div key={item.id} className="p-2 bg-slate-50/50 flex flex-col gap-1 text-[10.5px]">
                                 <div className="flex justify-between items-start">
-                                  <strong className="text-slate-800 dark:text-slate-250 font-bold line-clamp-1">{item.title}</strong>
+                                  <strong className="text-slate-800 font-bold line-clamp-1 dark:text-slate-400">{item.title}</strong>
                                   <span className="font-bold text-brand shrink-0 font-mono ml-2">
                                     +{item.xp} XP
                                   </span>
                                 </div>
-                                <p className="text-slate-400 text-[9px] font-mono">Published {item.date} • {formatSubteamLabel(item.subteam)}</p>
+                                <p className="text-slate-400 text-[9px] font-mono dark:text-slate-500">Published {item.date} • {formatSubteamLabel(item.subteam)}</p>
                                 
                                 {/* Bullet breakdown of the journal XP */}
-                                <div className="pl-2 border-l border-brand/20 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9.5px] text-slate-500 font-mono bg-brand/5 p-1 rounded">
-                                  <div>Base publish: <strong className="text-slate-700 dark:text-slate-350">+{item.baseXp} XP</strong></div>
-                                  <div>Quality: <strong className="text-slate-700 dark:text-slate-350">+{item.qualityXp} XP</strong></div>
+                                <div className="pl-2 border-l border-brand/20 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9.5px] text-slate-500 font-mono bg-brand/5 p-1 rounded dark:text-slate-400">
+                                  <div>Base publish: <strong className="text-slate-700 dark:text-slate-300">+{item.baseXp} XP</strong></div>
+                                  <div>Quality: <strong className="text-slate-700 dark:text-slate-300">+{item.qualityXp} XP</strong></div>
                                   <div>Lead review: <strong className={item.approvedXp > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 animate-pulse"}>
                                     {item.approvedXp > 0 ? `+${item.approvedXp} XP (Approved)` : 'Pending Approved'}
                                   </strong></div>
-                                  <div>Images ({item.imgCount}): <strong className="text-slate-700 dark:text-slate-350">+{item.imgXp} XP</strong></div>
+                                  <div>Images ({item.imgCount}): <strong className="text-slate-700 dark:text-slate-300">+{item.imgXp} XP</strong></div>
                                 </div>
                               </div>
                             ))}
@@ -693,17 +693,17 @@ export default function MemberDirectory({
                       {/* Section C: Outreach initiatives */}
                       {auditData.outreachLogs.length > 0 && (
                         <div className="space-y-1.5">
-                          <span className="text-[9px] font-mono font-extrabold uppercase text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                          <span className="text-[9px] font-mono font-extrabold uppercase text-slate-400 flex items-center gap-1 dark:text-slate-500">
                             <Heart className="w-3 h-3 text-emerald-500fill-emerald-500" />
                             <span>Community Outreach Events ({auditData.outreachLogs.length})</span>
                           </span>
 
-                          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-805 overflow-hidden">
+                          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 overflow-hidden dark:border-slate-800">
                             {auditData.outreachLogs.map(item => (
-                              <div key={item.id} className="p-2 bg-slate-50/50 dark:bg-slate-950/20 flex justify-between items-start text-[10.5px]">
+                              <div key={item.id} className="p-2 bg-slate-50/50 flex justify-between items-start text-[10.5px]">
                                 <div className="space-y-0.5 pr-2.5">
-                                  <strong className="text-slate-650 dark:text-slate-300 font-mono text-[9px]">{item.date}</strong>
-                                  <p className="text-slate-500 text-[10px] font-sans">{item.description}</p>
+                                  <strong className="text-slate-650 font-mono text-[9px] dark:text-slate-300">{item.date}</strong>
+                                  <p className="text-slate-500 text-[10px] font-sans dark:text-slate-400">{item.description}</p>
                                 </div>
                                 <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0 font-mono">
                                   +50 XP
@@ -717,17 +717,17 @@ export default function MemberDirectory({
                       {/* Section D: Manual XP Adjustments */}
                       {auditData.manualLogs.length > 0 && (
                         <div className="space-y-1.5">
-                          <span className="text-[9px] font-mono font-extrabold uppercase text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                          <span className="text-[9px] font-mono font-extrabold uppercase text-slate-400 flex items-center gap-1 dark:text-slate-500">
                             <Sparkles className="w-3 h-3 text-purple-500" />
                             <span>Manual Mentor Adjustments ({auditData.manualLogs.length})</span>
                           </span>
 
-                          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-855 overflow-hidden">
+                          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 overflow-hidden dark:border-slate-800">
                             {auditData.manualLogs.map(item => (
-                              <div key={item.id} className="p-2 bg-slate-50/50 dark:bg-slate-950/20 flex justify-between items-start text-[10.5px]">
+                              <div key={item.id} className="p-2 bg-slate-50/50 flex justify-between items-start text-[10.5px]">
                                 <div className="space-y-0.5 pr-2.5">
                                   <strong className="text-purple-600 dark:text-purple-400 font-mono text-[9px]">{item.date} • By Coach {item.admin}</strong>
-                                  <p className="text-slate-500 text-[10px] font-sans">Reason: "{item.reason}"</p>
+                                  <p className="text-slate-500 text-[10px] font-sans dark:text-slate-400">Reason: "{item.reason}"</p>
                                 </div>
                                 <span className={`font-black shrink-0 font-mono ${item.xp >= 0 ? "text-purple-600 dark:text-purple-400" : "text-rose-500"}`}>
                                   {item.xp >= 0 ? `+${item.xp}` : item.xp} XP
@@ -740,7 +740,7 @@ export default function MemberDirectory({
 
                       {/* Fallback no contributions logged */}
                       {auditData.hoursLogs.length === 0 && auditData.journalLogs.length === 0 && auditData.outreachLogs.length === 0 && auditData.manualLogs.length === 0 && (
-                        <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded text-center text-slate-400 italic">
+                        <div className="bg-slate-50 p-4 rounded text-center text-slate-400 italic dark:bg-slate-800 dark:text-slate-500">
                           No dynamic points earned yet for this user session record.
                         </div>
                       )}
@@ -750,16 +750,16 @@ export default function MemberDirectory({
                   {/* Mentor quick promotion tools as requested */}
                   {isLeadActionsAvailable && (
                     <div className="pt-3.5 border-t border-slate-100 dark:border-slate-800">
-                      <span className="text-[9px] font-mono font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">
+                      <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest block mb-1 dark:text-slate-500">
                         Mentor Security Controls
                       </span>
                       <div className="grid grid-cols-1 gap-2 mt-2">
-                        <div className="flex items-center justify-between border border-slate-150 dark:border-slate-800 p-2 rounded bg-slate-50 dark:bg-slate-950 text-xs">
+                        <div className="flex items-center justify-between border border-slate-150 p-2 rounded bg-slate-50 text-xs dark:bg-slate-800">
                           <span>Class Leadership Status:</span>
                           <select
                             value={selectedUserForAudit.leadership || 'None'}
                             onChange={(e) => onUpdateLeadership(selectedUserForAudit.id, e.target.value as any)}
-                            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded p-1 font-sans font-bold text-[10px] text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500 outline-none"
+                            className="bg-white border border-slate-300 rounded p-1 font-sans font-bold text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
                           >
                             <option value="None">None</option>
                             <option value="Captain">Captain</option>
@@ -772,7 +772,7 @@ export default function MemberDirectory({
                           <span className="text-rose-600 dark:text-rose-400 font-bold">Revoke Team Access:</span>
                           <button
                             onClick={() => onDeleteUser(selectedUserForAudit.id, selectedUserForAudit.name)}
-                            className="bg-rose-600 hover:bg-rose-700 text-white dark:text-slate-50 border-0 rounded px-3 py-1 font-sans font-bold text-[10px] uppercase tracking-wide cursor-pointer transition-colors shadow-sm"
+                            className="bg-rose-600 hover:bg-rose-700 text-white border-0 rounded px-3 py-1 font-sans font-bold text-[10px] uppercase tracking-wide cursor-pointer transition-colors shadow-sm"
                             title="Delete this user permanently"
                           >
                             Delete Account
@@ -806,11 +806,11 @@ export default function MemberDirectory({
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.95, y: 15, opacity: 0 }}
             transition={{ type: "spring", damping: 25, stiffness: 350 }}
-            className={`relative w-full ${rosterExportShowPreview ? 'max-w-6xl' : 'max-w-md'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+            className={`relative w-full ${rosterExportShowPreview ? 'max-w-6xl' : 'max-w-md'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0">
+            <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-emerald-500" />
                 <span className="text-xs font-mono font-extrabold uppercase tracking-wider">
@@ -820,19 +820,19 @@ export default function MemberDirectory({
               <button
                 type="button"
                 onClick={() => setIsRosterExportModalOpen(false)}
-                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none"
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none dark:text-slate-500"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40 dark:bg-slate-950/20">
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40">
               
               {/* CONFIGURATION COLUMN */}
-              <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900">
+              <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900 dark:border-slate-800">
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-505 uppercase tracking-wider">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
                       Paper Dimensions Format
                     </span>
                     <div className="grid grid-cols-3 gap-1 tracking-tight">
@@ -841,7 +841,7 @@ export default function MemberDirectory({
                           key={sz}
                           type="button"
                           onClick={() => setRosterExportPaperSize(sz)}
-                          className={`py-1.5 px-1 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                          className={`py-1.5 px-1 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
                             rosterExportPaperSize === sz
                               ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 font-extrabold'
                               : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
@@ -856,48 +856,48 @@ export default function MemberDirectory({
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/20 border border-slate-150 dark:border-slate-805">
-                    <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">
+                  <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 border border-slate-150 dark:bg-slate-800">
+                    <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block mb-1 dark:text-slate-500">
                       Select Display Elements
                     </span>
                     
-                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
                       <input
                         type="checkbox"
                         checked={rosterExportShowCover}
                         onChange={(e) => setRosterExportShowCover(e.target.checked)}
-                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
                       />
                       <span>Include Cover Sheet</span>
                     </label>
 
-                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none">
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
                       <input
                         type="checkbox"
                         checked={rosterExportShowTOC}
                         onChange={(e) => setRosterExportShowTOC(e.target.checked)}
-                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
                       />
                       <span>Include Matrix Summary</span>
                     </label>
 
-                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-350 select-none border-t border-slate-250 dark:border-slate-800 pt-2.5 mt-0.5">
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none border-t border-slate-250 pt-2.5 mt-0.5 dark:text-slate-300 dark:border-slate-800">
                       <input
                         type="checkbox"
                         checked={rosterExportShowPreview}
                         onChange={(e) => setRosterExportShowPreview(e.target.checked)}
-                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
                       />
                       <span className="font-bold flex items-center gap-1">Live Page Preview Frame <Sparkles className="w-3 h-3 text-emerald-500" /></span>
                     </label>
                   </div>
                 </div>
 
-                <div className="pt-4 mt-4 border-t border-slate-105 dark:border-slate-800 flex justify-end gap-2 text-xs shrink-0">
+                <div className="pt-4 mt-4 border-t border-slate-105 flex justify-end gap-2 text-xs shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsRosterExportModalOpen(false)}
-                    className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
+                    className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
                   >
                     Close
                   </button>
@@ -914,15 +914,15 @@ export default function MemberDirectory({
 
               {/* VISUAL PAGE PREVIEW */}
               {rosterExportShowPreview ? (
-                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 dark:bg-slate-950/40 select-none pb-12">
-                  <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mb-2 sticky top-0 bg-slate-100 dark:bg-slate-900/90 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10">
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 select-none pb-12 dark:bg-slate-800">
+                  <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10 dark:bg-slate-800 dark:border-slate-800">
                     <div className="flex items-center gap-1.5">
                       <LayoutTemplate className="w-4 h-4 text-emerald-500 animate-[pulse_3s_infinite]" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300 font-mono">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
                         Format: <span className="text-emerald-550 dark:text-emerald-400 underline uppercase">{rosterExportPaperSize}</span>
                       </span>
                     </div>
-                    <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none">
+                    <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
                       SCALED PREVIEW
                     </span>
                   </div>
@@ -940,8 +940,8 @@ export default function MemberDirectory({
                           const thisPage = currentPageNum++;
                           return (
                             <div className="flex flex-col items-center gap-1 w-full">
-                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages}</span>
-                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col justify-between text-black overflow-hidden relative" style={{ aspectRatio: paperAspect }}>
+                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages}</span>
+                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col justify-between text-black overflow-hidden relative dark:bg-slate-900" style={{ aspectRatio: paperAspect }}>
                                 <div className="border border-slate-900 flex-1 p-4 flex flex-col justify-between">
                                   <div className="text-center my-auto py-8">
                                     <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none mb-1">
@@ -962,15 +962,15 @@ export default function MemberDirectory({
                           const thisPage = currentPageNum++;
                           return (
                             <div className="flex flex-col items-center gap-1 w-full">
-                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} (SUMMARY)</span>
-                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col text-slate-850 overflow-hidden relative" style={{ aspectRatio: paperAspect }}>
+                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (SUMMARY)</span>
+                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col text-slate-850 overflow-hidden relative dark:bg-slate-900 dark:text-slate-400" style={{ aspectRatio: paperAspect }}>
                                 <div className="border-b border-black pb-1 mb-2">
                                   <h4 className="text-[9px] font-black uppercase text-black">Member Summary Table</h4>
                                 </div>
                                 <div className="flex-1 overflow-hidden">
                                   <div className="text-[6px] font-sans">
                                     {approvedAccounts.slice(0, 15).map(acc => (
-                                      <div key={acc.id} className="border-b border-slate-200 py-1 font-mono text-slate-800 flex justify-between">
+                                      <div key={acc.id} className="border-b border-slate-200 py-1 font-mono text-slate-800 flex justify-between dark:text-slate-400 dark:border-slate-800">
                                         <span>{acc.name}</span>
                                         <span>{acc.primarySubteam || 'No Subteam'}</span>
                                       </div>
@@ -987,8 +987,8 @@ export default function MemberDirectory({
                           const thisPage = currentPageNum++;
                           return (
                             <div key={acc.id} className="flex flex-col items-center gap-1 w-full">
-                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest">SHEET {thisPage} / {totalPages} ({acc.name.split(' ')[0]})</span>
-                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col text-black overflow-hidden relative" style={{ aspectRatio: paperAspect }}>
+                              <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} ({acc.name.split(' ')[0]})</span>
+                              <div className="bg-white border border-slate-350 shadow-md w-[360px] p-6 flex flex-col text-black overflow-hidden relative dark:bg-slate-900" style={{ aspectRatio: paperAspect }}>
                                 <div className="border-b-2 border-black pb-1 mb-2 flex justify-between">
                                   <span className="font-sans font-black uppercase text-[8px] truncate">{acc.name}</span>
                                   <span className="font-mono text-[7px]">{acc.role}</span>
@@ -1003,9 +1003,9 @@ export default function MemberDirectory({
                   })()}
                 </div>
               ) : (
-                <div className="flex-1 bg-slate-50 dark:bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                  <LayoutTemplate className="w-12 h-12 text-slate-300 dark:text-slate-800 mb-3" />
-                  <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500">Preview Closed</p>
+                <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                  <LayoutTemplate className="w-12 h-12 text-slate-300 mb-3" />
+                  <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preview Closed</p>
                 </div>
               )}
             </div>
@@ -1016,11 +1016,11 @@ export default function MemberDirectory({
 
     {/* PRINT ONLY RENDER (Visible to browser during print operation) */}
     {isRosterExportModalOpen && (
-      <div className="print-only bg-white text-black p-0 m-0 z-[200] relative font-sans">
+      <div className="print-only bg-white text-black p-0 m-0 z-[200] relative font-sans dark:bg-slate-900">
         
         {rosterExportShowCover && (
           <div 
-            className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12"
+            className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12 dark:bg-slate-900"
             style={{ pageBreakAfter: 'always', minHeight: rosterExportPaperSize === 'legal' ? '300mm' : '240mm' }}
           >
             <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
@@ -1030,18 +1030,18 @@ export default function MemberDirectory({
               <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
                 Team Member Directory
               </h1>
-              <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8">
+              <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8 dark:text-slate-300">
                 FTC Security & Credential Logs
               </p>
               
               <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
               
-              <p className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+              <p className="text-sm font-bold text-slate-800 uppercase tracking-wide dark:text-slate-400">
                 FIRST Tech Challenge Team #6567
               </p>
             </div>
             <div className="mt-auto border-t-2 border-slate-950 pt-6">
-              <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700">
+              <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700 dark:text-slate-300">
                 <div>
                   <p><strong>DOCUMENT TYPE:</strong> Secure Team Roster</p>
                   <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
@@ -1056,7 +1056,7 @@ export default function MemberDirectory({
 
         {rosterExportShowTOC && (
           <div 
-            className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+            className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
             style={{ pageBreakAfter: 'always', minHeight: rosterExportPaperSize === 'legal' ? '300mm' : '240mm' }}
           >
             <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col items-start justify-between gap-4">
@@ -1064,14 +1064,14 @@ export default function MemberDirectory({
                 <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
                   Registry Summary
                 </h2>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1">
+                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
                   Team Members Status Matrix
                 </p>
               </div>
             </div>
             <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
               <thead>
-                <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100">
+                <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100 dark:bg-slate-800 dark:text-slate-300">
                   <th className="py-2.5 px-2">Name</th>
                   <th className="py-2.5 px-2">Role</th>
                   <th className="py-2.5 px-2">Leadership</th>
@@ -1085,14 +1085,14 @@ export default function MemberDirectory({
                 {accounts.filter(a => a.status === 'Approved').map(acc => {
                   const g = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
                   return (
-                    <tr key={acc.id} className="border-b border-slate-300">
+                    <tr key={acc.id} className="border-b border-slate-300 dark:border-slate-800">
                       <td className="py-2 px-2 font-bold">{acc.name}</td>
-                      <td className="py-2 px-2 font-mono text-[9px] uppercase"><span className="bg-slate-100 border border-slate-300 px-1 py-0.5 rounded">{acc.role}</span></td>
+                      <td className="py-2 px-2 font-mono text-[9px] uppercase"><span className="bg-slate-100 border border-slate-300 px-1 py-0.5 rounded dark:bg-slate-800 dark:border-slate-800">{acc.role}</span></td>
                       <td className="py-2 px-2 font-mono text-[9px] uppercase"><span className={`px-1 py-0.5 rounded border ${acc.leadership === 'Captain' || acc.leadership === 'Subteam leader' ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{acc.leadership || 'None'}</span></td>
-                      <td className="py-2 px-2 text-[10px] text-right text-slate-600">{acc.primarySubteam || 'N/A'}</td>
-                      <td className="py-2 px-2 text-[10px] text-right font-bold text-slate-700">{g.stats.level}</td>
-                      <td className="py-2 px-2 text-[10px] text-right text-slate-600">{g.stats.totalHours.toFixed(1)}</td>
-                      <td className="py-2 px-2 text-[10px] text-right text-slate-600">{g.stats.totalJournals}</td>
+                      <td className="py-2 px-2 text-[10px] text-right text-slate-600 dark:text-slate-300">{acc.primarySubteam || 'N/A'}</td>
+                      <td className="py-2 px-2 text-[10px] text-right font-bold text-slate-700 dark:text-slate-300">{g.stats.level}</td>
+                      <td className="py-2 px-2 text-[10px] text-right text-slate-600 dark:text-slate-300">{g.stats.totalHours.toFixed(1)}</td>
+                      <td className="py-2 px-2 text-[10px] text-right text-slate-600 dark:text-slate-300">{g.stats.totalJournals}</td>
                     </tr>
                   )
                 })}
@@ -1113,7 +1113,7 @@ export default function MemberDirectory({
           return (
             <div 
               key={acc.id}
-              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12"
+              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
               style={{ pageBreakAfter: index < array.length - 1 ? 'always' : 'auto', minHeight: rosterExportPaperSize === 'legal' ? '300mm' : '240mm' }}
             >
               <div className="border-b-4 border-slate-950 pb-4 mb-6 flex justify-between items-start">
@@ -1121,7 +1121,7 @@ export default function MemberDirectory({
                   <h2 className="text-3xl font-black uppercase tracking-wider text-slate-955">
                     {acc.name}
                   </h2>
-                  <div className="flex gap-2 mt-2 font-mono text-xs text-slate-600 uppercase">
+                  <div className="flex gap-2 mt-2 font-mono text-xs text-slate-600 uppercase dark:text-slate-300">
                     <span className="font-bold">{acc.role}</span>
                     <span>•</span>
                     <span>{acc.schoolEmail}</span>
@@ -1131,7 +1131,7 @@ export default function MemberDirectory({
                   <div className="bg-slate-950 text-white px-3 py-1 font-bold font-mono text-xs inline-block">
                     LVL {g.stats.level}: {g.stats.levelName}
                   </div>
-                  <div className="text-[10px] font-mono tracking-widest font-extrabold uppercase mt-1 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded">
+                  <div className="text-[10px] font-mono tracking-widest font-extrabold uppercase mt-1 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded dark:text-slate-300 dark:border-slate-800">
                     {g.stats.xp} XP 
                   </div>
                 </div>
@@ -1139,25 +1139,25 @@ export default function MemberDirectory({
 
               <div className="grid grid-cols-2 gap-8 mb-8">
                 <div>
-                  <h3 className="font-mono text-[10px] font-bold text-slate-400 mb-2 border-b border-slate-200 pb-1 uppercase">Profile Config</h3>
+                  <h3 className="font-mono text-[10px] font-bold text-slate-400 mb-2 border-b border-slate-200 pb-1 uppercase dark:text-slate-500 dark:border-slate-800">Profile Config</h3>
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-slate-500 font-bold">Primary Discipline:</span>
+                      <span className="text-slate-500 font-bold dark:text-slate-400">Primary Discipline:</span>
                       <span className="font-mono">{acc.primarySubteam || 'None'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500 font-bold">Secondary Focus:</span>
+                      <span className="text-slate-500 font-bold dark:text-slate-400">Secondary Focus:</span>
                       <span className="font-mono">{acc.secondarySubteam || 'None'}</span>
                     </div>
-                    <div className="flex justify-between border-t border-slate-100 pt-1 mt-1">
-                      <span className="text-slate-500 font-bold text-[10px]">Leader Status:</span>
-                      <span className="font-mono text-[10px] bg-slate-100 px-1 text-slate-600 rounded">
+                    <div className="flex justify-between border-t border-slate-100 pt-1 mt-1 dark:border-slate-800">
+                      <span className="text-slate-500 font-bold text-[10px] dark:text-slate-400">Leader Status:</span>
+                      <span className="font-mono text-[10px] bg-slate-100 px-1 text-slate-600 rounded dark:bg-slate-800 dark:text-slate-300">
                         {acc.leadership || 'None'}
                       </span>
                     </div>
-                    <div className="flex justify-between border-t border-slate-100 pt-1 mt-1">
-                      <span className="text-slate-500 font-bold text-[10px]">Security Clearance:</span>
-                      <span className="font-mono text-[10px] bg-slate-100 px-1 text-slate-600 rounded">
+                    <div className="flex justify-between border-t border-slate-100 pt-1 mt-1 dark:border-slate-800">
+                      <span className="text-slate-500 font-bold text-[10px] dark:text-slate-400">Security Clearance:</span>
+                      <span className="font-mono text-[10px] bg-slate-100 px-1 text-slate-600 rounded dark:bg-slate-800 dark:text-slate-300">
                         {acc.leadership === 'Captain' ? 'Tier 1 : CPT' : acc.leadership === 'Subteam leader' ? 'Tier 2 : LEAD' : 'Tier 3 : OPR'}
                       </span>
                     </div>
@@ -1165,7 +1165,7 @@ export default function MemberDirectory({
                 </div>
                 
                 <div>
-                  <h3 className="font-mono text-[10px] font-bold text-slate-400 mb-2 border-b border-slate-200 pb-1 uppercase">Metric Summary & XP</h3>
+                  <h3 className="font-mono text-[10px] font-bold text-slate-400 mb-2 border-b border-slate-200 pb-1 uppercase dark:text-slate-500 dark:border-slate-800">Metric Summary & XP</h3>
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between items-center">
                       <span className="text-emerald-700 font-bold">Journals Published ({g.stats.totalJournals}):</span>
@@ -1184,7 +1184,7 @@ export default function MemberDirectory({
                       <span className="font-mono">{outreachXp} XP</span>
                     </div>
                     {manualXp !== 0 && (
-                      <div className="flex justify-between items-center border-t border-slate-200 pt-1 mt-1">
+                      <div className="flex justify-between items-center border-t border-slate-200 pt-1 mt-1 dark:border-slate-800">
                         <span className="text-indigo-700 font-bold">Direct Adjustments:</span>
                         <span className="font-mono">{manualXp} XP</span>
                       </div>
@@ -1193,7 +1193,7 @@ export default function MemberDirectory({
                 </div>
               </div>
 
-              <div className="mt-4 p-4 border border-slate-200 bg-slate-50 rounded italic text-[11px] text-slate-500">
+              <div className="mt-4 p-4 border border-slate-200 bg-slate-50 rounded italic text-[11px] text-slate-500 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800">
                 End of generated intelligence log for user {acc.id}.
               </div>
             </div>

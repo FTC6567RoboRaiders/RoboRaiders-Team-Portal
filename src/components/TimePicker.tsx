@@ -70,34 +70,34 @@ export default function TimePicker({ value, onChange, label }: TimePickerProps) 
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <span className="block text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+        <span className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider dark:text-slate-400">
           {label}
         </span>
       )}
-      <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-850 border border-slate-300 dark:border-slate-700/80 rounded p-1">
+      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded p-1 dark:bg-slate-800 dark:border-slate-800">
         {/* Hour Select */}
         <select
           value={selectedHour}
           onChange={handleHourChange}
-          className="flex-1 min-w-0 bg-transparent text-xs text-slate-800 dark:text-slate-100 font-mono font-bold py-1 px-1.5 outline-none cursor-pointer border-0 rounded hover:bg-slate-200/50 dark:hover:bg-slate-800/60"
+          className="flex-1 min-w-0 bg-transparent text-xs text-slate-800 font-mono font-bold py-1 px-1.5 outline-none cursor-pointer border-0 rounded hover:bg-slate-200/50 dark:text-slate-400"
         >
           {hours.map((h) => (
-            <option key={h} value={h} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+            <option key={h} value={h} className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-400">
               {String(h).padStart(2, '0')}
             </option>
           ))}
         </select>
 
-        <span className="text-slate-400 dark:text-slate-500 font-bold font-mono text-xs select-none">:</span>
+        <span className="text-slate-400 font-bold font-mono text-xs select-none dark:text-slate-500">:</span>
 
         {/* Minute Select */}
         <select
           value={selectedMinute}
           onChange={handleMinuteChange}
-          className="flex-1 min-w-0 bg-transparent text-xs text-slate-800 dark:text-slate-100 font-mono font-bold py-1 px-1.5 outline-none cursor-pointer border-0 rounded hover:bg-slate-200/50 dark:hover:bg-slate-800/60"
+          className="flex-1 min-w-0 bg-transparent text-xs text-slate-800 font-mono font-bold py-1 px-1.5 outline-none cursor-pointer border-0 rounded hover:bg-slate-200/50 dark:text-slate-400"
         >
           {minutes.map((m) => (
-            <option key={m} value={m} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+            <option key={m} value={m} className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-400">
               {String(m).padStart(2, '0')}
             </option>
           ))}
@@ -107,10 +107,10 @@ export default function TimePicker({ value, onChange, label }: TimePickerProps) 
         <select
           value={selectedAmpm}
           onChange={handleAmpmChange}
-          className="flex-shrink-0 bg-brand/10 dark:bg-brand/20 text-brand border-0 rounded px-2 py-1 text-[11px] font-black tracking-wider outline-none cursor-pointer"
+          className="flex-shrink-0 bg-brand/10 dark:bg-brand/60/20 text-brand border-0 rounded px-2 py-1 text-[11px] font-black tracking-wider outline-none cursor-pointer"
         >
-          <option value="AM" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-sans">AM</option>
-          <option value="PM" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-sans">PM</option>
+          <option value="AM" className="bg-white text-slate-900 font-sans dark:bg-slate-900 dark:text-slate-400">AM</option>
+          <option value="PM" className="bg-white text-slate-900 font-sans dark:bg-slate-900 dark:text-slate-400">PM</option>
         </select>
       </div>
     </div>
