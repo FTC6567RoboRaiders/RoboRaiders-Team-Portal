@@ -62,6 +62,7 @@ export interface UserAccount {
   secondarySubteam: 'Inspire' | 'Strategy' | 'None';
   role: 'member' | 'mentor' | 'captain';
   status: 'Pending' | 'Approved' | 'Rejected';
+  hasSetSecurePassword?: boolean;
   createdAt: number;
   leadership?: 'None' | 'Captain' | 'Subteam leader';
   hasCustomPassword?: boolean;

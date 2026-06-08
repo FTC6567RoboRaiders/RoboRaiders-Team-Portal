@@ -160,11 +160,31 @@
         "time_seeded": { "type": "boolean" },
         "kanban_seeded": { "type": "boolean" },
         "outreach_seeded": { "type": "boolean" },
-        "ledger_seeded": { "type": "boolean" }
+        "ledger_seeded": { "type": "boolean" },
+        "disabledModules": { "type": "array", "description": "Array of module ids that are frozen or hidden." }
       }
+    },
+    "SystemNotification": {
+      "title": "System Notification",
+      "description": "A broadcast system announcement alert displayed in the application.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "warning", "danger", "success"] },
+        "createdAt": { "type": "number" },
+        "createdBy": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["id", "title", "message", "type", "createdAt", "createdBy", "active"]
     }
   },
   "firestore": {
+    "systemNotifications/{notificationId}": {
+      "schema": "SystemNotification",
+      "description": "System Announcements published by the Programming subteam."
+    },
     "systemSettings/{settingId}": {
       "schema": "SystemSetting",
       "description": "Global settings for tracking if database collections have been initialized with demo data."

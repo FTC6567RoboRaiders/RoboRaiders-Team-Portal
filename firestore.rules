@@ -144,6 +144,18 @@ service cloud.firestore {
         && data.createdAt is number;
     }
 
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'title', 'message', 'type', 'createdAt', 'createdBy', 'active'])
+        && data.keys().size() == 7
+        && data.id is string
+        && data.title is string && data.title.size() <= 200
+        && data.message is string && data.message.size() <= 2000
+        && data.type in ['info', 'warning', 'danger', 'success']
+        && data.createdAt is number
+        && data.createdBy is string
+        && data.active is bool;
+    }
+
     // Collection Rules
     
     // 1. Users
@@ -232,6 +244,15 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isApprovedUser();
       allow delete: if isMentorOrCaptain();
+    }
+
+    // 10. System Notifications
+    match /systemNotifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isApprovedUser() && (
+        getUserDoc().primarySubteam == 'Programming' || 
+        getUserDoc().role in ['mentor_captain', 'mentor', 'captain']
+      ) && isValidNotification(request.resource.data);
     }
   }
 }

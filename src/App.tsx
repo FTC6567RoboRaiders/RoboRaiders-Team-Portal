@@ -22,6 +22,7 @@ import {
   FileCode, 
   Grid, 
   ChevronRight, 
+  ChevronLeft,
   CheckCircle, 
   AlertTriangle,
   FileUp,
@@ -50,7 +51,10 @@ import {
   Clock,
   Trophy,
   Scroll,
-  DollarSign
+  DollarSign,
+  Terminal,
+  Megaphone,
+  Ban
 } from 'lucide-react';
 import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction } from './types';
 import { compressAndResizeImage } from './utils/image';
@@ -75,7 +79,8 @@ import {
   onSnapshot,
   getDocs,
   query,
-  where
+  where,
+  orderBy
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import RoboraidersLogo from './components/RoboraidersLogo';
@@ -107,6 +112,7 @@ import StudentHandbook from './components/StudentHandbook';
 import TimePicker from './components/TimePicker';
 import GeneralLedger from './components/GeneralLedger';
 import MemberDirectory from './components/MemberDirectory';
+import SystemDashboard from './components/SystemDashboard';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -345,8 +351,37 @@ export default function App() {
 
   const isUserAdminOrMentor =  currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'admin@school.edu' || currentUser?.schoolEmail === 'ftc6567@gmail.com' || currentUser?.schoolEmail === 'mentor@school.edu';
 
+  const isAuthorizedToAccessDisabled = currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor;
+
+  const renderDisabledModuleScreen = (moduleLabel: string) => (
+    <div className="flex-1 p-8 text-center flex flex-col items-center justify-center bg-white dark:bg-slate-950/45 rounded-xl border border-slate-150 dark:border-slate-850 m-6 max-w-2xl mx-auto my-12 shadow-lg" id="disabled-module-screen">
+      <div className="bg-rose-100 dark:bg-rose-950/60 text-rose-500 p-3.5 rounded-full mb-4">
+        <Ban className="w-8 h-8" />
+      </div>
+      <h2 className="text-md font-extrabold text-rose-700 dark:text-rose-400 uppercase tracking-widest text-center">
+        Module Frozen
+      </h2>
+      <p className="text-[10px] text-slate-400 font-mono mt-1 text-center font-bold">
+        {moduleLabel.toUpperCase()} — DEACTIVATED BY SOFTWARE DIVISION
+      </p>
+      <p className="text-xs text-slate-505 leading-relaxed font-sans text-center mt-4 max-w-md dark:text-slate-400">
+        This section of the portal has been temporarily disabled by the System Administrator or Programming Team division. Please coordinate directly with your subteam leads inside the lab workspace for updates.
+      </p>
+      <button
+        onClick={() => setCurrentView('landing')}
+        className="mt-6 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-2 px-6 rounded uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer font-sans dark:bg-slate-805 dark:hover:bg-slate-700"
+      >
+        Return to Portal Hub
+      </button>
+    </div>
+  );
+
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'system_dashboard'>('landing');
+
+  // Interactive System Notifications and disabled modules flags
+  const [disabledModules, setDisabledModules] = useState<string[]>([]);
+  const [systemNotifications, setSystemNotifications] = useState<any[]>([]);
 
   // Outreach events state
   const [outreachEvents, setOutreachEvents] = useState<OutreachEvent[]>(() => {
@@ -1198,6 +1233,7 @@ export default function App() {
 
   // Login & Registration state
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot_password'>('login');
+  const [postponedPasswordChange, setPostponedPasswordChange] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginSchoolId, setLoginSchoolId] = useState('');
 
@@ -1214,6 +1250,14 @@ export default function App() {
   const [setupCustomPassword, setSetupCustomPassword] = useState('');
   const [setupConfirmPassword, setSetupConfirmPassword] = useState('');
   const [isSettingUpPassword, setIsSettingUpPassword] = useState(false);
+
+  useEffect(() => {
+    if (currentUser?.status === 'Approved' && !currentUser.hasSetSecurePassword && !postponedPasswordChange) {
+      setShowPasswordSetupPrompt(true);
+    } else {
+      setShowPasswordSetupPrompt(false);
+    }
+  }, [currentUser, postponedPasswordChange]);
 
   const [registerName, setRegisterName] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
@@ -1288,6 +1332,100 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setDisabledModules([]);
+      setSystemNotifications([]);
+      return;
+    }
+
+    // 1. Listen to portal settings
+    const unsubPortal = onSnapshot(doc(db, 'systemSettings', 'portal'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setDisabledModules(data.disabledModules || []);
+      } else {
+        setDisabledModules([]);
+      }
+    }, (error) => {
+      console.warn("Failed to subscribe to systemSettings/portal", error);
+    });
+
+    // 2. Listen to system notifications
+    const unsubNotifications = onSnapshot(
+      query(collection(db, 'systemNotifications'), orderBy('createdAt', 'desc')), 
+      (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        setSystemNotifications(list);
+      }, 
+      (error) => {
+        console.warn("Failed to subscribe to systemNotifications", error);
+      }
+    );
+
+    return () => {
+      unsubPortal();
+      unsubNotifications();
+    };
+  }, [currentUser]);
+
+  const handleToggleModule = async (moduleId: string) => {
+    try {
+      const isAlreadyDisabled = disabledModules.includes(moduleId);
+      const updatedList = isAlreadyDisabled
+        ? disabledModules.filter(id => id !== moduleId)
+        : [...disabledModules, moduleId];
+      
+      await setDoc(doc(db, 'systemSettings', 'portal'), {
+        disabledModules: updatedList
+      }, { merge: true });
+      
+      showToast(`${isAlreadyDisabled ? 'Enabled' : 'Disabled'} live module: ${moduleId}`, 'success');
+    } catch (err: any) {
+      showToast('Settings update failed: ' + err.message, 'danger');
+    }
+  };
+
+  const handleAddNotification = async (notification: { title: string; message: string; type: 'info' | 'warning' | 'danger' | 'success'; active: boolean }) => {
+    try {
+      const notiId = `noti_${Date.now()}`;
+      await setDoc(doc(db, 'systemNotifications', notiId), {
+        id: notiId,
+        title: notification.title,
+        message: notification.message,
+        type: notification.type,
+        active: notification.active,
+        createdAt: Date.now(),
+        createdBy: currentUser?.name || 'Programming Admin'
+      });
+    } catch (err: any) {
+      showToast('Broadcast failed: ' + err.message, 'danger');
+    }
+  };
+
+  const handleDeleteNotification = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'systemNotifications', id));
+      showToast('Broadcast alert deleted.', 'info');
+    } catch (err: any) {
+      showToast('Deletion failed: ' + err.message, 'danger');
+    }
+  };
+
+  const handleToggleNotificationActive = async (id: string, active: boolean) => {
+    try {
+      await updateDoc(doc(db, 'systemNotifications', id), {
+        active: active
+      });
+      showToast(active ? 'Broadcast reactivated.' : 'Broadcast muted/drafted.', 'success');
+    } catch (err: any) {
+      showToast('Toggle failed: ' + err.message, 'danger');
+    }
+  };
 
   const sendEmailNotification = (to: string, subject: string, body: string) => {
     const newEmail: DispatchedEmail = {
@@ -2708,6 +2846,15 @@ FTC #6567 Captains & Mentors`
        setIsSettingUpPassword(true);
        if (!auth.currentUser) throw new Error("Not logged into Auth. Please log out and log back in, then try again.");
        await updatePassword(auth.currentUser, setupCustomPassword);
+
+       // Mark in Firestore
+       if (currentUser) {
+         await updateDoc(doc(db, 'users', currentUser.id), { hasSetSecurePassword: true });
+         const updatedUser = { ...currentUser, hasSetSecurePassword: true };
+         setCurrentUser(updatedUser as any);
+         localStorage.setItem('ftc_current_user', JSON.stringify(updatedUser));
+       }
+
        showToast('Password updated! Use this new password next time you log in.', 'success');
        setShowPasswordSetupPrompt(false);
     } catch (e: any) {
@@ -3046,7 +3193,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
         )}
 
-        <div className="w-full max-w-md bg-white/95 border border-slate-200 rounded-xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center relative z-10 backdrop-blur-xs dark:border-slate-800">
+        <div className="w-full max-w-md bg-white/95 dark:bg-slate-900 border border-slate-200 rounded-xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center relative z-10 backdrop-blur-xs dark:border-slate-800">
           {/* Logo */}
           <div className="mb-6 flex flex-col items-center text-center">
             <RoboraidersLogo className="w-16 h-16 text-brand mb-2" />
@@ -3114,7 +3261,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               <button
                 type="button"
                 onClick={() => setAuthMode('register')}
-                className="w-full bg-indigo-50/50 hover:bg-indigo-50 text-brand dark:text-brand/80-hover font-black text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all border border-dashed border-brand/40 hover:border-brand flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-full bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-900/30 text-brand dark:text-brand/80 dark:hover:text-brand font-black text-xs py-2.5 px-4 rounded-lg uppercase tracking-wider transition-all border border-dashed border-brand/40 hover:border-brand flex items-center justify-center gap-2 cursor-pointer shadow-xs"
               >
                 <UserPlus className="w-4 h-4 text-brand" />
                 <span>Create a New Account</span>
@@ -3501,7 +3648,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
   const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
 
   const sidebarLinks: {
-    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals';
+    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'system_dashboard';
     label: string;
     sublabel: string;
     icon: any;
@@ -3581,6 +3728,26 @@ ${entry.planNextTime || '_No carry-over specified._'}
       color: 'text-red-400'
     });
   }
+
+  if (currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor) {
+    sidebarLinks.push({
+      id: 'system_dashboard',
+      label: 'SysAdmin Controls',
+      sublabel: 'Software Terminal',
+      icon: Terminal,
+      badge: null,
+      color: 'text-rose-500'
+    });
+  }
+
+  // Filter sidebar links dynamically based on disabled modules status
+  const renderedSidebarLinks = sidebarLinks.filter(link => {
+    if (disabledModules.includes(link.id)) {
+      // If module is disabled globally, only let Programming subteam or Captains/Mentors view it
+      return currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor;
+    }
+    return true;
+  });
 
   const handleDeleteKanbanTask = async (id: string) => {
     try {
@@ -3789,7 +3956,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
         
         {/* RESPONSIVE MOBILE HORIZONTAL TAB STRIP */}
         <div className="md:hidden flex overflow-x-auto gap-2 p-2 bg-slate-900 border-b border-slate-800 shrink-0 no-print dark:bg-slate-950" id="workspace-mobile-nav">
-          {sidebarLinks.map((link) => {
+          {renderedSidebarLinks.map((link) => {
             const LinkIcon = link.icon;
             const isActive = currentView === link.id;
             return (
@@ -3883,7 +4050,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
           {/* LIST OF SHORTCUT LINKS */}
           <nav className="flex-1 py-4 px-3 space-y-1.5 overflow-y-auto" id="workspace-sidebar-nav">
-            {sidebarLinks.map((link) => {
+            {renderedSidebarLinks.map((link) => {
               const LinkIcon = link.icon;
               const isActive = currentView === link.id;
 
@@ -3943,6 +4110,53 @@ ${entry.planNextTime || '_No carry-over specified._'}
       {/* LANDING PAGE HUB */}
       {currentView === 'landing' && (
         <div className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 no-print" id="dashboard-landing-hub animate-fade-in">
+          
+          {/* SYSTEM ALERTS BROADCAST SECTOR */}
+          {systemNotifications.filter(noti => noti.active).map((noti) => {
+            let containerBgColor = 'bg-slate-50 dark:bg-slate-905 border-slate-205 dark:border-slate-800 text-slate-800 dark:text-slate-200';
+            let iconColor = 'text-slate-500';
+
+            if (noti.type === 'success') {
+              containerBgColor = 'bg-emerald-50 dark:bg-emerald-950/15 border-emerald-200 dark:border-emerald-900/30 text-emerald-800 dark:text-emerald-350';
+              iconColor = 'text-emerald-500';
+            } else if (noti.type === 'warning') {
+              containerBgColor = 'bg-amber-50 dark:bg-amber-950/15 border-amber-200 dark:border-amber-900/30 text-amber-800 dark:text-amber-350';
+              iconColor = 'text-amber-500';
+            } else if (noti.type === 'danger') {
+              containerBgColor = 'bg-rose-50 dark:bg-rose-950/15 border-rose-200 dark:border-rose-900/30 text-rose-800 dark:text-rose-400';
+              iconColor = 'text-rose-500';
+            } else if (noti.type === 'info') {
+              containerBgColor = 'bg-indigo-50 dark:bg-indigo-950/15 border-indigo-200 dark:border-indigo-900/35 text-indigo-805 dark:text-indigo-350';
+              iconColor = 'text-indigo-500';
+            }
+
+            return (
+              <div 
+                key={noti.id} 
+                className={`p-4 rounded-xl border flex gap-3.5 shadow-sm relative overflow-hidden transition-colors ${containerBgColor} animate-fade-in`}
+              >
+                <div className="absolute top-0 right-0 transform translate-x-12 -translate-y-12 w-32 h-32 bg-white/5 dark:bg-black/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div className="mt-0.5 shrink-0">
+                  <Megaphone className={`w-5 h-5 ${iconColor}`} />
+                </div>
+                <div className="flex-1">
+                  <span className="text-[9px] uppercase font-bold tracking-widest font-mono opacity-80 block mb-0.5">
+                    Broadcast Announcement
+                  </span>
+                  <h4 className="text-xs font-black uppercase tracking-tight font-sans">
+                    {noti.title}
+                  </h4>
+                  <p className="text-xs mt-1 leading-relaxed opacity-90 font-medium">
+                    {noti.message}
+                  </p>
+                  <span className="text-[9px] font-mono opacity-60 block mt-2">
+                    Published {new Date(noti.createdAt).toLocaleDateString()} by {noti.createdBy}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
           {/* Welcome Card & Team Announcement */}
           <div className="bg-slate-900 text-white rounded-xl p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden border border-slate-800 shadow-xl dark:bg-slate-950">
             <div className="absolute top-0 right-0 transform translate-x-12 -translate-y-12 w-48 h-48 bg-brand/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -5481,47 +5695,63 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* GENERAL LEDGER VIEW */}
       {currentView === 'finance' && (
-        <GeneralLedger
-          currentUser={currentUser}
-          transactions={ledgerTransactions}
-          onAddTransaction={handleAddLedgerTransaction}
-          onDeleteTransaction={handleDeleteLedgerTransaction}
-          onBack={() => setCurrentView('landing')}
-          showToast={showToast}
-        />
+        disabledModules.includes('finance') && !isAuthorizedToAccessDisabled ? (
+          renderDisabledModuleScreen('General Ledger')
+        ) : (
+          <GeneralLedger
+            currentUser={currentUser}
+            transactions={ledgerTransactions}
+            onAddTransaction={handleAddLedgerTransaction}
+            onDeleteTransaction={handleDeleteLedgerTransaction}
+            onBack={() => setCurrentView('landing')}
+            showToast={showToast}
+          />
+        )
       )}
 
       {/* STUDENT TEAM HANDBOOK VIEW */}
       {currentView === 'handbook' && (
-        <StudentHandbook
-          currentUser={currentUser}
-          showToast={showToast}
-          onBack={() => setCurrentView('landing')}
-        />
+        disabledModules.includes('handbook') && !isAuthorizedToAccessDisabled ? (
+          renderDisabledModuleScreen('Student Handbook')
+        ) : (
+          <StudentHandbook
+            currentUser={currentUser}
+            showToast={showToast}
+            onBack={() => setCurrentView('landing')}
+          />
+        )
       )}
 
       {/* OUTREACH EVENTS HUB VIEW */}
       {currentView === 'outreach' && (
-        <OutreachHub
-          currentUser={currentUser}
-          accounts={accounts}
-          events={outreachEvents}
-          onUpdateEvents={saveOutreachEventsToLocalStorage}
-          onDeleteEvent={handleDeleteOutreachEvent}
-          onPrintPDF={handlePrintOutreachPDF}
-        />
+        disabledModules.includes('outreach') && !isAuthorizedToAccessDisabled ? (
+          renderDisabledModuleScreen('Outreach Logs')
+        ) : (
+          <OutreachHub
+            currentUser={currentUser}
+            accounts={accounts}
+            events={outreachEvents}
+            onUpdateEvents={saveOutreachEventsToLocalStorage}
+            onDeleteEvent={handleDeleteOutreachEvent}
+            onPrintPDF={handlePrintOutreachPDF}
+          />
+        )
       )}
 
       {/* COLLABORATIVE KANBAN BOARD VIEW */}
       {currentView === 'kanban' && (
-        <KanbanBoard
-          currentUser={currentUser}
-          accounts={accounts}
-          tasks={kanbanTasks}
-          onUpdateTasks={saveKanbanTasksToLocalStorage}
-          onDeleteTask={handleDeleteKanbanTask}
-          formatSubteamLabel={formatSubteamLabel}
-        />
+        disabledModules.includes('kanban') && !isAuthorizedToAccessDisabled ? (
+          renderDisabledModuleScreen('Kanban Board')
+        ) : (
+          <KanbanBoard
+            currentUser={currentUser}
+            accounts={accounts}
+            tasks={kanbanTasks}
+            onUpdateTasks={saveKanbanTasksToLocalStorage}
+            onDeleteTask={handleDeleteKanbanTask}
+            formatSubteamLabel={formatSubteamLabel}
+          />
+        )
       )}
 
       {/* MEMBER DIRECTORY & SECURITY APPROVALS HUB VIEW */}
@@ -5556,8 +5786,26 @@ ${entry.planNextTime || '_No carry-over specified._'}
         />
       )}
 
+      {/* SOFTWARE ADMINISTRATIVE TERMINAL */}
+      {currentView === 'system_dashboard' && (
+        <SystemDashboard
+          currentUser={currentUser}
+          disabledModules={disabledModules}
+          systemNotifications={systemNotifications}
+          onToggleModule={handleToggleModule}
+          onAddNotification={handleAddNotification}
+          onDeleteNotification={handleDeleteNotification}
+          onToggleNotificationActive={handleToggleNotificationActive}
+          onBack={() => setCurrentView('landing')}
+          showToast={showToast}
+        />
+      )}
+
       {/* TIME ENTRY LABORATORY HOURS LEDGER */}
-      {currentView === 'time_entry' && (
+      {currentView === 'time_entry' && disabledModules.includes('time_entry') && !isAuthorizedToAccessDisabled && (
+        renderDisabledModuleScreen('Time Card')
+      )}
+      {currentView === 'time_entry' && (!disabledModules.includes('time_entry') || isAuthorizedToAccessDisabled) && (
         <div className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 no-print" id="time-hours-ledger-desk">
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -5974,7 +6222,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
       )}
 
       {/* GOOGLE SITES COMPACT IFRAME TAB MENU */}
-      {currentView === 'journal' && (
+      {currentView === 'journal' && disabledModules.includes('journal') && !isAuthorizedToAccessDisabled && (
+        renderDisabledModuleScreen('Notebook Logs')
+      )}
+      {currentView === 'journal' && (!disabledModules.includes('journal') || isAuthorizedToAccessDisabled) && (
         <div className="no-print sm:hidden bg-white border-b border-slate-300 py-2 px-3 flex justify-center gap-1 sticky top-0 z-50 dark:bg-slate-900 dark:border-slate-800">
           <button
             onClick={() => setActiveTab('form')}
@@ -6002,7 +6253,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
       )}
 
       {/* CORE HIGH DENSITY WORKING GRID */}
-      {currentView === 'journal' && (
+      {currentView === 'journal' && (!disabledModules.includes('journal') || isAuthorizedToAccessDisabled) && (
         <div className="flex-1 p-6 lg:p-10 max-w-[1700px] mx-auto w-full flex flex-col gap-8 no-print" id="journal-desk-view-container">
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -8138,6 +8389,7 @@ FTC #6567 Captains & Mentors`
                   type="button"
                   onClick={() => {
                     setShowPasswordSetupPrompt(false);
+                    setPostponedPasswordChange(true);
                     showToast("Password configuration postponed. You can change it anytime in Settings.", "info");
                   }}
                   className="p-1 hover:bg-slate-850 text-slate-450 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-400"

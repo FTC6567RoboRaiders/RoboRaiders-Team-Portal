@@ -20,7 +20,8 @@ import {
   Info,
   Printer,
   FileText,
-  ChevronLeft
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { OutreachEvent, OutreachImage, UserAccount } from '../types';
 import { compressAndResizeImage } from '../utils/image';
