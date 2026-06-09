@@ -87,9 +87,9 @@ body {
   font-size: 16px !important;
 }
 
-/* Relax UI components spacing to make them less busy */
+/* Relax UI components spacing to make them less busy - use logical padding props that do not collapse horizontal utilities */
 input, select, textarea {
-  padding: 0.5rem 0.75rem;
+  padding-block: 0.4rem;
 }
 
 /* Print optimizations for FTC Engineering Notebook alignment */
