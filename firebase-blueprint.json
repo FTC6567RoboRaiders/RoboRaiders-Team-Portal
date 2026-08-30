@@ -161,8 +161,60 @@
         "kanban_seeded": { "type": "boolean" },
         "outreach_seeded": { "type": "boolean" },
         "ledger_seeded": { "type": "boolean" },
+        "inventory_seeded": { "type": "boolean" },
         "disabledModules": { "type": "array", "description": "Array of module ids that are frozen or hidden." }
       }
+    },
+    "InventoryItem": {
+      "title": "Inventory Item",
+      "description": "A robotics room equipment, part, tool, or consumable item.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["REV Robotics Parts", "goBILDA & Motion", "Electronics & Power", "Hardware & Fasteners", "Raw Stock & Materials", "Tools & Equipment", "Game Elements & Field", "Consumables & Lab Supplies", "Other"] },
+        "sku": { "type": "string" },
+        "vendor": { "type": "string" },
+        "quantity": { "type": "number" },
+        "minQuantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "location": { "type": "string" },
+        "status": { "type": "string", "enum": ["In Stock", "Low Stock", "Out of Stock", "Checked Out", "Ordered", "Damaged/Repair"] },
+        "condition": { "type": "string", "enum": ["New", "Good", "Fair", "Damaged/Needs Repair", "Retired"] },
+        "costPerUnit": { "type": "number" },
+        "itemUrl": { "type": "string" },
+        "notes": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "checkedOutBy": { "type": "string" },
+        "checkedOutByEmail": { "type": "string" },
+        "checkedOutDate": { "type": "string" },
+        "checkedOutExpectedReturn": { "type": "string" },
+        "checkedOutNotes": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "createdBy": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "quantity", "minQuantity", "unit", "location", "status", "condition", "createdAt", "createdBy", "createdByEmail", "updatedAt", "updatedBy"]
+    },
+    "InventoryTransaction": {
+      "title": "Inventory Transaction",
+      "description": "A log of item movements, checkouts, returns, consumptions, and restocks.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemName": { "type": "string" },
+        "type": { "type": "string", "enum": ["check_out", "check_in", "restock", "consume", "audit_adjustment", "damage_report"] },
+        "quantityChanged": { "type": "number" },
+        "resultingQuantity": { "type": "number" },
+        "performedBy": { "type": "string" },
+        "performedByEmail": { "type": "string" },
+        "notes": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "itemId", "itemName", "type", "quantityChanged", "resultingQuantity", "performedBy", "performedByEmail", "timestamp"]
     },
     "SystemNotification": {
       "title": "System Notification",
@@ -196,6 +248,14 @@
     "ledgerTransactions/{transactionId}": {
       "schema": "LedgerTransaction",
       "description": "Financial ledger of team expenditures and budget sources."
+    },
+    "inventoryItems/{itemId}": {
+      "schema": "InventoryItem",
+      "description": "Robotics room hardware, tools, parts, and consumable stock items."
+    },
+    "inventoryTransactions/{txId}": {
+      "schema": "InventoryTransaction",
+      "description": "Movement and check-out/check-in logs for robotics room items."
     },
     "journalEntries/{entryId}": {
       "schema": "JournalEntry",

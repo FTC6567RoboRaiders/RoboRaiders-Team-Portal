@@ -54,9 +54,10 @@ import {
   DollarSign,
   Terminal,
   Megaphone,
-  Ban
+  Ban,
+  Boxes
 } from 'lucide-react';
-import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction } from './types';
+import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction } from './types';
 import { compressAndResizeImage } from './utils/image';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { 
@@ -86,6 +87,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import RoboraidersLogo from './components/RoboraidersLogo';
 import { computeUserGamification, calculateJournalQualityScore, isSignupBonus } from './utils/gamification';
 import { SUBTEAM_GUILDS, getSubteamStatsAndRank } from './data/subteamRanks';
+import OutreachPrintLayout from './components/OutreachPrintLayout';
+import { formatEventDate, formatEventDateLong, formatEventDateShort, getTodayLocalDateString } from './utils/date';
 
 export interface XPAuditLogEntry {
   id: string;
@@ -111,6 +114,8 @@ import { DEMO_ENTRIES, DEFAULT_TIME_ENTRIES } from './data/journalDemo';
 import StudentHandbook from './components/StudentHandbook';
 import TimePicker from './components/TimePicker';
 import GeneralLedger from './components/GeneralLedger';
+import InventoryManager from './components/InventoryManager';
+import { DEFAULT_INVENTORY_ITEMS } from './data/inventoryDemo';
 import MemberDirectory from './components/MemberDirectory';
 import SystemDashboard from './components/SystemDashboard';
 
@@ -315,6 +320,8 @@ export default function App() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [formSubteam, setFormSubteam] = useState<Subteam>('Design/Build/Fabrication');
   const [ledgerTransactions, setLedgerTransactions] = useState<LedgerTransaction[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>([]);
   
   // Real User Accounts state
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
@@ -377,7 +384,7 @@ export default function App() {
   );
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'system_dashboard'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard'>('landing');
 
   // Interactive System Notifications and disabled modules flags
   const [disabledModules, setDisabledModules] = useState<string[]>([]);
@@ -575,6 +582,54 @@ export default function App() {
       return true;
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `ledgerTransactions/${newTx.id}`);
+      return false;
+    }
+  };
+
+  const handleSaveInventoryItem = async (item: InventoryItem): Promise<boolean> => {
+    const existingIndex = inventoryItems.findIndex(i => i.id === item.id);
+    let updated: InventoryItem[];
+    if (existingIndex >= 0) {
+      updated = [...inventoryItems];
+      updated[existingIndex] = item;
+    } else {
+      updated = [item, ...inventoryItems];
+    }
+    setInventoryItems(updated);
+    try {
+      await setDoc(doc(db, 'inventoryItems', item.id), item);
+      return true;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `inventoryItems/${item.id}`);
+      return false;
+    }
+  };
+
+  const handleDeleteInventoryItem = async (id: string): Promise<boolean> => {
+    const updated = inventoryItems.filter(i => i.id !== id);
+    setInventoryItems(updated);
+    try {
+      await deleteDoc(doc(db, 'inventoryItems', id));
+      return true;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `inventoryItems/${id}`);
+      return false;
+    }
+  };
+
+  const handleAddInventoryTransaction = async (tx: Omit<InventoryTransaction, 'id' | 'timestamp'>): Promise<boolean> => {
+    const newTx: InventoryTransaction = {
+      ...tx,
+      id: 'inv_tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      timestamp: Date.now()
+    };
+    const updated = [newTx, ...inventoryTransactions];
+    setInventoryTransactions(updated);
+    try {
+      await setDoc(doc(db, 'inventoryTransactions', newTx.id), newTx);
+      return true;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `inventoryTransactions/${newTx.id}`);
       return false;
     }
   };
@@ -951,6 +1006,48 @@ export default function App() {
                     handleFirestoreError(error, OperationType.GET, 'ledgerTransactions');
                   });
                   unsubscribeAll.push(unsubLedger);
+
+                  const unsubInventory = onSnapshot(collection(db, 'inventoryItems'), (snapshot) => {
+                    if (snapshot.empty) {
+                      const isSeeded = seedingConfigRef.current?.inventory_seeded || seedingConfigRef.current?.errorFallback;
+                      if (!isSeeded) {
+                        const local = inventoryItemsRef.current.length > 0 ? inventoryItemsRef.current : DEFAULT_INVENTORY_ITEMS;
+                        if (local.length > 0) {
+                          local.forEach(item => {
+                            setDoc(doc(db, 'inventoryItems', item.id), item).catch(err => {
+                              handleFirestoreError(err, OperationType.WRITE, `inventoryItems/${item.id}`);
+                            });
+                          });
+                        } else {
+                          setInventoryItems([]);
+                        }
+                        setDoc(doc(db, 'systemSettings', 'seeding'), { inventory_seeded: true }, { merge: true }).catch(() => {});
+                      } else {
+                        setInventoryItems([]);
+                      }
+                    } else {
+                      const list: InventoryItem[] = [];
+                      snapshot.forEach(d => {
+                        list.push(d.data() as InventoryItem);
+                      });
+                      setInventoryItems(list.sort((a,b) => a.name.localeCompare(b.name)));
+                    }
+                  }, (error) => {
+                    handleFirestoreError(error, OperationType.GET, 'inventoryItems');
+                  });
+                  unsubscribeAll.push(unsubInventory);
+
+                  const unsubInvTx = onSnapshot(collection(db, 'inventoryTransactions'), (snapshot) => {
+                    const list: InventoryTransaction[] = [];
+                    snapshot.forEach(d => {
+                      list.push(d.data() as InventoryTransaction);
+                    });
+                    setInventoryTransactions(list.sort((a,b) => b.timestamp - a.timestamp));
+                  }, (error) => {
+                    handleFirestoreError(error, OperationType.GET, 'inventoryTransactions');
+                  });
+                  unsubscribeAll.push(unsubInvTx);
+
                 }
               }, (error) => {
                 console.warn("Failed to load seeding systemSettings, defaulting to error fallback:", error);
@@ -1122,6 +1219,48 @@ export default function App() {
                     handleFirestoreError(error, OperationType.GET, 'ledgerTransactions');
                   });
                   unsubscribeAll.push(unsubLedger);
+
+                  const unsubInventory = onSnapshot(collection(db, 'inventoryItems'), (snapshot) => {
+                    if (snapshot.empty) {
+                      const isSeeded = seedingConfigRef.current?.inventory_seeded || seedingConfigRef.current?.errorFallback;
+                      if (!isSeeded) {
+                        const local = inventoryItemsRef.current.length > 0 ? inventoryItemsRef.current : DEFAULT_INVENTORY_ITEMS;
+                        if (local.length > 0) {
+                          local.forEach(item => {
+                            setDoc(doc(db, 'inventoryItems', item.id), item).catch(err => {
+                              handleFirestoreError(err, OperationType.WRITE, `inventoryItems/${item.id}`);
+                            });
+                          });
+                        } else {
+                          setInventoryItems([]);
+                        }
+                        setDoc(doc(db, 'systemSettings', 'seeding'), { inventory_seeded: true }, { merge: true }).catch(() => {});
+                      } else {
+                        setInventoryItems([]);
+                      }
+                    } else {
+                      const list: InventoryItem[] = [];
+                      snapshot.forEach(d => {
+                        list.push(d.data() as InventoryItem);
+                      });
+                      setInventoryItems(list.sort((a,b) => a.name.localeCompare(b.name)));
+                    }
+                  }, (error) => {
+                    handleFirestoreError(error, OperationType.GET, 'inventoryItems');
+                  });
+                  unsubscribeAll.push(unsubInventory);
+
+                  const unsubInvTx = onSnapshot(collection(db, 'inventoryTransactions'), (snapshot) => {
+                    const list: InventoryTransaction[] = [];
+                    snapshot.forEach(d => {
+                      list.push(d.data() as InventoryTransaction);
+                    });
+                    setInventoryTransactions(list.sort((a,b) => b.timestamp - a.timestamp));
+                  }, (error) => {
+                    handleFirestoreError(error, OperationType.GET, 'inventoryTransactions');
+                  });
+                  unsubscribeAll.push(unsubInvTx);
+
                 }
               });
               unsubscribeAll.push(unsubSettings);
@@ -1694,6 +1833,7 @@ export default function App() {
   const [outreachExportScope, setOutreachExportScope] = useState<'all' | 'filtered'>('all');
   const [outreachExportStartDate, setOutreachExportStartDate] = useState<string>('');
   const [outreachExportEndDate, setOutreachExportEndDate] = useState<string>('');
+  const [outreachExportMinHours, setOutreachExportMinHours] = useState<string>('0');
   const [outreachEventsToPrint, setOutreachEventsToPrint] = useState<OutreachEvent[] | null>(null);
   const [outreachPrintSubtitle, setOutreachPrintSubtitle] = useState<string>('');
   const [outreachExportPaperSize, setOutreachExportPaperSize] = useState<'letter' | 'a4' | 'legal'>('letter');
@@ -1750,6 +1890,18 @@ export default function App() {
   useEffect(() => {
     ledgerTransactionsRef.current = ledgerTransactions;
   }, [ledgerTransactions]);
+
+  const inventoryItemsRef = useRef<InventoryItem[]>([]);
+  const inventoryTransactionsRef = useRef<InventoryTransaction[]>([]);
+
+  useEffect(() => {
+    inventoryItemsRef.current = inventoryItems;
+  }, [inventoryItems]);
+
+  useEffect(() => {
+    inventoryTransactionsRef.current = inventoryTransactions;
+  }, [inventoryTransactions]);
+
 
   // Directory approvals and credentials actions
   const handleApproveUser = async (userId: string) => {
@@ -3648,7 +3800,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
   const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
 
   const sidebarLinks: {
-    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'approvals' | 'system_dashboard';
+    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard';
     label: string;
     sublabel: string;
     icon: any;
@@ -3706,6 +3858,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
       icon: FileText,
       badge: null,
       color: 'text-amber-400'
+    },
+    {
+      id: 'inventory',
+      label: 'Lab Inventory',
+      sublabel: 'Hardware & tools',
+      icon: Boxes,
+      badge: inventoryItems.filter(i => i.quantity <= i.minQuantity).length || null,
+      badgeColor: 'bg-amber-500',
+      color: 'text-rose-400'
     },
     {
       id: 'finance',
@@ -5694,6 +5855,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
       )}
 
       {/* GENERAL LEDGER VIEW */}
+      {/* ROBOTICS ROOM INVENTORY VIEW */}
+      {currentView === 'inventory' && (
+        disabledModules.includes('inventory') && !isAuthorizedToAccessDisabled ? (
+          renderDisabledModuleScreen('Robotics Lab Inventory')
+        ) : (
+          <InventoryManager
+            currentUser={currentUser}
+            accounts={accounts}
+            items={inventoryItems}
+            transactions={inventoryTransactions}
+            onSaveItem={handleSaveInventoryItem}
+            onDeleteItem={handleDeleteInventoryItem}
+            onAddTransaction={handleAddInventoryTransaction}
+            onBack={() => setCurrentView('landing')}
+            showToast={showToast}
+          />
+        )
+      )}
+
       {currentView === 'finance' && (
         disabledModules.includes('finance') && !isAuthorizedToAccessDisabled ? (
           renderDisabledModuleScreen('General Ledger')
@@ -9329,1693 +9509,59 @@ FTC #6567 Captains & Mentors`
                         </div>
                       </div>
                     );
-                  })()}
-                  <p className="text-[9px] text-slate-400 font-mono leading-normal border-t border-slate-200 pt-2.5 mt-1.5 dark:text-slate-500 dark:border-slate-800">
-                    * The system compiles individual records per page if selecting members, or a unified report for team/subteams. Choose "Save as PDF" to generate the printable document.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
-            {timeExportShowPreview && (
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 select-none pb-12">
-                <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10 dark:bg-slate-800 dark:border-slate-800">
-                  <div className="flex items-center gap-1.5">
-                    <LayoutTemplate className="w-4 h-4 text-cyan-500 animate-[pulse_3s_infinite]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
-                      Live Timesheets Format: <span className="text-cyan-600 dark:text-cyan-400 underline">{timeExportPaperSize.toUpperCase()}</span>
-                    </span>
-                  </div>
-                  <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
-                    SCALED PREVIEW
-                  </span>
-                </div>
-
-                {(() => {
-                  let matchingEntries: TimeEntry[] = [];
-                  if (timeExportScope === 'all') {
-                    matchingEntries = timeEntries;
-                  } else if (timeExportScope === 'members') {
-                    matchingEntries = timeEntries.filter(t => selectedTimeExportMembers.includes(t.userEmail));
-                  } else if (timeExportScope === 'subteam') {
-                    matchingEntries = timeEntries.filter(t => selectedTimeExportSubteam === 'All' || t.subteam === selectedTimeExportSubteam);
-                  }
-
-                  if (matchingEntries.length === 0) {
-                    return (
-                      <div className="my-12 text-center p-8 border border-dashed border-slate-300 rounded bg-white max-w-sm text-slate-400 dark:bg-slate-900 dark:text-slate-500 dark:border-slate-800">
-                        <AlertTriangle className="w-8 h-8 text-cyan-500 mx-auto mb-2" />
-                        <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Matched</p>
-                        <p className="text-[10px] mt-1 leading-normal italic">Modify your Scope & Profile options on the left to inspect visual time sheets.</p>
-                      </div>
-                    );
-                  }
-
-                  const totalHr = matchingEntries.reduce((sum, e) => sum + e.durationHours, 0);
-                  const paperAspectRatio = timeExportPaperSize === 'letter' ? '8.5 / 11' : timeExportPaperSize === 'legal' ? '8.5 / 14' : '1 / 1.414';
-
-                  return (
-                    <div className="flex flex-col gap-6 w-full max-w-md items-center py-2 animate-fade-in">
-                      
-                      {/* Cover Page Preview */}
-                      {timeExportShowCover && (
-                        <div className="bg-white border border-slate-350 shadow-lg w-[380px] p-8 flex flex-col items-center justify-center text-slate-950 overflow-hidden relative dark:bg-slate-900 dark:text-slate-400" style={{ aspectRatio: paperAspectRatio }}>
-                          <h1 className="text-xl font-black uppercase max-w-[250px] text-center mb-2">Time Records Report</h1>
-                          <div className="w-16 h-1 bg-cyan-500 mb-6"></div>
-                          <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest text-center dark:text-slate-400">FTC Team 6567</p>
-                          <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest mt-1 text-center dark:text-slate-500">{new Date().toLocaleDateString()}</p>
-                          <div className="mt-8 text-[8px] text-slate-500 font-mono text-center border p-2 border-slate-200 dark:text-slate-400 dark:border-slate-800">
-                            <strong>SCOPE:</strong> {timeExportScope.toUpperCase()}<br/>
-                            <strong>TOTAL TIME:</strong> {totalHr.toFixed(2)} HOURS
-                          </div>
-                        </div>
-                      )}
-
-                      {/* TOC Page Preview */}
-                      {timeExportShowTOC && (
-                        <div className="bg-white border border-slate-350 shadow-lg w-[380px] p-6 flex flex-col text-slate-950 overflow-hidden relative dark:bg-slate-900 dark:text-slate-400" style={{ aspectRatio: paperAspectRatio }}>
-                          <h2 className="text-sm font-black uppercase border-b border-slate-950 pb-2 mb-4">Table of Contents</h2>
-                          <div className="flex flex-col gap-2 font-mono text-[9px]">
-                            <div className="flex justify-between border-b border-dashed border-slate-300 pb-1 dark:border-slate-800">
-                              <span>1. Summary Overview</span>
-                              <span>1</span>
-                            </div>
-                            <div className="flex justify-between border-b border-dashed border-slate-300 pb-1 dark:border-slate-800">
-                              <span>2. Detailed Time Entries</span>
-                              <span>2</span>
-                            </div>
-                            <div className="flex justify-between border-b border-dashed border-slate-300 pb-1 text-slate-400 dark:text-slate-500 dark:border-slate-800">
-                              <span>3. Signatures & Approvals</span>
-                              <span>{timeExportScope === 'members' ? 3 : 5}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="bg-white border border-slate-350 shadow-lg w-[380px] p-5 flex flex-col justify-between text-slate-950 overflow-hidden relative dark:bg-slate-900 dark:text-slate-400" style={{ aspectRatio: paperAspectRatio }}>
-                        <div className="border border-slate-900/10 flex-grow p-3.5 flex flex-col justify-between min-h-0 text-[10px]">
-                          <div>
-                            <div className="border-b border-slate-950 pb-2 mb-3 flex justify-between items-start">
-                              <div>
-                                <span className="text-[7px] font-mono font-black border border-slate-950 px-1 py-0.5 rounded bg-slate-100 uppercase tracking-wide dark:bg-slate-800">
-                                  FTC TIME ROSTER
-                                </span>
-                                <h4 className="text-[10px] font-extrabold uppercase mt-1 leading-tight max-w-[160px] truncate font-sans">
-                                  {timeExportScope === 'all' && 'Team Time Report'}
-                                  {timeExportScope === 'members' && `${matchingEntries[0]?.userName || 'Selected Members'} Sheet`}
-                                  {timeExportScope === 'subteam' && `${selectedTimeExportSubteam} Subteam`}
-                                </h4>
-                              </div>
-                              <div className="text-right text-[7px] font-mono leading-tight text-slate-500 dark:text-slate-400">
-                                <div><strong>RECORDS:</strong> {matchingEntries.length} items</div>
-                                <div><strong>TIME:</strong> {totalHr.toFixed(2)} hrs</div>
-                                <div><strong>DIV:</strong> FTC #6567</div>
-                              </div>
-                            </div>
-
-                            <div className="overflow-hidden min-h-0">
-                              <table className="w-full text-left text-[8px] font-sans border-collapse mt-1">
-                                <thead>
-                                  <tr className="border-b border-slate-955 text-[7px] uppercase font-mono text-slate-500 bg-slate-50 dark:bg-slate-800 dark:text-slate-400">
-                                    <th className="py-1 px-0.5">Date</th>
-                                    <th className="py-1 px-0.5">Member</th>
-                                    <th className="py-1 px-0.5 text-right">Hrs</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {matchingEntries.slice(0, 5).map((e) => (
-                                    <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800">
-                                      <td className="py-1.5 px-0.5 font-mono text-[7px]">{e.date}</td>
-                                      <td className="py-1.5 px-0.5 font-bold truncate max-w-[80px]">{e.userName}</td>
-                                      <td className="py-1.5 px-0.5 text-right font-mono font-bold text-slate-955">{e.durationHours.toFixed(1)} h</td>
-                                    </tr>
-                                  ))}
-                                  {matchingEntries.length > 5 && (
-                                    <tr>
-                                      <td colSpan={3} className="py-1.5 text-center text-slate-400 italic font-mono text-[7px] dark:text-slate-500">
-                                        + {matchingEntries.length - 5} additional logged records below...
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-
-                          <div className="border-t border-dashed border-slate-300 pt-2 flex justify-end text-[6.5px] font-mono text-slate-505 dark:border-slate-800">
-                            <span className="border-b border-slate-900/30 w-32 pb-0.5 text-right uppercase">
-                              {timeExportScope === 'members' ? 'MEMBER SIGNATURE' : 'MENTOR VERIFIER'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-          </div>
-
-          {/* Action buttons */}
-              <div className="bg-slate-50 p-4 border-t border-slate-105 flex justify-end gap-2 text-xs shrink-0 dark:bg-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsTimeExportModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded text-xs font-bold font-mono uppercase bg-slate-200 text-slate-800 hover:bg-slate-300 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePrintTimePDF}
-                  className="px-4 py-1.5 rounded text-xs font-bold font-mono uppercase tracking-wider bg-cyan-600 hover:bg-cyan-700 text-white transition-colors flex items-center gap-1 shadow-sm cursor-pointer border-0 outline-none"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Generate PDF Report</span>
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* PDF Export Menu Modal */}
-      <AnimatePresence>
-        {isExportModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
-            onClick={() => setIsExportModalOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 15, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 15, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className={`relative w-full ${exportShowPreview ? 'max-w-6xl' : 'max-w-lg'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-brand" />
-                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider">
-                    Export Journal PDF Documents
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsExportModalOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none dark:text-slate-500"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Grid split-container when showPreview is enabled */}
-              <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40">
-                
-                {/* CONFIGURATION COLUMN */}
-                <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900 dark:border-slate-800">
-                  <div className="flex flex-col gap-4">
-                    <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
-                      Compile engineering logs into high-fidelity structured print pages optimized for notebook presentation binder reviews.
-                    </p>
-
-                    {/* Scope Selection */}
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
-                        Export Range
-                      </span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setExportScope('all')}
-                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                            exportScope === 'all'
-                              ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          <Layers className="w-4 h-4" />
-                          <span>All Journals ({entries.length})</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setExportScope('filtered')}
-                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                            exportScope === 'filtered'
-                              ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          <Settings className="w-4 h-4" />
-                          <span>Targeted Set</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Filters for Targeted Set */}
-                    <AnimatePresence>
-                      {exportScope === 'filtered' && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col dark:bg-slate-800 dark:border-slate-800"
-                        >
-                          {/* Subteam select */}
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest dark:text-slate-500">
-                              Subteam Category
-                            </label>
-                            <select
-                              value={exportSubteam}
-                              onChange={(e) => setExportSubteam(e.target.value as Subteam | 'All')}
-                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand font-mono dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
-                            >
-                              <option value="All">All Subteams</option>
-                              {SUBTEAM_LIST.map((sub) => (
-                                <option key={sub} value={sub}>{formatSubteamLabel(sub)}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Status select */}
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest dark:text-slate-500">
-                              Review Status
-                            </label>
-                            <select
-                              value={exportStatus}
-                              onChange={(e) => setExportStatus(e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand font-mono dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
-                            >
-                              <option value="All">All Statuses</option>
-                              <option value="Draft">Draft</option>
-                              <option value="Pending Review">Pending Review</option>
-                              <option value="Approved">Approved</option>
-                              <option value="Needs Revision">Needs Revision</option>
-                            </select>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {/* Paper Sizing Formats */}
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
-                        Paper Dimensions Format
-                      </span>
-                      <div className="grid grid-cols-3 gap-1 tracking-tight">
-                        {(['letter', 'a4', 'legal'] as const).map((sz) => (
-                          <button
-                            key={sz}
-                            type="button"
-                            onClick={() => setExportPaperSize(sz)}
-                            className={`py-1.5 px-1 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
-                              exportPaperSize === sz
-                                ? 'border-amber-500 bg-amber-500/5 dark:bg-amber-600/10 text-amber-600 dark:text-amber-400 font-extrabold'
-                                : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
-                            }`}
-                          >
-                            <span className="uppercase text-[9px] tracking-wide">{sz}</span>
-                            <span className="text-[8px] font-mono font-normal block opacity-75">
-                              {sz === 'letter' ? '8.5" √ó 11"' : sz === 'a4' ? '210√ó297mm' : '8.5" √ó 14"'}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Document Contents Elements (TOC, Cover, etc) */}
-                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 border border-slate-150 dark:bg-slate-800">
-                      <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block mb-1 dark:text-slate-500">
-                        Select Notebook Sheets
-                      </span>
-                      
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={exportShowCover}
-                          onChange={(e) => setExportShowCover(e.target.checked)}
-                          className="rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-800"
-                        />
-                        <span>Include Cover Title Banner</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={exportShowTOC}
-                          onChange={(e) => setExportShowTOC(e.target.checked)}
-                          className="rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-800"
-                        />
-                        <span>Include Table of Contents</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none border-t border-slate-250 pt-2.5 mt-0.5 dark:text-slate-300 dark:border-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={exportShowPreview}
-                          onChange={(e) => setExportShowPreview(e.target.checked)}
-                          className="rounded border-slate-300 text-brand focus:ring-brand dark:border-slate-800"
-                        />
-                        <span className="font-bold flex items-center gap-1">Live Page Preview Frame <Sparkles className="w-3 h-3 text-amber-500" /></span>
-                      </label>
-                    </div>
-
-                    {/* Dynamic counter info */}
-                    <div className="bg-slate-50 p-3 rounded border border-slate-200 flex flex-col gap-1.5 text-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800">
-                      <div className="flex justify-between items-center text-xs font-mono">
-                        <span className="text-slate-400 uppercase font-black tracking-wider text-[9px] dark:text-slate-500">Calculated Pages:</span>
-                        <span className="font-extrabold text-brand dark:text-red-405">
-                          {(() => {
-                            const filteredCount = exportScope === 'all' 
-                              ? entries.length 
-                              : entries.filter(e => {
-                                  const subteamMatch = exportSubteam === 'All' || e.subteam === exportSubteam;
-                                  const statusMatch = exportStatus === 'All' || e.status === exportStatus;
-                                  return subteamMatch && statusMatch;
-                                }).length;
-                            const totalPrntPages = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + filteredCount;
-                            return `${totalPrntPages} Dynamic Sheet${totalPrntPages !== 1 ? 's' : ''}`;
-                          })()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions inside column */}
-                  <div className="pt-4 mt-4 border-t border-slate-105 flex justify-end gap-2 text-xs shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setIsExportModalOpen(false)}
-                      className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handlePrintPDF}
-                      className="px-4 py-1.5 rounded text-[11px] font-bold font-mono uppercase tracking-wider bg-brand hover:bg-brand-hover text-white transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Print PDF</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
-                {exportShowPreview ? (
-                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 select-none pb-12 dark:bg-slate-800">
-                    <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 dark:bg-slate-800 dark:border-slate-800">
-                      <div className="flex items-center gap-1.5">
-                        <LayoutTemplate className="w-4 h-4 text-amber-500 animate-[pulse_3s_infinite]" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
-                          Live Scribe Sheets Format: <span className="text-amber-550 dark:text-amber-400 underline uppercase">{exportPaperSize}</span>
-                        </span>
-                      </div>
-                      <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
-                        SCALED PREVIEW
-                      </span>
-                    </div>
-
-                    {(() => {
-                      // Filter and sort preview
-                      let prefiltered: JournalEntry[] = [];
-                      if (exportScope === 'all') {
-                        prefiltered = [...entries];
-                      } else {
-                        prefiltered = entries.filter(e => {
-                          const subteamMatch = exportSubteam === 'All' || e.subteam === exportSubteam;
-                          const statusMatch = exportStatus === 'All' || e.status === exportStatus;
-                          return subteamMatch && statusMatch;
-                        });
-                      }
-                      const sortedPreview = [...prefiltered].sort((a, b) => {
-                        const teamA = (a.subteam || '').toUpperCase();
-                        const teamB = (b.subteam || '').toUpperCase();
-                        if (teamA !== teamB) return teamA.localeCompare(teamB);
-                        return (a.date || '').localeCompare(b.date || '');
-                      });
-
-                      const totalPages = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + sortedPreview.length;
-                      let currentPageNum = 1;
-
-                      if (totalPages === 0) {
-                        return (
-                          <div className="my-12 text-center p-8 border border-dashed border-slate-300 rounded bg-white max-w-sm text-slate-400 dark:bg-slate-900 dark:text-slate-500 dark:border-slate-800">
-                            <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-                            <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Selected</p>
-                            <p className="text-[10px] mt-1 leading-normal italic">Modify your Targeted filters above to see visual compiled journal sheets.</p>
-                          </div>
-                        );
-                      }
-
-                      const paperAspect = exportPaperSize === 'letter' ? '8.5 / 11' : exportPaperSize === 'a4' ? '1 / 1.414' : '8.5 / 14';
-
-                      return (
-                        <div className="flex flex-col gap-8 w-full max-w-md items-center shadow-inner py-4">
-                          
-                          {/* 1. COVER PAGE PREVIEW */}
-                          {exportShowCover && (() => {
-                            const thisPage = currentPageNum++;
-                            return (
-                              <div className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
-                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-300 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
-                                  <div className="border border-slate-900/30 flex-1 p-4 flex flex-col justify-between">
-                                    <div className="text-center my-auto py-8">
-                                      <div className="w-12 h-12 mb-4 border-2 border-slate-950 flex items-center justify-center rounded-full mx-auto">
-                                        <span className="font-extrabold text-sm tracking-tighter">RR</span>
-                                      </div>
-                                      <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none text-slate-950 dark:text-slate-400">
-                                        RoboRaiders Team Portal
-                                      </h3>
-                                      <p className="text-[7px] font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
-                                        Official Engineering Notebook
-                                      </p>
-                                      
-                                      <div className="w-12 h-0.5 bg-slate-950 my-3 mx-auto"></div>
-                                      
-                                      <p className="text-[9px] font-extrabold text-slate-800 uppercase tracking-wide dark:text-slate-400">
-                                        FIRST Tech Challenge Team #6567
-                                      </p>
-                                    </div>
-                                    <div className="border-t border-dashed border-slate-350 pt-3 flex justify-between items-end text-[7px] font-mono text-slate-500 leading-none dark:text-slate-400">
-                                      <div>
-                                        <p>TYPE: Compiled Ledger</p>
-                                        <p className="mt-0.5">PAPER: {exportPaperSize.toUpperCase()}</p>
-                                      </div>
-                                      <div className="text-right">
-                                        <p>RECORDS: {sortedPreview.length} Ent.</p>
-                                        <p className="mt-0.5">STATUS: Verified</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* 2. TOC PAGE PREVIEW */}
-                          {exportShowTOC && (() => {
-                            const thisPage = currentPageNum++;
-                            const startingPageIndex = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + 1;
-                            return (
-                              <div className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (TABLE OF CONTENTS)</span>
-                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-300 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
-                                  <div className="border-b border-slate-950 dark:border-white pb-1.5 mb-3 flex justify-between items-baseline">
-                                    <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-slate-400">Table of Contents</h4>
-                                    <span className="text-[7.5px] font-mono text-slate-450 uppercase tracking-wider dark:text-slate-400">FTC #6567 Binder</span>
-                                  </div>
-                                  
-                                  <div className="flex-1 overflow-hidden space-y-2">
-                                    <div className="grid grid-cols-12 text-[7px] font-mono font-extrabold border-b border-slate-400 text-slate-500 pb-1 dark:text-slate-400 dark:border-slate-800">
-                                      <span className="col-span-3">REF ID</span>
-                                      <span className="col-span-3">DATE</span>
-                                      <span className="col-span-4">SUBTEAM</span>
-                                      <span className="col-span-2 text-right">PAGE</span>
-                                    </div>
-                                    <div className="divide-y divide-slate-100 dark:divide-slate-800 flex flex-col gap-1.5 pt-1 overflow-hidden">
-                                      {sortedPreview.slice(0, 10).map((entry, idx) => (
-                                        <div key={entry.id} className="grid grid-cols-12 text-[7px] font-sans text-slate-800 pt-1 dark:text-slate-400">
-                                          <span className="col-span-3 font-mono font-bold text-slate-950 truncate dark:text-slate-400">{getEntryReferenceCode(entry, entries)}</span>
-                                          <span className="col-span-3 font-mono text-slate-500 dark:text-slate-400">{entry.date}</span>
-                                          <span className="col-span-4 font-mono uppercase truncate text-slate-600 dark:text-slate-300">{entry.subteam}</span>
-                                          <span className="col-span-2 text-right font-mono font-bold text-amber-600 dark:text-amber-400">{idx + startingPageIndex}</span>
-                                        </div>
-                                      ))}
-                                      {sortedPreview.length > 10 && (
-                                        <p className="text-[6.5px] font-mono italic text-slate-550 pt-1 text-center font-bold dark:text-slate-300">
-                                          ... and {sortedPreview.length - 10} more sheets listed in index ...
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="mt-auto pt-2 border-t border-slate-100 text-center text-[6px] font-mono text-slate-400 dark:text-slate-500 dark:border-slate-800">
-                                    FTC #6567 ROBOAID LEDGER
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* 3. LOG ENTRIES PREVIEWS */}
-                          {sortedPreview.map((entry, idx) => {
-                            const thisPage = currentPageNum++;
-                            return (
-                              <div key={entry.id} className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} ({entry.subteam} LOG)</span>
-                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-400 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
-                                  
-                                  {/* Header */}
-                                  <div className="border-b-2 border-slate-950 pb-1 flex justify-between items-start text-[7.5px] font-mono text-slate-700 shrink-0 dark:text-slate-300">
-                                    <div className="flex flex-col">
-                                      <span className="font-sans font-black uppercase text-[8px] text-slate-950 truncate max-w-[150px] leading-tight dark:text-slate-400">
-                                        {formatSubteamLabel(entry.subteam)} Log
-                                      </span>
-                                      <span className="text-[6.5px] font-bold text-slate-400 leading-none mt-0.5 dark:text-slate-500">Author: {entry.author.split('(')[0]}</span>
-                                    </div>
-                                    <div className="text-right text-[6.5px] font-bold whitespace-nowrap leading-none space-y-0.5">
-                                      <div>{getEntryReferenceCode(entry, entries)}</div>
-                                      <div>{entry.date}</div>
-                                    </div>
-                                  </div>
-
-                                  {/* Log Content mock-up */}
-                                  <div className="flex-1 mt-2.5 overflow-hidden flex flex-col gap-2 text-[7px] text-slate-950 font-sans pr-1 dark:text-slate-400">
-                                    <div className="border border-slate-200 rounded p-1.5 bg-slate-50/50 dark:border-slate-800">
-                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 pb-0.5 mb-1 leading-none dark:text-slate-500 dark:border-slate-800">What We Planned</strong>
-                                      <p className="line-clamp-2 italic text-slate-700 dark:text-slate-300">{entry.planned}</p>
-                                    </div>
-
-                                    <div className="border border-slate-200 rounded p-1.5 bg-slate-50/50 dark:border-slate-800">
-                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 pb-0.5 mb-1 leading-none dark:text-slate-500 dark:border-slate-800">What We Accomplished</strong>
-                                      <p className="line-clamp-3 leading-normal text-slate-800 dark:text-slate-400">{entry.accomplished}</p>
-                                    </div>
-
-                                    <div className="border border-slate-200 rounded p-1.5 bg-slate-50/50 dark:border-slate-800">
-                                      <strong className="block text-[6.5px] font-mono text-slate-400 uppercase font-bold border-b border-slate-200 pb-0.5 mb-1 leading-none dark:text-slate-500 dark:border-slate-800">Problems and Solutions</strong>
-                                      <p className="line-clamp-2 leading-tight text-slate-800 dark:text-slate-400">{entry.problemsAndSolutions[0] || 'No core blockers faced.'}</p>
-                                    </div>
-
-                                    {entry.images && entry.images.length > 0 && (
-                                      <div className="border border-slate-200 rounded p-1 flex items-center justify-between bg-emerald-500/5 mt-0.5 text-[6.5px] leading-none shrink-0 text-emerald-600 dark:text-emerald-400 dark:border-slate-800">
-                                        <div className="flex items-center gap-1">
-                                          <span className="p-0.5 bg-emerald-100 dark:bg-emerald-900 rounded font-mono font-bold uppercase">MEDIA</span>
-                                          <span className="font-medium italic">Includes {entry.images.length} high-fidelity schematic uploads</span>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                    <LayoutTemplate className="w-12 h-12 text-slate-300 mb-3" />
-                    <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preview Closed</p>
-                    <p className="text-[10px] mt-1 italic max-w-xs leading-normal">
-                      Enable the "Live Page Preview Frame" switch in the configuration column on the left to see sheets dynamic sizing and alignment in real-time.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* OUTREACH PDF EXPORT MENU MODAL */}
-      <AnimatePresence>
-        {isOutreachExportModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
-            onClick={() => setIsOutreachExportModalOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 15, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 15, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className={`relative w-full ${outreachExportShowPreview ? 'max-w-6xl' : 'max-w-md'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-emerald-500" />
-                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider">
-                    Export Community Outreach Portfolio
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsOutreachExportModalOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-0 outline-none dark:text-slate-500"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Grid split-container when showPreview is enabled */}
-              <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100/40">
-                
-                {/* CONFIGURATION COLUMN */}
-                <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col justify-between shrink-0 overflow-y-auto bg-white dark:bg-slate-900 dark:border-slate-800">
-                  <div className="flex flex-col gap-4">
-                    
-                    {/* Paper Sizing Formats */}
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
-                        Paper Dimensions Format
-                      </span>
-                      <div className="grid grid-cols-3 gap-1 tracking-tight">
-                        {(['letter', 'a4', 'legal'] as const).map((sz) => (
-                          <button
-                            key={sz}
-                            type="button"
-                            onClick={() => setOutreachExportPaperSize(sz)}
-                            className={`py-1.5 px-1 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 rounded text-[10px] font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 ${
-                              outreachExportPaperSize === sz
-                                ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
-                            }`}
-                          >
-                            <span className="uppercase text-[9px] tracking-wide">{sz}</span>
-                            <span className="text-[8px] font-mono font-normal block opacity-75">
-                              {sz === 'letter' ? '8.5" √ó 11"' : sz === 'a4' ? '210√ó297mm' : '8.5" √ó 14"'}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Document Contents Elements (TOC, Cover, etc) */}
-                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-slate-50 border border-slate-150 dark:bg-slate-800">
-                      <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block mb-1 dark:text-slate-500">
-                        Select Notebook Sheets
-                      </span>
-                      
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={outreachExportShowCover}
-                          onChange={(e) => setOutreachExportShowCover(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
-                        />
-                        <span>Include Cover Title Banner</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={outreachExportShowTOC}
-                          onChange={(e) => setOutreachExportShowTOC(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
-                        />
-                        <span>Include Table of Contents</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-slate-700 select-none border-t border-slate-250 pt-2.5 mt-0.5 dark:text-slate-300 dark:border-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={outreachExportShowPreview}
-                          onChange={(e) => setOutreachExportShowPreview(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 dark:border-slate-800"
-                        />
-                        <span className="font-bold flex items-center gap-1">Live Page Preview Frame <Sparkles className="w-3 h-3 text-emerald-500" /></span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Actions inside column */}
-                  <div className="pt-4 mt-4 border-t border-slate-105 flex justify-end gap-2 text-xs shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setIsOutreachExportModalOpen(false)}
-                      className="px-3 py-1.5 rounded text-[11px] font-bold font-mono uppercase bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-600"
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTimeout(() => {
-                           window.print();
-                        }, 150);
-                      }}
-                      className="px-4 py-1.5 rounded text-[11px] font-bold font-mono uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Print PDF</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
-                {outreachExportShowPreview ? (
-                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100 select-none pb-12 dark:bg-slate-800">
-                    <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 py-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 dark:bg-slate-800 dark:border-slate-800">
-                      <div className="flex items-center gap-1.5">
-                        <LayoutTemplate className="w-4 h-4 text-emerald-500 animate-[pulse_3s_infinite]" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
-                          Live Outreach Portfolio Format: <span className="text-emerald-550 dark:text-emerald-400 underline uppercase">{outreachExportPaperSize}</span>
-                        </span>
-                      </div>
-                      <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
-                        SCALED PREVIEW
-                      </span>
-                    </div>
-
-                    {(() => {
-                      const totalPages = (outreachExportShowCover ? 1 : 0) + (outreachExportShowTOC ? 1 : 0) + (outreachEventsToPrint?.length || 0);
-                      let currentPageNum = 1;
-
-                      if (totalPages === 0) {
-                        return (
-                          <div className="my-12 text-center p-8 border border-dashed border-slate-300 rounded bg-white max-w-sm text-slate-400 dark:bg-slate-900 dark:text-slate-500 dark:border-slate-800">
-                            <AlertTriangle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                            <p className="text-xs font-mono font-bold uppercase tracking-wider">No Records Selected</p>
-                          </div>
-                        );
-                      }
-
-                      const paperAspect = outreachExportPaperSize === 'letter' ? '8.5 / 11' : outreachExportPaperSize === 'a4' ? '1 / 1.414' : '8.5 / 14';
-
-                      return (
-                        <div className="flex flex-col gap-8 w-full max-w-md items-center shadow-inner py-4">
-                          
-                          {/* 1. COVER PAGE PREVIEW */}
-                          {outreachExportShowCover && (() => {
-                            const thisPage = currentPageNum++;
-                            return (
-                              <div className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (TITLE BANNER)</span>
-                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col justify-between text-slate-950 dark:text-slate-300 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
-                                  <div className="border-4 border-double border-slate-900/30 flex-1 p-4 flex flex-col justify-between">
-                                    <div className="text-center my-auto py-8">
-                                      <h3 className="text-sm font-black uppercase font-display tracking-tight leading-none">
-                                        Community Impact Portfolio
-                                      </h3>
-                                      <p className="text-[7px] font-mono uppercase tracking-widest mt-1">
-                                        FIRST Tech Challenge Team #6567
-                                      </p>
-                                    </div>
-                                    <div className="border-t border-slate-350 pt-3 flex justify-between items-end text-[7px] font-mono leading-none">
-                                      <div>
-                                        <p>DATE: {new Date().toLocaleDateString()}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* 2. TOC / SUMMARY PAGE PREVIEW */}
-                          {outreachExportShowTOC && (() => {
-                            const thisPage = currentPageNum++;
-                            return (
-                              <div className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} (SUMMARY LIST)</span>
-                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-300 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
-                                  <div className="border-b border-slate-950 dark:border-white pb-1.5 mb-3 flex justify-between items-baseline">
-                                    <h4 className="text-[10px] font-black uppercase text-slate-950 dark:text-slate-400">Summary Table</h4>
-                                  </div>
-                                  <div className="flex-1 overflow-hidden">
-                                     <div className="text-[7.5px] font-sans">
-                                       {(outreachEventsToPrint || []).slice(0, 10).map((entry, idx) => (
-                                         <div key={entry.id} className="border-b border-slate-300 py-1 font-mono text-slate-700 flex justify-between truncate dark:text-slate-300 dark:border-slate-800">
-                                            <span>{entry.date} - {entry.title}</span>
-                                            <span>{entry.hoursLogged}h</span>
-                                         </div>
-                                       ))}
-                                     </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* 3. EVENT LOG PREVIEWS */}
-                          {(outreachEventsToPrint || []).map((entry, idx) => {
-                            const thisPage = currentPageNum++;
-                            return (
-                              <div key={entry.id} className="flex flex-col items-center gap-1 w-full">
-                                <span className="text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest dark:text-slate-500">SHEET {thisPage} / {totalPages} ({entry.title.substring(0, 10)}...)</span>
-                                <div className={`bg-white dark:bg-slate-800 border border-slate-350 dark:border-slate-800 shadow-md w-[360px] p-6 flex flex-col text-slate-850 dark:text-slate-400 overflow-hidden relative`} style={{ aspectRatio: paperAspect }}>
-                                  <div className="border-b-2 border-slate-950 pb-1 flex justify-between items-start text-[7.5px] font-mono shrink-0">
-                                    <span className="font-sans font-black uppercase text-[8px] text-slate-950 truncate max-w-[150px] leading-tight dark:text-slate-400">
-                                      {entry.title}
-                                    </span>
-                                    <div className="text-right text-[6.5px] font-bold whitespace-nowrap leading-none space-y-0.5">
-                                      <div>{entry.date}</div>
-                                      <div>{entry.hoursLogged} hrs</div>
-                                    </div>
-                                  </div>
-                                  <div className="flex-1 mt-2.5 overflow-hidden text-[7px] text-slate-950 font-sans pr-1 leading-normal dark:text-slate-400">
-                                    {entry.description}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                    <LayoutTemplate className="w-12 h-12 text-slate-300 mb-3" />
-                    <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preview Closed</p>
-                    <p className="text-[10px] mt-1 italic max-w-xs leading-normal">
-                      Enable the "Live Page Preview Frame" switch in the configuration column on the left to see sheets dynamic sizing and alignment in real-time.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* GLORIOUS LEVEL-UP RANK CELEBRATION MODAL */}
-      <AnimatePresence>
-        {levelUpData && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
-            onClick={handleDismissLevelUp}
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 50, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.9, y: -50, opacity: 0 }}
-              transition={{ type: "spring", damping: 15, stiffness: 200 }}
-              className={`relative w-full max-w-md ${
-                isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-              } border rounded-2xl shadow-2xl p-6 sm:p-8 overflow-hidden flex flex-col items-center text-center`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Top gradient strip */}
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-400 via-pink-500 to-indigo-600"></div>
-
-              {/* Decorative radial background light */}
-              <div className="absolute -top-24 w-72 h-72 bg-gradient-radial from-cyan-500/10 to-transparent rounded-full blur-2xl pointer-events-none"></div>
-
-              {/* Celebratory particles shower */}
-              {[-25, -10, 0, 10, 25].map((deg, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ y: 0, x: 0, opacity: 0, scale: 0.5 }}
-                  animate={{ 
-                    y: [-40, -120 - (i * 20)], 
-                    x: [0, (i - 2) * 50], 
-                    opacity: [0, 1, 1, 0],
-                    scale: [0.5, 1.2, 1, 0.2]
-                  }}
-                  transition={{ duration: 3.5, ease: "easeOut", repeat: Infinity, repeatDelay: i * 0.4 }}
-                  className="absolute text-yellow-500 select-none pointer-events-none text-xl z-50"
-                  style={{ top: "35%" }}
-                >
-                  {i % 2 === 0 ? '‚ú®' : '‚≠ê'}
-                </motion.div>
-              ))}
-
-              {/* Bouncing Trophy Frame */}
-              <motion.div 
-                animate={{ 
-                  y: [0, -10, 0],
-                  scale: [1, 1.05, 1]
-                }}
-                transition={{ 
-                  duration: 3, 
-                  ease: "easeInOut", 
-                  repeat: Infinity 
-                }}
-                className="w-24 h-24 bg-gradient-to-br from-amber-400/20 to-pink-500/10 dark:from-amber-400/10 dark:to-pink-500/5 rounded-full flex items-center justify-center mb-5 border border-amber-500/30 shadow-lg relative group"
-              >
-                {/* Outer spin halo */}
-                <div className="absolute inset-0 rounded-full border-2 border-dashed border-cyan-400/20 animate-[spin_20s_linear_infinite]"></div>
-                
-                <Trophy className="w-12 h-12 text-amber-500 dark:text-amber-450 drop-shadow-[0_4px_12px_rgba(245,158,11,0.3)]" />
-              </motion.div>
-
-              {/* Promotion Header */}
-              <span className="text-[10px] font-mono font-extrabold tracking-widest text-cyan-600 dark:text-cyan-400 uppercase leading-none bg-cyan-100/30 dark:bg-cyan-950/40 px-3 py-1 rounded-full border border-cyan-200/40 dark:border-cyan-800/20">
-                Arena promotion unlocked
-              </span>
-
-              <h2 className="text-sm font-bold text-slate-500 mt-4 leading-none uppercase tracking-wider font-mono dark:text-slate-400">
-                Level {levelUpData.level} Achieved!
-              </h2>
-
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1 uppercase font-display leading-tight tracking-tight px-2 drop-shadow-sm dark:text-slate-400">
-                {levelUpData.levelName}
-              </h1>
-
-              <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent my-4"></div>
-
-              <p className="text-xs sm:text-[13px] leading-relaxed font-sans text-slate-600 max-w-sm px-2 dark:text-slate-300">
-                Congratulations, <strong className="text-slate-800 dark:text-slate-400">{currentUser?.name}</strong>! Your technical contributions, notebook logs, and laboratory hour accumulations have elevated your rank in the RoboRaiders Championship Arena.
-              </p>
-
-              {/* Progress Seal Plate */}
-              <div className={`mt-5 p-3 rounded-xl border ${
-                isDark ? 'bg-slate-950/60 border-slate-800/80' : 'bg-slate-50 border-slate-200/80'
-              } flex items-center gap-4 w-full max-w-xs justify-center`}>
-                <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-indigo-600 rounded-lg flex items-center justify-center font-mono font-black text-white text-lg shadow-md shrink-0">
-                  {levelUpData.level}
-                </div>
-                <div className="text-left font-sans">
-                  <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider block leading-none dark:text-slate-500">Guild Standing</span>
-                  <span className="text-xs font-bold text-slate-800 uppercase mt-1 block leading-none truncate max-w-[170px] dark:text-slate-400">{levelUpData.levelName}</span>
-                </div>
-              </div>
-
-              {/* Close / Claim button */}
-              <button
-                type="button"
-                onClick={handleDismissLevelUp}
-                className="mt-6 w-full max-w-xs py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-extrabold text-[11px] sm:text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20 active:scale-[0.98] cursor-pointer"
-              >
-                Acknowledge Achievement!
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-        </div> {/* closing WORKSPACE SCREEN CONTENT PANEL */}
-      </div> {/* closing WORKSPACE SIDEBAR + VIEW CONTENT WRAPPER */}
-
-      {/* Dynamic Batch Print Container - ONLY printed, completely invisible on screen, styles strictly adjusted for print */}
-      {entriesToPrint && entriesToPrint.length > 0 && (
-        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans dark:bg-slate-900">
-          
-          {/* Dynamic page sizing for print based on paper format selection */}
-          <style dangerouslySetInnerHTML={{__html: `
-            @media print {
-              @page { 
-                size: ${exportPaperSize === 'letter' ? '8.5in 11in' : exportPaperSize === 'a4' ? '210mm 297mm' : '8.5in 14in'};
-                margin: 15mm !important;
-              }
-              body {
-                background: white !important;
-                color: black !important;
-                margin: 0 !important;
-                padding: 0 !important;
-              }
-              .print-only {
-                display: block !important;
-              }
-            }
-          `}} />
-
-          {/* TITLE PAGE */}
-          {exportShowCover && (
-            <div 
-              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12 dark:bg-slate-900"
-              style={{ pageBreakAfter: 'always', minHeight: exportPaperSize === 'legal' ? '300mm' : '240mm' }}
-            >
-              <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
-                <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
-                  <span className="font-extrabold text-2xl tracking-tighter">RR</span>
-                </div>
-                <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-950 mb-2 dark:text-slate-400">
-                  RoboRaiders Team Portal
-                </h1>
-                <p className="text-sm font-mono uppercase tracking-widest text-slate-600 mb-8 dark:text-slate-300">
-                  Official Engineering Notebook
-                </p>
-                
-                <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
-                
-                <p className="text-base font-extrabold text-slate-800 uppercase tracking-wide dark:text-slate-400">
-                  FIRST Tech Challenge Team #6567
-                </p>
-              </div>
-
-              <div className="mt-auto border-t-2 border-slate-950 pt-6">
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-705">
-                  <div>
-                    <p><strong>DOCUMENT TYPE:</strong> Compiled Ledger</p>
-                    <p><strong>EXPORTED ON:</strong> {new Date().toISOString().split('T')[0]}</p>
-                    <p><strong>PAPER SIZE:</strong> {exportPaperSize.toUpperCase()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p><strong>RECORDS CLASSIFIED:</strong> {entriesToPrint.length} Entries</p>
-                    <p><strong>STATUS:</strong> Verified Team Records</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TABLE OF CONTENTS */}
-          {exportShowTOC && (
-            <div 
-              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
-              style={{ pageBreakAfter: 'always', minHeight: exportPaperSize === 'legal' ? '300mm' : '240mm' }}
-            >
-              <div className="border-b-4 border-slate-950 pb-4 mb-6">
-                <h2 className="text-2xl font-black uppercase tracking-wider text-slate-950 font-display dark:text-slate-400">
-                  Table of Contents
-                </h2>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
-                  FTC #6567 Compiled Notebook Binder
-                </p>
-              </div>
-
-              <div className="flex-1 mt-4">
-                <table className="w-full text-left text-xs text-slate-800 dark:text-slate-400">
-                  <thead>
-                    <tr className="border-b-2 border-slate-950 font-mono font-bold text-slate-500 uppercase text-[10px] dark:text-slate-400">
-                      <th className="py-2 pr-4 w-1/6">REF ID</th>
-                      <th className="py-2 pr-4 w-1/6">DATE</th>
-                      <th className="py-2 pr-4 w-1/4">AUTHOR</th>
-                      <th className="py-2 pr-4 w-1/4">SUBTEAM CATEGORY</th>
-                      <th className="py-2 text-right w-1/12">PAGE</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {entriesToPrint.map((entry, idx) => {
-                      const startingPageIndex = (exportShowCover ? 1 : 0) + (exportShowTOC ? 1 : 0) + 1;
-                      return (
-                        <tr key={entry.id} className="align-top">
-                          <td className="py-3 pr-4 font-mono font-bold text-slate-950 dark:text-slate-400">{getEntryReferenceCode(entry, entries)}</td>
-                          <td className="py-3 pr-4 font-mono">{entry.date}</td>
-                          <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-slate-400">{entry.author}</td>
-                          <td className="py-3 pr-4 text-slate-750 font-mono text-[10px] uppercase dark:text-slate-400">{entry.subteam}</td>
-                          <td className="py-3 text-right font-mono text-slate-500 font-bold dark:text-slate-400">{idx + startingPageIndex}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-auto border-t border-slate-300 pt-4 text-center text-[10px] font-mono text-slate-400 dark:text-slate-500 dark:border-slate-800">
-              </div>
-            </div>
-          )}
-
-          {entriesToPrint.map((entry, index) => {
-            return (
-              <div 
-                key={entry.id} 
-                className={`flex-1 flex flex-col gap-4 p-6 bg-white border border-slate-200 rounded-lg mb-8 relative print:border-none print:p-0 ${
-                  index < entriesToPrint.length - 1 ? 'break-after-page' : ''
-                }`}
-                style={{ pageBreakAfter: index < entriesToPrint.length - 1 ? 'always' : 'auto', minHeight: exportPaperSize === 'legal' ? '300mm' : '240mm' }}
-              >
-                {/* FTC Header Plate */}
-                <div className="border-b-4 border-slate-950 pb-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950 dark:bg-slate-800 dark:text-slate-400">
-                      {entry.subteam}
-                    </span>
-                    <h4 className="text-xs font-black text-slate-950 uppercase font-display tracking-widest dark:text-slate-400">
-                      SUBTEAM JOURNAL ENTRY
-                    </h4>
-                  </div>
-
-                  <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 flex flex-col gap-0.5 dark:text-slate-300">
-                    <div><strong>REF ID:</strong> <span className="font-extrabold text-slate-950 select-all tracking-wider bg-slate-100 px-1 rounded dark:bg-slate-800 dark:text-slate-400">{getEntryReferenceCode(entry, entries)}</span></div>
-                    <div><strong>DATE:</strong> {entry.date}</div>
-                    <div className="flex items-center gap-1 sm:justify-end">
-                      <strong>AUTHOR:</strong>{' '}
-                      <span className="font-bold text-slate-950 dark:text-slate-400">
-                        {entry.author}
-                      </span>
-                      {(() => {
-                        const p = profiles.find(prof => prof.name === entry.author || prof.name === entry.author.split('(')[0].trim());
-                        if (p?.tadpoleTag) {
-                          return (
-                            <span className="inline-flex items-center gap-0.5 bg-emerald-100 text-emerald-800 font-mono text-[8px] font-black px-1.5 py-0.5 rounded border border-emerald-250 select-none tracking-wider whitespace-nowrap animate-pulse ms-1">
-                              üê∏ TADPOLE
-                            </span>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Content Fields Map */}
-                <div className="space-y-3.5 text-xs text-slate-950 dark:text-slate-400">
-                  
-                  {/* What We Planned */}
-                  <div className="bg-white border border-slate-300 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
-                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5 dark:text-slate-400 dark:border-slate-800">
-                      What we planned
-                    </strong>
-                    <p className="text-slate-950 leading-normal font-medium text-[11px] whitespace-pre-wrap dark:text-slate-400">
-                      {entry.planned}
-                    </p>
-                  </div>
-
-                  {/* What We Accomplished */}
-                  <div className="bg-white border border-slate-300 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
-                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5 dark:text-slate-400 dark:border-slate-800">
-                      What we accomplished
-                    </strong>
-                    <p className="text-slate-950 leading-normal text-[11px] whitespace-pre-wrap dark:text-slate-400">
-                      {entry.accomplished}
-                    </p>
-                  </div>
-
-                  {/* Problems & Solutions */}
-                  <div className="bg-white border border-slate-300 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
-                    <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1.5 font-bold border-b border-slate-200 pb-0.5 dark:text-slate-400 dark:border-slate-800">
-                      Problems and solutions found
-                    </strong>
-                    {entry.problemsAndSolutions.length === 0 ? (
-                      <p className="text-slate-400 italic text-[11px] dark:text-slate-500">No active blockers recorded.</p>
-                    ) : (
-                      <div className="space-y-2.5">
-                        {entry.problemsAndSolutions.map((p, idx) => (
-                          <div key={idx} className="flex gap-2.5 items-start pl-0.5 animate-none">
-                            <span className="bg-slate-950 text-white text-[9px] font-bold px-1.5 rounded mt-0.5 shrink-0">
-                              {idx + 1}
-                            </span>
-                            <div className="text-slate-950 leading-normal text-[11px] font-medium whitespace-pre-wrap dark:text-slate-400">
-                              {p}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Plan for next time */}
-                  {entry.planNextTime && (
-                    <div className="bg-white border border-slate-300 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
-                      <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold border-b border-slate-200 pb-0.5 dark:text-slate-400 dark:border-slate-800">
-                        Plan for next time
-                      </strong>
-                      <p className="text-slate-950 leading-normal text-[11px] whitespace-pre-wrap dark:text-slate-400">
-                        {entry.planNextTime}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Notebook imagery */}
-                  {entry.images.length > 0 && (
-                    <div className="space-y-1.5">
-                      <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] font-bold dark:text-slate-400">
-                        Session Imagery Proofs (Chassis maps, tests, wiring diagrams)
-                      </strong>
-                      <div className="grid grid-cols-2 gap-2">
-                        {entry.images.map((img) => (
-                          <div key={img.id} className="border border-slate-300 bg-white rounded p-1 flex flex-col gap-1 dark:bg-slate-900 dark:border-slate-800">
-                            <div className="aspect-[4/3] rounded overflow-hidden bg-slate-100 flex items-center justify-center border border-slate-200 dark:bg-slate-800 dark:border-slate-800">
-                              <img 
-                                src={img.dataUrl} 
-                                alt={img.name} 
-                                className="max-h-full max-w-full object-contain pointer-events-none"
-                                referrerPolicy="no-referrer"
-                              />
-                            </div>
-                            <div className="text-[9px] font-mono text-slate-550 px-1 truncate shrink-0 dark:text-slate-300">
-                              üìÅ {img.name} ({(img.size / 1024).toFixed(1)} KB)
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-
-                {/* Physical signature box */}
-                <div className="mt-auto pt-3 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2 dark:text-slate-400 dark:border-slate-800">
-                  <span>FTC CENTRALIZED LEDGER IDENTIFIER AND PROOF ‚Äî VERIFIED LOCAL SYNC</span>
-                  {entry.status === 'Approved' ? (
-                    <span className="shrink-0 text-emerald-700 font-extrabold flex items-center gap-1 uppercase tracking-wider">
-                      ‚úîÔ∏è SIGNED OFF BY MENTOR: {entry.reviewer || 'TESTMENTOR'}
-                    </span>
-                  ) : (
-                    <span className="shrink-0 border-b border-slate-900 w-[200px] text-right">SIGNATURE: ___________________</span>
-                  )}
-                </div>
-
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Dynamic Time Sheets Print Container - ONLY printed, completely invisible on screen, styles adjusted for print */}
-      {timeEntriesToPrint && timeEntriesToPrint.length > 0 && (
-        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans dark:bg-slate-900">
-          
-          {/* TITLE COVER PAGE */}
-          {timeExportShowCover && (
-            <div 
-              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12 dark:bg-slate-900"
-              style={{ pageBreakAfter: 'always', minHeight: timeExportPaperSize === 'legal' ? '300mm' : '240mm' }}
-            >
-              <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
-                <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
-                  <span className="font-extrabold text-2xl tracking-tighter">RR</span>
-                </div>
-                <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
-                  RoboRaiders Team Portal
-                </h1>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8 dark:text-slate-300">
-                  Time Records Report
-                </p>
-                
-                <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
-                
-                <p className="text-sm font-bold text-slate-800 uppercase tracking-wide dark:text-slate-400">
-                  FIRST Tech Challenge Team #6567
-                </p>
-              </div>
-
-              <div className="mt-auto border-t-2 border-slate-950 pt-6">
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700 dark:text-slate-300">
-                  <div>
-                    <p><strong>DOCUMENT TYPE:</strong> Time Ledger</p>
-                    <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
-                    <p><strong>PAPER SIZE:</strong> {timeExportPaperSize.toUpperCase()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p><strong>RECORDS CLASSIFIED:</strong> {timeEntriesToPrint.length} Entries</p>
-                    <p><strong>CUMULATIVE STRENGTH:</strong> {timeEntriesToPrint.reduce((acc, c) => acc + (c.durationHours || 0), 0).toFixed(2)} hrs</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TABLE OF CONTENTS / SUMMARY LOG */}
-          {timeExportShowTOC && (
-            <div 
-              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
-              style={{ pageBreakAfter: 'always', minHeight: timeExportPaperSize === 'legal' ? '300mm' : '240mm' }}
-            >
-              <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
-                    Summary Table
-                  </h2>
-                  <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
-                    FTC #6567 Time Ledger Index
-                  </p>
-                </div>
-                <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5 dark:text-slate-300">
-                  <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950 dark:text-slate-400">{timeEntriesToPrint.length} Records</span></div>
-                  <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded dark:text-slate-400 dark:border-slate-800">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
-                </div>
-              </div>
-
-              <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
-                <thead>
-                  <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100 dark:bg-slate-800 dark:text-slate-300">
-                    <th className="py-2.5 px-2">Date</th>
-                    <th className="py-2.5 px-2">Team Member</th>
-                    <th className="py-2.5 px-2">Subteam</th>
-                    <th className="py-2.5 px-2 text-right">Duration</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {timeEntriesToPrint.slice(0, 45).map((ev, index) => (
-                    <tr key={ev.id} className="border-b border-slate-300 dark:border-slate-800">
-                      <td className="py-3 px-2 font-mono">{ev.date}</td>
-                      <td className="py-3 px-2 font-bold">{ev.userName}</td>
-                      <td className="py-3 px-2 font-mono text-[9px] uppercase">{ev.subteam}</td>
-                      <td className="py-3 px-2 text-right font-extrabold">{ev.durationHours.toFixed(2)} hrs</td>
-                    </tr>
-                  ))}
-                  {timeEntriesToPrint.length > 45 && (
-                    <tr>
-                      <td colSpan={4} className="py-4 text-center italic text-xs text-slate-500 dark:text-slate-400">
-                        ... and {timeEntriesToPrint.length - 45} more records enclosed ...
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-
-              <div className="mt-auto border-t border-slate-400 pt-6 dark:border-slate-800">
-                <div className="flex justify-between text-[11px] font-mono text-slate-600 dark:text-slate-300">
-                  <span>FTC #6567 TIME BINDER INDEX SUMMARY</span>
-                  <span>SIGNED VERIFIED BY CAPTAIN: _________________</span>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* Header Plate for inline first page if cover is disabled */}
-          {(!timeExportShowCover && !timeExportShowTOC) && (
-            <div className="border-b-4 border-slate-950 pb-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-150 uppercase tracking-wide text-slate-950 animate-none dark:bg-slate-800 dark:text-slate-400">
-                    ROBORAIDERS TIME LEDGER
-                  </span>
-                </div>
-                <h1 className="text-xl font-extrabold uppercase mt-1">
-                  {timeExportScope === 'all' && 'Entire Team Cumulative Time Report'}
-                  {timeExportScope === 'members' && 'Individual Participant Time Sheets'}
-                  {timeExportScope === 'subteam' && `Subteam Time Sheet ‚Äî ${selectedTimeExportSubteam}`}
-                </h1>
-              </div>
-
-              <div className="text-left sm:text-right text-[10px] font-mono text-slate-700 space-y-0.5 dark:text-slate-300">
-                <div><strong>GENERATED:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>
-                <div><strong>TOTAL ENTRIES:</strong> <span className="font-bold text-slate-950 dark:text-slate-400">{timeEntriesToPrint.length} Records</span></div>
-                <div><strong>CUMULATIVE TIME:</strong> <span className="font-extrabold text-slate-950 bg-slate-105 px-1 border border-slate-300 rounded dark:text-slate-400 dark:border-slate-800">{timeEntriesToPrint.reduce((sum, e) => sum + e.durationHours, 0).toFixed(2)} Hours</span></div>
-                <div><strong>TEAM NUMBER:</strong> FTC #6567</div>
-              </div>
-            </div>
-          )}
-
-          {/* Render individual tables per member if in "members" mode to give professional layout, or print a single consolidated master registry for "all" or "subteam" options */}
-          {timeExportScope === 'members' ? (
-            // Print separate elegant timecard sections per selected member
-            (() => {
-              // Group entries by userEmail
-              const grouped: { [email: string]: TimeEntry[] } = {};
-              timeEntriesToPrint.forEach(entry => {
-                const email = entry.userEmail;
-                if (!grouped[email]) grouped[email] = [];
-                grouped[email].push(entry);
-              });
-
-              return Object.keys(grouped).map((email, gIdx) => {
-                const userEntries = grouped[email].sort((a,b) => a.date.localeCompare(b.date));
-                const totalHours = userEntries.reduce((sum, e) => sum + e.durationHours, 0);
-                const userName = userEntries[0]?.userName || email;
-
-                return (
-                  <div 
-                    key={email} 
-                    className={`pb-6 mb-8 border-b border-dashed border-slate-300 text-slate-900 dark:text-slate-300 ${
-                      gIdx < Object.keys(grouped).length - 1 ? 'break-after-page' : ''
-                    }`}
-                    style={{ pageBreakAfter: gIdx < Object.keys(grouped).length - 1 ? 'always' : 'auto' }}
-                  >
-                    <div className="flex justify-between items-end border-b border-slate-950 pb-2 mb-4">
-                      <div>
-                        <h2 className="text-base font-black text-slate-950 uppercase dark:text-slate-400">{userName}</h2>
-                        <p className="text-[10px] text-slate-500 font-mono tracking-wide dark:text-slate-400">{email}</p>
-                      </div>
-                      <div className="text-right text-[10px] font-mono">
-                        <div><strong>SUBTEAM Focus:</strong> <span className="font-bold">{userEntries[0]?.subteam}</span></div>
-                        <div><strong>INDIVIDUAL STRENGTH:</strong> <span className="font-extrabold text-slate-950 dark:text-slate-400">{totalHours.toFixed(2)} Hours</span></div>
-                      </div>
-                    </div>
-
-                    <table className="w-full text-left text-[11px] font-sans border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-950 text-[10px] uppercase font-mono text-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-slate-300">
-                          <th className="py-2 px-1">Date</th>
-                          <th className="py-2 px-1">Subteam Focus</th>
-                          <th className="py-2 px-1">Shift Period</th>
-                          <th className="py-2 px-1 text-right">Duration</th>
-                          <th className="py-2 px-1.5 pl-4 max-w-xs">Task Details / Contributions Log</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {userEntries.map((e) => (
-                          <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800">
-                            <td className="py-3 px-1 font-mono whitespace-nowrap">{e.date}</td>
-                            <td className="py-3 px-1 font-medium">{e.subteam}</td>
-                            <td className="py-3 px-1 font-mono text-slate-500 whitespace-nowrap dark:text-slate-400">{e.startTime} - {e.endTime}</td>
-                            <td className="py-3 px-1 text-right font-bold whitespace-nowrap">{e.durationHours.toFixed(2)} hrs</td>
-                            <td className="py-3 px-1.5 pl-4 break-words text-slate-800 leading-relaxed max-w-xs dark:text-slate-400">{e.taskDescription}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-
-                    <div className="mt-8 flex justify-end text-[9px] font-mono text-slate-500 dark:text-slate-400">
-                      <span className="border-b border-slate-955 w-44 text-right">MEMBER SIGNATURE: _________________</span>
-                    </div>
-                  </div>
-                );
-              });
-            })()
-          ) : (
-            // A single clean, consolidated master log table for All or Subteam focus scope
-            <div className="space-y-4">
-              <table className="w-full text-left text-[11px] font-sans border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-955 text-[10px] uppercase font-mono text-slate-700 bg-slate-50 dark:bg-slate-800 dark:text-slate-300">
-                    <th className="py-2 px-1">Date</th>
-                    <th className="py-2 px-1">Team Participant</th>
-                    <th className="py-2 px-1">Subteam Focus Area</th>
-                    <th className="py-2 px-1 text-center">Shift Range</th>
-                    <th className="py-2 px-1 text-right">Hours</th>
-                    <th className="py-2 px-3 pl-4 max-w-md">Contribution Narrative</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {timeEntriesToPrint.sort((a,b) => a.date.localeCompare(b.date) || a.userName.localeCompare(b.userName)).map((e) => (
-                    <tr key={e.id} className="border-b border-slate-200 dark:border-slate-800">
-                      <td className="py-3 px-1 font-mono whitespace-nowrap">{e.date}</td>
-                      <td className="py-3 px-1 font-bold text-slate-955">{e.userName}</td>
-                      <td className="py-3 px-1 font-medium">{e.subteam}</td>
-                      <td className="py-3 px-1 text-center font-mono text-slate-500 whitespace-nowrap dark:text-slate-400">{e.startTime} ‚Äì {e.endTime}</td>
-                      <td className="py-3 px-1 text-right font-bold whitespace-nowrap">{e.durationHours.toFixed(2)} hr</td>
-                      <td className="py-3 px-3 pl-4 text-slate-800 leading-relaxed break-words max-w-md dark:text-slate-400">{e.taskDescription}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <div className="pt-8 flex justify-end text-[9px] font-mono text-slate-500 dark:text-slate-400">
-                <span className="border-b border-slate-950 w-52 text-right">MENTOR/CAPTAIN REVIEWER SIGNATURE: _________________</span>
-              </div>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* Dynamic Outreach Events Print Container - ONLY printed, completely invisible on screen, styles adjusted for print */}
-      {outreachEventsToPrint && outreachEventsToPrint.length > 0 && (
-        <div className="print-only bg-white text-black min-h-screen p-0 m-0 z-[200] relative font-sans dark:bg-slate-900">
-          
-          {/* TITLE COVER PAGE */}
-          {outreachExportShowCover && (
-            <div 
-              className="flex flex-col justify-between p-12 bg-white text-black m-0 relative border-4 border-double border-slate-950 mb-12 dark:bg-slate-900"
-              style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
-            >
-              <div className="flex flex-col items-center justify-center flex-1 text-center my-auto min-h-[170mm]">
-                <div className="w-24 h-24 mb-6 border-4 border-slate-950 flex items-center justify-center rounded-full mx-auto">
-                  <span className="font-extrabold text-2xl tracking-tighter">RR</span>
-                </div>
-                <h1 className="text-4xl font-extrabold uppercase font-display tracking-tight text-slate-955 mb-2">
-                  RoboRaiders Team Portal
-                </h1>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-8 dark:text-slate-300">
-                  Community Outreach & Impact Portfolio
-                </p>
-                
-                <div className="w-32 h-1 bg-slate-950 my-4 mx-auto"></div>
-                
-                <p className="text-sm font-bold text-slate-800 uppercase tracking-wide dark:text-slate-400">
-                  FIRST Tech Challenge Team #6567
-                </p>
-                <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest mt-2 dark:text-slate-400">
-                  {outreachPrintSubtitle}
-                </p>
-              </div>
-
-              <div className="mt-auto border-t-2 border-slate-950 pt-6">
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-700 dark:text-slate-300">
-                  <div>
-                    <p><strong>DOCUMENT TYPE:</strong> Community Impact Portfolio</p>
-                    <p><strong>GENERATED ON:</strong> {new Date().toLocaleDateString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p><strong>CAMPAIGNS CLASSIFIED:</strong> {outreachEventsToPrint.length} Outreach Records</p>
-                    <p><strong>CUMULATIVE HOURS DEPLOYED:</strong> {outreachEventsToPrint.reduce((acc, c) => acc + (c.hoursLogged || 0), 0).toFixed(1)} hrs</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TABLE OF CONTENTS / SUMMARY LOG */}
-          {outreachExportShowTOC && (
-            <div 
-              className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
-              style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
-            >
-              <div className="border-b-4 border-slate-950 pb-4 mb-6">
-                <h2 className="text-2xl font-black uppercase tracking-wider text-slate-955">
-                  Summary Table of Events
-                </h2>
-                <p className="text-xs font-mono uppercase tracking-widest text-slate-500 mt-1 dark:text-slate-400">
-                  FTC #6567 Community Engagement Index
-                </p>
-              </div>
-
-              <table className="w-full text-left text-[11px] font-sans border-collapse mt-4">
-                <thead>
-                  <tr className="border-b-2 border-slate-955 text-[10px] uppercase font-mono text-slate-700 font-bold bg-slate-100 dark:bg-slate-800 dark:text-slate-300">
-                    <th className="py-2.5 px-2">Date</th>
-                    <th className="py-2.5 px-2">Campaign Initiative Title</th>
-                    <th className="py-2.5 px-2">Location Venue</th>
-                    <th className="py-2.5 px-2 text-right">Devoted Team Hours</th>
-                  <th className="py-2.5 px-2 text-right">Reps Tagged</th>
-                </tr>
-              </thead>
-              <tbody>
-                {outreachEventsToPrint.map((ev, index) => (
-                  <tr key={ev.id} className="border-b border-slate-300 dark:border-slate-800">
-                    <td className="py-3 px-2 font-mono">{ev.date}</td>
-                    <td className="py-3 px-2 font-bold">
-                      <div>{ev.title}</div>
-                      {(ev.reachedChildren !== undefined || ev.reachedAdults !== undefined) && (
-                        <div className="text-[9px] text-slate-500 font-mono font-normal mt-0.5 dark:text-slate-400">
-                          Reach: {ev.reachedChildren || 0} children (under 18) / {ev.reachedAdults || 0} adults (18+)
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-2 text-slate-700 dark:text-slate-300">{ev.location}</td>
-                    <td className="py-3 px-2 text-right font-extrabold">{ev.hoursLogged} hrs</td>
-                    <td className="py-3 px-2 text-right font-mono text-slate-600 dark:text-slate-300">{ev.participants ? ev.participants.length : 0}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="mt-auto border-t border-slate-400 pt-6 dark:border-slate-800">
-              <div className="flex justify-between text-[11px] font-mono text-slate-600 dark:text-slate-300">
-                <span>FTC #6567 OUTREACH BINDER LEDGER INDEX SUMMARY</span>
-                <span>SIGNED VERIFIED BY CAPTAIN: _________________</span>
-              </div>
-            </div>
-          </div>
-          )}
-
-          {/* INDIVIDUAL EVENT PROFILE SHEETS */}
-          {outreachEventsToPrint.map((ev) => {
-            return (
-              <div 
-                key={ev.id}
-                className="flex flex-col p-12 bg-white text-black min-h-screen relative mb-12 dark:bg-slate-900"
-                style={{ pageBreakAfter: 'always', minHeight: outreachExportPaperSize === 'legal' ? '300mm' : '240mm' }}
-              >
-                {/* Header card info */}
-                <div className="border-b-4 border-slate-950 pb-4 mb-6 flex justify-between items-start">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-mono font-black border border-slate-950 px-2.5 py-0.5 rounded bg-slate-100 uppercase tracking-wide dark:bg-slate-800">
-                      FTC Community Initiative Record
-                    </span>
-                    <h2 className="text-2xl font-extrabold uppercase font-display tracking-tight text-slate-950 mt-1 dark:text-slate-400">
-                      {ev.title}
-                    </h2>
-                  </div>
-                  <div className="text-right text-[10px] font-mono text-slate-705">
-                    <div><strong>DATE:</strong> {ev.date}</div>
-                    <div><strong>LOCATION:</strong> {ev.location}</div>
-                    <div><strong>HOURS DEVOTED:</strong> <span className="font-extrabold text-slate-950 dark:text-slate-400">{ev.hoursLogged} hrs</span></div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-6">
-                  {/* Campaign Impact Description */}
-                  <div className="bg-white border border-slate-300 p-4 rounded-xl dark:bg-slate-900 dark:border-slate-800">
-                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1 dark:text-slate-300 dark:border-slate-800">
-                      1. Workshop Objective & Community Experience Narrative
-                    </strong>
-                    <p className="text-slate-900 leading-relaxed text-[11.5px] font-medium whitespace-pre-wrap dark:text-slate-400">
-                      {ev.description}
-                    </p>
-                  </div>
-
-                  {/* Impact & Alignment Metrics */}
-                  <div className="bg-white border border-slate-300 p-4 rounded-xl dark:bg-slate-900 dark:border-slate-800">
-                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1 dark:text-slate-300 dark:border-slate-800">
-                      2. Quantifiably Measured Impact & Target Demographics
-                    </strong>
-                    {(ev.reachedChildren !== undefined || ev.reachedAdults !== undefined) && (
-                      <div className="mb-3 text-[11px] font-mono text-slate-900 border-b border-slate-100 pb-2 dark:text-slate-400 dark:border-slate-800">
-                        <strong className="text-slate-505">DIRECT ESTIMATED REACH:</strong>
-                        <div className="flex gap-4 mt-1 font-extrabold">
-                          <span>üëß Children (under 18): <span className="text-slate-950 font-black dark:text-slate-400">{ev.reachedChildren || 0}</span></span>
-                          <span>üë® Adults (18+): <span className="text-slate-950 font-black dark:text-slate-400">{ev.reachedAdults || 0}</span></span>
-                        </div>
-                      </div>
-                    )}
-                    {ev.impactMetrics ? (
-                      <p className="text-slate-900 font-bold font-mono tracking-normal leading-relaxed text-xs whitespace-pre-wrap dark:text-slate-400">
-                        {ev.impactMetrics}
-                      </p>
-                    ) : (
-                      <p className="text-slate-400 italic text-[11px] font-mono dark:text-slate-500">No specific event metrics logged.</p>
-                    )}
-                  </div>
-
-                  {/* Tagged Active Participants */}
-                  <div className="bg-white border border-slate-300 p-4 rounded-xl dark:bg-slate-900 dark:border-slate-800">
-                    <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] mb-2 font-black border-b border-slate-200 pb-1 dark:text-slate-300 dark:border-slate-800">
-                      3. Registered Representing Team Members
-                    </strong>
-                    {ev.participants && ev.participants.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {ev.participants.map((name, idx) => (
-                          <span 
-                            key={idx} 
-                            className="bg-slate-100 border border-slate-300 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                          >
-                            üë§ {name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-slate-400 italic text-[11.2px] font-mono dark:text-slate-500">No representatives registered for this event.</p>
-                    )}
-                  </div>
-
-                  {/* Attachment proofs */}
-                  {ev.images && ev.images.length > 0 && (
-                    <div className="space-y-2 mt-2">
-                      <strong className="block text-slate-600 uppercase font-mono tracking-widest text-[9px] font-black dark:text-slate-300">
-                        4. Photographical Verification Attachment & Interactive Proofs
-                      </strong>
-                      <div className="grid grid-cols-2 gap-3.5">
-                        {ev.images.map((img) => (
-                          <div key={img.id} className="border border-slate-300 bg-white rounded-lg p-1.5 flex flex-col gap-1.5 dark:bg-slate-900 dark:border-slate-800">
-                            <div className="aspect-[4/3] rounded-md overflow-hidden bg-slate-50 flex items-center justify-center border border-slate-250 dark:bg-slate-800 dark:border-slate-800">
-                              <img 
-                                src={img.dataUrl} 
-                                alt={img.name} 
-                                className="max-h-full max-w-full object-contain pointer-events-none"
-                                referrerPolicy="no-referrer"
-                              />
-                            </div>
-                            <div className="text-[9px] font-mono text-slate-500 px-1 truncate shrink-0 dark:text-slate-400">
-                              üìÅ {img.name} ({(img.size / 1024).toFixed(1)} KB)
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Proof sign off signature line */}
-                <div className="mt-auto pt-4 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2 dark:text-slate-400 dark:border-slate-800">
-                  <span>FTC #6567 OUTREACH BINDER INTEGRITY STAMP ‚Äî VERIFIES LOCAL SYNCHED LEDGERS</span>
-                  <span className="shrink-0 font-bold border-b border-slate-950 w-64 text-right">
-                    VERIFIED BY MENTOR SIGNATURE: _________________
-                  </span>
-                </div>
-
-              </div>
-            );
-          })}
-
-        </div>
-      )}
-    </div>
-  );
-}
+               xúÏ}›R„HöË˝<E6;€òillÉ´(ñ¢◊¶ö
+€To/At	;±5%[IÆÇfàÿÛg#v#Êf#ˆˆ‹ú˚Ωü7ô8˚Á˚2SRJ LI6‘O7än ñ•¸˝Ú˚ˇ!Ñ‹ØU÷ÓG2◊ÓåÀ˜O¨	}π–õ†zÒbvsIÿGﬂ±Z›™◊…µ;™wÍáZC{:™N]ob9‰ ıÜ‘´·˛J^ô’f≠E&Aµˇ-Ô˝é‘hû`˜Ôm◊Î+{äaÚ“S‚ﬂ˙ùêÅ;ôŸıâ=⁄Ï·‚—¥‰ìı»ÃQb_ü:t¿h…ÑNÆ®ÁØ◊#ôOÌkõ·ùôÎ09ÊkM6¸˘˛Î◊»˛ÿu}JVz÷J,üúÆê¿%#:•åî0öôgOÎ °dËÊ:j™%ﬁòeß¥ªOﬂV‹∑˜Ó6˛@ﬁıŒ€«‰¨˝∫CŒ∫ù∑Gù…˛ÈIø}t“È¬ÌìŒ1˘√Fr«Ô{B;78Âﬁÿ˝xÊ—6˝Hæ˝ñT“ÅNe∏∏vËMµA‹‘ªv‹è’€™5á≈òUü¸â˝©\áå,ºg√˘’¨Ï≈ƒ∫©é´€ı„Kr5›®◊7^¥ƒ,Ma5Ø™ç¶b˜”É˘XΩû;k˜c’Ò$∫¸”‹ÏÎ€Í>R:AÛJ£W’&ô‡xc˛∂xV≠'Ü…∆ <ª©nœùOátà›^YÉ˜CørÊ^u2$˛¿·=º˝º&`{√u	hW-rÜ∏Œ0(ÕYŸ=∂n›y–ßìˆì\º-2ÜˇŸI‹ZSv≠©=¡]ÃÊéOﬁÙ∂ß◊ˆ∫º\!öN¸ô5Õ"èF±CWÆ3$Û»Åg)`≈s|¥á‘dÛ,Åa“®bSã9∂·|ˆÆ˝1•ÅO+;ö—±	?˜"æÖ7÷sÏ)]Ÿì ô√ÔŸø–Z‡û„Tˆa*ÄJw7∞Õ hSûzÂb∆´°«…˙•çq4ú+Ê’,goø}‹9Òâr¸Íô©∞^wï yπGÓm94Ä3∆0–Œ4lÍÔ∞ùƒ/∑ó‰%π∏¸≈ãÄ◊+&∏3J^æ|IV-«Y]SˆE“=A„ÅË
+æ©zπ'éÇæ3APÎ∞vm;på+.«Åtÿè∫y√€ÆŸ”Å3á≠µπOΩŒƒ≤ùµµEF+€£å∂«€Êµa»üˇLÇö/›÷æ§ûLê¯ÆßFYsËtåYu›Ã<ÃΩiÜ¬ÖW’NnÅ	Ï»QÌ¨∫-ËFH>Ü õaíò é
+âRèèc¿ùÇD˘ìÙ¡M“Ü	|¥wƒ¶“v®Ù=€öéú“ﬂ§øùB˙ìN≈ë¸i±<k8À#ﬁ¯æŒEˆﬁ ﬁâK∫ÇA{ÉªHáJ∂»–•†,»N¶yP;∞{∞≤˜∆Ÿ'@˚<¬Åˇ[rÊπ æî∏≥¿vß>qßåusËuÄ¸ú=ıg ö‰ÉÌ#âPO8)©®≈„ÑáË« Éˇ¡ÉóÜnèÁZ©¯Û…:°è¬GÚ°µ·xPòŒ0S‡iÎ Ny˚3$`m6….æÌ$u„áP2@¸*˘û¨n«≥AçU≤cz~d9Ú„[¯¯j?÷∂‡€?®Êm<ëJ÷'≈^&@`ºú—Ïòπêüπ∂Ü¥jOµáFsÏ}dv…
+!£úÊß•íú5W¡WÎÁ·å$™»•U†¥Ü.„w?V/6∑ŸY@‘î\ %,æJËÂ41Ûc{8&Ÿ£rS˘ÿ	pÿ
+0Ã∑}yw“Q\;Ypªø◊ürXÜq#ã[ÅQ@!J·˚}—l’#^(1ÉÌ!qâêLóIvª„Ü±˚åh—xò≤Å(<∆ìW’g+{Ü#/⁄“¢¨/c¯ﬁXÃNµ˙{á˝}“GÚ˙¨ıÏπïd|Â¿Ãú%Cø¶—1ÓÚn
+«Â æV÷Äo>vñCÒk0€tƒÿgÛà”T9©◊≈vän%Dyd‚$Õ d‰>≈öñ¶∑l†~‡π”—^oˇÙ¨≥Ï1ˇö@Hà““√ïg†∑r√˝”>à˘˝£7…÷9—ÄVÌ:¨4◊Ó…ßÁ›ûiMÕ l¸yMI¿BTŸ?›_Q‚õüM¶’_&*lfé)∞éJT®Vh‡TBÖ∆‡C¶ôrØÅî¡yò>`√fôSó•ΩÕÙQcx$Ôå®öÕS—ËxlT∆,tRÖåΩ◊®ëﬁ|2±º[r
+€éjíÂ3Øy8óV|iã“¨ëÄt	≠32*x–2+”¸bWFÖÁóîµ‰âoDŸ£©\-HŒﬂíˆlÊπ,ß‘Í•	FR… ,ˆ&p÷-£⁄©?%x T›J°ÍÙŒy®;3q≈|°ˇçFùœj‰πa¢õµº©NÏiu\≠âó4Ç‰nÈ≥ïOG6âÚ¸q9√,/»?%π√bO©’…œì|™DïÀå#GKHÅuX_I#ÎÛ5ÃmVcü;3º#ÏÈûˆ˙ùn˛<!d∂åÚ|˜¨î“%°	Ï—8Ö¶∆3.4yÛÈ -¨	ﬂö˙ÖÊ®FN®nEÓmï…!B˙¬gVu‹_~õ¬Évﬂ˝˛.•π®_~œ4°∏&®e\Ì	≈"*”’{“CÌÕª≈á™J≈¥™KËâ(–p^[π«$ü4f0èÌ¥Úº$ÅAEÙ“Çe˛\pò°x“ÌÏüvz≤l¢V“ﬁsîQhí©>ä?co°¶éﬁJ-„Q˛;.OŸä¨å∆,íèº£iÇ&à@>ñÂÜË¨ùîm0Ww∆tt˛C¸	Ù«±fáÅÇ`†UyÏ^í”í8FiZ›IÑ®[Z[ki–ìáÑ§Å$•é∆VTaÏn„Â[‚ËÍ!⁄"1
+XŸ˚èA±6·9Ø¿6o‹Á›‡ ﬁ"&i·;ˆÄVÍÎ§µVõX≥JÖÎ∫ıJÅdøyOo_ﬁ—ö=ºœ¥Ê¬Ã~‹„0Ω‹; 7#-?g<n› ˜:2≈∫aƒ?¢ËÇ–o◊√C:˘pΩJƒFe¸IpÊ->kŸN!Ï"Ï‚£*© ö(ú“óÜ>ë=“2´¢C*6"˛(¨®ÎÙÄÈ{y∑yØX]YgôUπaK	U%Ã˙™Î;ÌBTAÃ$÷ph„∆Yq‹—àπJq≈˙‚T´©ùî”¯m.¬n¬F“Ãáë¶KË’“.sZÂEÄ
+7Y¸¢SqÃ.û’Z”BkAevJ”–jêe7Î ¥o6QLLaÜàtÁcÆ cıMÁÕ´NóÙé^ü¥˚Á›≥.æÈúÙOª‰mß{tx‘ÈÊ˘‚÷2⁄√è⁄ü∂Zïs¶‚˝§Ó%w®ãoÿí´y†µ;´âW®i">jV›“¯s6Í≠,$rçpËπøë£w˘ À‹ŒpTÏÁ≈ÔÓtP‚˚ów‹≥»ß¡ë/yŒ∏CÀ9ù—iÂ⁄r|™ƒ2æajÅàCmA¬√Åë∂¯òI:¯ëƒRHßŸœ1rÒÒ‡ai}Í3úäº∂Î˘d 4—ı™3◊éiyL,øój1fû*–€w\ü*ú∑¯j? .ç≠È–°gË(ãªtvpòø%[ãmH“Â$2·>ì˜É›yn◊OfwF„oj,˝IzÔƒY©w†!sº+∂'ªlm®óî‹*«¯W„ò√ï∆ØCgdX÷»‚≠Û–So≤“Âx‚‚j‘Rø®ÔGGlw£ÕΩ.Œ<Í”ÈÄF∏	ÒéêQÚÜNÁÑT	=Ìf^;∏≥˝‘ŸNÛiªÒ∏AV€rPªÎŒ¨Å‹Óê:πO†pI<‘H?DoÏ¿‹ål∞@&ãh¿úÅ/ı˙e	?ÜÖG±Fscªïu6û∫UÊ}û2rÃGå©Ì◊¨fb=}¥Ë√2‘^¥÷	Æ¸£_úƒ*ãWÏΩ˙∫a’„u/€]|§ÒmDV;d≈«≠¨ùÃ‡”iB3∏Ù◊SÍ˚;çô¶‚çΩ{ÑjÂ˜w4„Ml≈û›8å_	˝‘WÔc«¿,ÆWi≥µ≤™ÏÜ.pRÛ∆…ÿBí á>¯≠„Àå∫2.x”ö∏≥3Ä6kƒ§∑4sí∆!xæ†éøøÒ"âÖCºø©1no∑Í&SÑ8;&NQÅ¿5⁄WÖ$¿ªá∂C˚0|≠s˝¿‡–Ñæ8U™î¸iœJ%˜)PÌ?Å‹ç2bﬂ¢‚´∆cˆÎŒ‹~PÓm1Œ»qä⁄NÚa[›ó†,‚(Ú∏1%EW ‹≈®¸?+‡D	9ÑZqÙ^{ˆê¯3«`.”¿Ç—z‰„éÜ/·%€'tä‚Ó∞¿!Ò>I2Ó∞œhæ‘h©ìÒ=[™Cóπ¡ú-OOè^üw€˝£”¯v|˛ÊDÈE§ãÓƒ6‰¿›3-˛¶@≥˘vÁ≥§É†4H˝E)EcæÎÕñ.÷GÂvÿ¿um?Hµê#âu˛KÿÅˆy‰¿“‡å"EEF‚¡ZåÌ—∏zx	ÄÒH´7†WƒêG ±∞<üybOÏ_ÿà<`dzÂ∫Ô·‰¸ãÀØ6F„ªæZŸƒ|ïø Hqï∑bã:ü¥¸ï◊«Y	Ç“+Iéñ∑J≠íB†˚Æ5eÂªpµLäêÙ*åß‡\§|=%hIBxÂëÜ íIGT·A>&ùèÃ∞±ò=Êyp>++QJ∫(¡Æs—0E>~ØF	/™≤•Á®ÀÄ±±ràwÿá™€v˘/!"bﬂ6û’´xc£!«‡¬ôDºó◊ÁN‘gGöQI(5»ƒò‡TD†/ô|o0ƒÄ«÷-E†Åñ^d'™–"¯,üTÓh“ÏΩñßÄ‘k_¢'>’—‚a^t¯+<_—‘ûŸg:d=` ˛¬«¨oy#äû>––≤g*_mØe+ ˘åuëá§Á/¥ä≠T„zòÕqë◊Ík‰K“›å)¬rR˜¢P|»ó§æ	ﬂ^EÊw’¨æëØPï≥@ÔÔÄÉ≠2≠A¬éëå‘◊ËVí8®h¿˛B‡œ8RÀ= Ax`KÛ¨yéuEù‹»…£≤p–"¶Ápˆ˚¬»ıns¨vlyÊJ∂ê9˝~∞ú9 .M∏ÓÂºtrå¨t§ã)%o†Bk;¸5÷<&	Á˜gùk•Œ
+±FáÈ¶_T∑…L$ôï]/Í)ù≈µ;ò˚;(®°D·d,ïu!œa∫Ïô¿+◊œCs≈N≠¿Í≠0¶J¨®øª¡»µ'˜Œ_ı;Ì7?ı˙‹ì»ü_Ù%
+¡|â‡µ˚pÛﬁ›5K+!Ftå∞…⁄æ/:∂<ﬂ†hòós4`X$ËπˇE2]ÆÎ‚ky0Îz	√ﬁO·ó'd]#∂Æ¥02Iµs‡Y◊¡ ˚g¡&ŒË’qFWˆíﬂlî«—!LR|Z∞°JY‘Ù€áª+{…Ô≈-ÅƒÙ?´mœÚ•9z˚sÚb÷håÔ!=˚‹ û2HÂ+#˛5h˘åÏ	ù˙,üıc(7Ö»ç7‡Œ…⁄±›U.¬‘Î Wl·_ûZ‚9+ñ«B∏˚ø‰“Û|u	T˛3Z-™U—ÎU¢t8nsg	≠J‰u€0	Ú≈µ	?öLÜÆPeìg+´≤…——ÑZödNˇó\V-÷—XË*FD_6Z—bÒ{œxõ}tG:?¸^îÂ02∫Ê)n ®nÚM.ÊﬁLzó<™òAANëíã…ËeeèG°hS5~€V†∑0c§„(ÑˇÍs=Í/ä*?Õ
+˘Î_H£±Ç^·Ä<◊f£˛◊ø4_<üLòFÙ÷ ∏ãÊÈkıº˛zß–zÛìéCô9üT˙ß˚Î<_Õ:°¡`m	J÷Å©≤ˆDB0*f≤°
+¿)KïÚBqj‚á™I	_ò2r!9	Ìê,~P'<ò·C˜RFH“xö$’Ê:¥ÁWCi^Ë«('–,ì7FeOgsìl√Èﬂ`LÔØ‹dœ–·K…äÅ£È¨D†ıX
+¥K¨$ç≤n¨øœ/%ÖSæ4#G<yüH$’∑áíW÷täa_FÓ*îLü†IŒ≥8,¡ÀøHR$t˘ Iì!∫%gàÆ+2Do.íÒQ¡P¯R-ä¢ÅØ3YjπCæ⁄e~eè%ËMdá:Ù0z∑7ÉqaÔ§„;∫ΩÀ¨:oSAPWˇò√Z›N≠â= 9sŒnOØ›¬,î∆ÏT–Ê$îÈë° ÖœF°¥:âÃ¯§öŒùí≠SÒm≤*8©–ê8A%∑o9É9~2xÚwrÕ¿Jpç}j”÷¸»høU7%¶¥∆Ò≈ÛoÜV‹}Ñ.ÚRÌ˙£„√Î{ít+…{~'z^§Ó•˘√ï-r`∞L≠ÒòUy~i"œo‚AUNRMwL9õÍç€1“ù≈wÂ«ät%“é&¶ˆÌ∑rﬂ˘≠‹Øâ0?*ev=Û¶ÉVòX%≈√∂6`´Ík‰;˘7Lä'˝í  søbäÔ~óÏ˚>¬qL∏IˇLæÅÂl†‹Ï3qyı˛ù©])	~Â!ÍÚìz¸<¢ˇ©èI| ´Œ':oœ4˛cπèàz‘yÁïëE4åÀyÃ„ïäwT◊	ó·Çèç¨ˆQ˘àèœtå÷mY˘»v»®œy¿˝ì"!5QêxâÑ,¥YŸhHNÈ¢ï‰~mÏÎ√FCñ€ô≈‚Ÿõ—∞◊1¿≈\ëAø…∫]IÉãØ∞wU·b*[∆'©øí-æRXè˜ŸK≤‹ñ,…≤L5›Üî©»¬⁄(Xï%∂j,RñÖıÙEîf¡ãIΩÅg_Q°XÕ©–"&ﬂR€g¢-röâªî)◊l±0ã¢)>uùºrkµ‰Õ‘(Á8¬ñ IÒ1ˆd∆öÊ,ˆOÑºÏNË1üWÎ/¨¸°îöt%?í:√∆kµöêà¥›à*Eõ,+`}"¡ÍTÀR˜ JÏCƒ'#£√êhÚïˆ„≤ÜT*÷:π ëÃÖl#o£HfEÀåÈ$W◊íâ⁄ıâõyÖÕ\-ÿ+ÿ√∆Ç2kn-\`vøÊ∞‰˘vgy¥¬ü–∑÷÷∞X¬±p0…6Æ‰ﬂ¥€±¶¨›!MùâêKI∂âMÕ¨Å õÈQ.≥ûÃ·\êÜvål]•ö*…Îf2¸˛z*±È´3#ÖÀ±÷∂dPòÊ5ßlÑ&∂T›†(®„ZDzXW —X*»ß4,$ÍO…üDÄ}~… 6:≥Ûõ7è¢î≠:¬ˆ≈*˚(ü>q·B¡¸hè\Ó ˜>ÿ6óˆßç6Tt!—¸2ÈoAÜk‘@d{Àƒ5Iä3˚KßÌ€,0ß∏*8€>≥ÑºL°≤Ôæ+§◊ÀÛb7/∞BÇÁ´]$€k!Øç“:ùówÔáNßOÓ¬ı∫»ªã±˘=©Ùè˙«Ú™}ÚvnÑ•fyÓﬁïL«≤Ÿ“9w	¿x≈,œ4EGr2Ÿ´Ãü∫ÏˆÔÓÛ◊Áî—ç.{˝¶»^ﬂ`˘âå3+öiWïÀ:TZÑé€ÍvÒÃ¨ŸjNM¨Êƒ¢ÑSJUzÊï194Ü:éú8!,ël≥ê!
+â¬ci`∑[∫EO≈í`ãá«õÖ+Œ∞õC€ü9÷mjúI)6™ã'b∆´Î^π]Ÿü∞,ÛgÄ~-ßbå7ØÖÇqHÂR/§.aúR†pB+7Ò”Îk{`c—ëÚlÑ.jÖßü√,≈◊rù7‰TKxz7„cR
+&óÿÆä⁄)ìÑ±Ù√¬õux‘Ìı>Aﬁ[
+2îÉ+À&ˇ–€Ub= <ÀsåÖ?‚<¥œYhÎf˝VôE.VC$zz∂◊ˇÈ¨≥f´íc:°„]·ë1Ó£¥≤w÷>ÎtwHZÁò©]∏£r[[˛°5öEe»ùJø«ÚOy≤L∫M’bı˙Ì˛9ÙÚ◊µ]@|ì,‰E-Z!‚Å™?‘4°=GFi÷xmΩÖ$î∞∂ﬁ'êO"•£á)•#`ónV5ûƒ°r‚P˚àCßáÃŸ9È˜æôH¶œ_ö§*ã%œU‰≠ºb¶»ºRYW∞Òh∏**ÂTJ≥ÁE∏nU=»‹™Db8ö‚\Ü$Ù[≠±ãQI[∆0ëW,˚[q…ß0X “¶˜T‚SN4S≥©ò…Pì¨¨w≥≥j¿‹ ∆óÕTq0ãπïfëÜ|ÔU7AVÌí£ÉíÚ™©¡ÉvøÛPÕmÂÈ!™≈f¢Ú“Ë2-/¡ƒ√W8D’[">ƒnlsw∑µ.«≥ ’Ö· ≈6F|ı∞Ñ⁄u◊â=º)QÀ'ö,/ËÉM§ã˙‰õtÇÀm^HcYÅ‹™˘ÂpÍq°Â8ÓF4`∂.Ω¶FØÔªC.£∞5Ø
+»\d‘EÇäÖån[ãXÆúteõ“–Ñ	ˆAG'ür˝6£äa|p–ﬁôfêKè¥î∞X¨^J)êÏ¡q.^âO°ï…™5çdêkâ#*kÄ„.ÎsîæjµsSQœ≤
+≥º'◊£¬àG€Xb3)¶x±£R:∑ÇªÛ–“≠¬ê]{Î∆3é–ılô™ãgFyÁ· ,Û+fªßØN€G‰∏s∫@≈’ØPﬂ¨ë„”◊DπÓQß ˛Ω<·?	‡*B¸≈ò)ı$˛◊+¶ß»nÒØEPﬂ˙4ÇzÅGå≈(
+¨l$¸´ÖL¨ +àMÚÖc"õM^àæ5\ãu1≠◊5:7¨:›™ÀâËπµp9>\ïâ/q¨÷‡\π£¬ZÊ•d¡,á£ Yë0ÇhbùiœÉ±Î°qÅM»b_k¨≤Ceµ≤∫vQø,≈1.!cJLØfí˘p-»‘˝ËY≥‰<C˝H›ËüDqI®§Ÿ$%ø<öu° äıp¿|ﬁWÁ≥ÒïPPMx,Ωπêª∆EÊ‘éO˛Ã[Jd.‚Uí»B»tR0ıÜé^ï@k¨¨wb,GåF.…·ÙÍ7¥RÁZ‡FÆSøn^?é≠Ä¸H…ôÉYBÜQ]ÚÖL‚,e#|ü‡ÜgEÆÁ9¢Ùåè°∏!≥8Ù?«2¿—†Ô)à®„ÑêÕ¥c¨*ÅFdIzó/\Œ<˜ éî)>zÆ3gA“àRí<]	xôâëµß√h\¿ÿ∞pÑDPèÚ\^,À>0√⁄Í„¿U(~NXà¿∑ﬂ˘{¨+•[ VãKé™tB=Àä¸ÜÇãL@_í˝
+ÖˆH¯rRAﬁ]ﬁ,T8>r9Ö˚,Ù4GŸ<§{/§’5∆¨ÏΩÈµ@Y,ßE
+C
+DŒ&?	eëÉM™P÷`LA®=ü9Æ5ÃIÏ§R)n∏¯√Ötî_ñvÕîô¬îTX›™.◊Ö¶≠5≤S&û[NT¶>ÏvV´R°c}`©1D9t¶N˘g†ÁÉ6h˘8†B∂©00ê•y–ªôÂD	6ô+/`òI¶Hãª:¨¨"	∆î¨h≤]≠ˇ£çqíˆî=7pß◊ˆhÓÒbw"gâÀsËuÜ	ãƒPdoÒy¬j§È0“—î%µQ”f9@â'‘P(Ou[√*—?JâË”Û~∑”ﬁˇÅ◊ä˛Á≥”nüºÈúúì7ßÌ„¢µ¢OÁ,«`¸T3zâö—öE|™˝êµ£›ƒ"®!=~	5§∑üjHÜˆ∞5§%Æˇ3Wíﬁw'ì˘ô’7∞Xúk◊±]%m˘å•ãcØz*,˝TX˙©∞tÍÕœSXz!öê>í–\ÿ]ÆÕBeåıßÅÀ0≤H[Ej?ÄÁ,o»jL£€à*àfÅ!Aa‰æûqV˛ÚTaZµZ_gÖi≥OPî$=ëÎP
+ãaN9"gMƒÛ}@¸L⁄û∂EôØe-ß3yú¨ÒæÀR„Uxˇ≈ﬂfo°}3÷W0UPT|¶Û˚·©4/C¡ û_n-a7ª˚‘Ïñ8π¥:∑QXK[Æ<Õo£Æ∞∂xwQ:j)™ÊÕœ©‹%OÎ◊P“{1\˛˛mû‰Ú’¡üéÛß/æÿÅy
+øÑ™·Ã·«náU?s	r@‘qèi5Q…˙‡Î/ìÕÿ¥ZKgf(S´cYé∞k˝êlSÏuKfØWˆ=wB‡ábµeÛ*ï‡≈© ≤ÊÑQ⁄∞†;*é®t=⁄¸RYZvñ.^õüV?Y)XÂ·sl~(W≈`Çπ(©ˇÉT£}®çÒ„±;A/{/IÂdéA:ï‰™Ω±ßÏï5ÙI®~™?∂ÿ_≤F8;≥<ÎÊûÅq/˝LÈÆ:”ƒj±·√=‹EªöGKTOH,)†ùƒî„Ô–p°b
+'˛‡•ÅB» m√»‚‡ıòÖñÀTOV◊FzûW=ŸL/ÛlÔ_∂Ìª_ÆgÈS`Z—’ûÂxVCÛ‘WÛÇò7≈Ô.Ç‚üp-ª~√∏6œçqYL¸ÄxN19†C„~ÜÑkúºÀkOPâfC§aû“X6Éc√~ "YÅ$‡m@Ì•ö`ËÆX;Ü™"jwQ2ÚY∞g·~?06^Á`‚ØÁ0ÜÓåôÓ8™Y¡ºÈmàƒ¯o• ¨€f˘PHﬂë±∑P+M©ï&∂≤ÿ`∂§f∂
+7≥ª¡Qs.q*˝£.Ïd,ë"ÈqˇF^!∆ˇuT˘åÏ	ù˙¨ÄüıcÿV7Ö∂<ô∂◊0∂ª Eò1~ùÂÉ_«Ú#ÀYΩ$ñœë∞HÙ„ˇíõ‡'ﬂÿAx: ˇ3"*jQy%©{î∑«_˚›ΩãÀN5L™Û‚˙˜TY∑T}¶–jíÁRT÷jíc&IJíÂ¸_rÈe!3I¨Añ%èf<)c>…wb1˜f≤}‰§4rJá›Û˙R2‚YŸ√ÉS$bDÉ˘∂àOƒÚ 7·-[}û CQúX!˝i4V–ô5|Bîôh6Í˝KÛ≈Û…$¨3¡ﬁZY5Ã¸Á€aı)íñ0ˆÑﬁQûE“qòßíO*˝”˝u¬2°Æ÷ñ†qM¥ﬂƒ•!ôGB9*÷¨—RÑáî%îEdDs’3UUä¬úögå3â]∏xEπÖH¶Ó•å`¨qËMU«Ê¡_)ºúN¯!ï[,óÛ„1™⁄gΩœXñ≠m™nÊë*‹ÀdA™sü°WÌ>‰„áñÙ—)äº¬‡¯ú¸§9Jêﬂ2†\Ã†ë_ê)RÙ~0¶Œ◊‰Y˝–W@ìÙF-–Á8|æÌÀC©hËW©ô∞g^ZÌ≠	á$ªΩåÀ°)7üM¨˘¨tÛY‚<’ïW^8É◊S}˘/¢æ|ûhX∂ìLI*ÆJgåälÂRBå5Ó˙^˝∂·çùGtå◊j∆≈2ò_Ì€
+„*PA„£=∫k,∫÷TÓı~ùÄ¶ØÛXÏàm-~ƒR*À§ˆ%>s·ÕÁ…¯ Ïâ”`˛0¢‘O≥ÂN’.€$h4I%`Êc¸kˇ‰láË≥ÉCsl˝’Ö+j(“ç∑GΩÛˆq≤fñÂhù∞bì'ùc%1Üó»)ëé"À¶Úƒzñ‹4å/∆ÿﬁ˙áÒeÀ|følV Ë"ÍX(≥3*íˆ∆î"âıkbˆ‡˝-†µY*Hêƒ ⁄§ók:*^Ó[ﬁ£µ`cBDcµt_ΩòÕÅLˇºÈˇlOØ1(é^=§Û!¶x·dŸªgY[^âå¶åMÃ∆ì»éf§—¥t:b‹tÉleáÖ;çv;WÖö«Éö¨bÍîAQ™0°÷-™@ÀÀ
+fR°Ì∑è;!fZ@uf‘~ÊêJŒÇPAâ≈=RñŸI=o¨+.è?ÕSÅÒÏtäó1ŸWPb¸¡KxÁóÕNfr˙`JÑÕ¡ÛÂù¶&m√,DÄiEHåo˚°∆w!ç≤œy(	}†øöà[eÈçETU-z<í€hx≤}¡ñΩººπam¥‡˚îjåçÛ)’ÿS™±œïjÏıÒi˜ËÙºGé;o;«’Û3“mü¸ëÏwé;ØDÆêI«@µŒ˘Ï¿
+¨Ø.ÕXÎìßL9Ù¿ˆ'∂ÔÛ•{∞åb,√W´˛âä±∑™y›L(÷H&C1∑TB±0Gò Ω«ˆ ó1«ô’3πæÄÕ2RæûjuÏã¨OÃ}»©Ü≤7fìç°¬üÏ Ö1ÁK¿£Då'Yﬂùëë»Òùx∂*-ö∆ZW>¶2¶BÅh˛˚2∆B"£jÿh5p´πˆ‹I\!å|∞≠ÍµHv‡{:¥G.SCÔÈÛ3 Î a G8ã#∂‡ƒaâôKåΩäÉon¡∞ü#ı}ûµËÄç{pkM£Pw∑ ‡≤∞b·fs7aDlØπÚØ YR&∂öÊµ¨¯LÃınÅ;ı{Äñ"‰ïŸ·Ó.™òå vù∞ÑÎ§Ÿ∫‰ÓâC:Z'∂∆EQè[b.â∂ä#ì0«7I‹ü#—R+u%§§£– @Œ™Y'UR±… %¨]Æ´üá\¿”Xï4◊‡Y¿ÎöG£a‚ˆ<´|TÃ‚¶œ’ö¸·ZÛRÒ¥röI‘7\»Ÿƒ)p`Ä	Ò‡¿ztFQ›sƒ’W∑·ù¿t0^\ÇzmK›ìÚ4"≤∏•¢ñVZóôIa{sÄ.∂îÊü®äú¯fÎÔWTÉQ1@w6˘{“‰jD√˚œˇ√∞Îﬂ˛Ôø)§œÉ◊Z÷çœÃ+8x‰ÿ˙ÄÔ∆∑¬Œ™8˛qÀY0C• ~Œî¬BU≠é0ìÖ≈Ç%°D—Æ8J†ñ Èh aIÒTº≤œ(∆ñKö®Åmn•—˘Uüo4b1:‚I&K§û
+oÀè∂í(TØ$5˜W’VJ'ƒ;¿∆6£Í^Œ(*«Eê@Ã“ùZñíwŒb¬Ë»ÿr‹BôÛ¢„≤ôIö¿«ÿT+∞e©µ±˚üõuˇg‘‰Zû§›ﬁ”»Ÿ1äS°2£EÀVDı2Ú∑b)/Í?oÕn~n4·è7∫≤*Õ≠÷z£µΩﬁh¨◊kõk*•{Ú@+é/p)¸	C‘qq∂O•Œû-s“µ:\yI8Nhô‰Ÿ#V°‰œÓ° ∞U'ëÒ_µ„ân≤é	≠"ªøÕv^!˝∂Åπ∞»,Z§˘îUàfñôÎ≠”∑«ÕÃ∫˘}t#Û‹HÃ^´1–€<‘πôºìêkÏÛ=i∆6|~ìô”∏©òQ#3#∆_O¯6·≥\æ0t≈4©ö$C€üïM◊ıHDåp.˘,¿*õwv∆8Ú¨¯?ndÁ™∂#é´≥_-3§»Yß˛„[€ı;π≈ÑòjﬁT≠a
+◊¸¢±Y89&ûΩH#œWµê…lﬂù¬|Éπ√»°øÆ*LS®ã(ÏyÓSÔ˚⁄∑"™Û˘…ù£§5Om Ë®A9Ëj.∫úF	4›|Eë∏FÎPJ¨¡`>		îà∞^XÑ-> ˛>TPu›+∑k·iÚ…˛•axir;Ùi5ì*%ß@†#g“£0‰3¶RÃ~Óﬁ¡Qh%Ú ›D´†∏ÔYVíﬁÿé§ÁîG~ç¯LFhVç∑íB>@]íxß®ûô=7¿oåÒèÜ}	≈∫§ *€Œsπë¥∂5∆>¬Å?∆	«%ÎªRÂ©¿ì
+^YÌ¢°*h»Ùù—ÅTÁÀ]Æfl⁄øÜE:‰õk_œm C=Ã[ÍÕØÊlﬂiZ∂ù√˙äeäv>gÖo®—x©lﬂπUÍd˛µÏ	·^9™C¨Òô3{À÷?Ú+Y˚YÊ¸Ò,ÛJÚqW…sƒù´í'M§èûk%˝≠“ºú‰ÊRä˙$úñ ≥K|‚{<
+∆ÄP\ÿaBpΩµ€ó9ﬁ\
+∆m~Í~d©ñC-	Y&GÂÉı‡™ˇ¯¥ ⁄P`˛Ò¥˚«ﬁY{øCz˚›NÁÑykuN˙_-ÛªGùWÌ.˘éD_ÿ∆è›ˆŸYßÀZëÏ¬ Ú
+SÓ∞•XØí”ì„üS¢”·:aˆh@ù[†ôlﬂfAS∑=JßÎ\/·3mÂ Äá¨!¢e∆{xºiw¢Ñ™‰gëº£≠|ñÒr∆ß´Ózåîƒ&9⁄Áô€˘	™E'‹‰–ƒ &ë0≥GOÑ~ñ> 8C˚ó∞U≈≥ΩÇ√0ƒb∂m¬KıO6S˜.[?Ë:¢pd|Á∂GÉ#å˘°ˇÊ¯Â››œ?èÉâ≥Cﬁ%†Û1N¬=¶yÖdS(3`¨tx™≠MM‘hÿS‰#îO«îì	IDP‚õ[Ê}÷“<±ºë=EkºÙç=¡v≠iê~0çØ‹·≠¬ª%÷7ÔÇ¿Ü&—˝«¡Ú∆<LÜÉ¨üöY√!≥úòKO§&Amv>B
+⁄t≤h≥Ú∑w˜˜(ˇß‡µ‘?Ópß–$	@àº%≤π<w™:m`h⁄ÖrÜ
+ÂÈD≈LxgÖ+›9¢òL˘Ûâ¬ÙE÷U>“ì‚!xÂQÎ}˚‡zSf¥n˝’uñhÜ¢L©Åmûm ¡!ÿÕ-ˆÈﬁlƒ1ŒôWÓ)!˚;LÑ-«e»M&ó™¿ƒ™BX≤gôıçW4ó£N®RÑT1∆U≈<49+ …ÙË’Ìñ-◊¢P?lÖ*™®4ìP1§î
+≤rÇ√XV÷éêe«>µ&Ãw‘rÛ@≈BÊnVû’B&∑˘¨Á+åyª∞”´—+I1rÖCE¯€d ÕÑ±ûÈ6b*¨;ÕÆ“U¥ß)¯R…âµ+º≥áG›^ˆÿ£˝1∞¨¿ìPæ≈˜¨ıÏyëu“(q“^ñÅ®∂""µb’tºp3ê 
+úze„≠TpeJ||^WªÉÔÍ”ÃˆÑ÷gÔ‡tˇ¸≤ô˝üŒ:;ë'¨•2$«¨∆â¡I)jä◊€Î Î)5t7•YöÕ Z-pèzßΩ ¡æ±≤@ï’˛Í⁄E˝R_üWÍ·¨çåpÔË_‰ë¶˘ ËÂ!g ß≤¶kW“ßí˙=C∂i|›Œ˛i˜†Gˆè€Ωﬁ—·QÁ 1Nè|gò›.2ˇ^ø›?ÔImæÖ£m√.1∞~®Âfl∞ç∑íFD∆°¥_árzä.==£“?›_íM—≥%≤–Ò'_#ﬂàRP˝ﬁEŒ@ÖT∆äfRù_ƒë12’-äx3!Ë*b⁄,DL8Ø1mÖ÷â¬d¢øœ	BåÛ"ﬂW6Ü<•¸!ZáT˚∞ÖÀ*bÕ£"ûVCØ¬¡òZCû	<%)àYôÙûâƒTe™y¡X™,2Ûòª±`ﬂÌí£É›ç`ºhÌ~g·˜15ﬁyˇá”Ó2-ÙŒ_ı;Ì7dFÚ˙¥˚SŸ∂b‚ƒZl4WˆP@‘7øxj‚†Öå›ÄIÓR◊ ‘pÏ™Ä¯á»°ŸÀ4ÂcnU¨¶˘:±á7‚}|Lê	Á}ïè‡Hﬁ`–OZÏ˝û4 ◊÷◊»wÚoHi§_∫Ëä¸ 
+8Ã°KTcﬁ'\–√˝ﬂÃIsÉaj79<‰ú®-ùnDd nªÙöz®©‹wá4\\±Ó»öS_t\–ü7∆K/ŸûO'vfÜZ;#ÔÏ±Î-ﬁ±Ã/'0òåûb§e
+∆ç ªµ–X§´‰Â[a$[ı(‡»  géDŒxt'/m8â:òÑ!'…Ë◊√»PŸx4ñ#Iíq^Q≈ó,ä∂ l¬s∏E
+LßA;*Vò§—è¡‚t˜NY&ïKìË7]4ˇ.xòn"‚§ôˆ3\>Ó…Ó†~^ôíMùÏjlU¿ÕhG^ªj!≥]Eﬁõ±ÕŸ$â™ƒàZûΩP«ÇØ«Ó î¡◊˘ƒ!À)ú¥tn••Líî‹l◊ƒÂ˙AÜ3æ1fﬁPmzâJ’Âºœ∏î¢ÇM6]ë∫.%∞à˜[z’ëä§Êew—Ù9–[Ü0ËÒñﬁüq∫JÃJ≠¬Pô9ÑË?ùûwO⁄«§ˆÓOöôå∑ •@“˚OÑñg/÷ﬁö¯se1M:0C*	IOÉ¢É§G)§˘é7BxÅ£<õEJq;2Öµ¬É+SäQy¬(È§UQ+gl¢@6
+‹N)ï!(ÔûãMÒpÓVâ6\÷ê1¨{¨ÂÜí\•Æsc∂ÜºL°Ï2YeÊπ◊∂C±Ê¬tX¡o¯&˛À<Á]ëGÑ±«˙_CÕiÖiNk ìä)Öfò}_¨·Ãuhﬂô≤ 3†ÿ{ J—´aœ™î®ëŒ>∑]œ≤‰qNaéÒ4a2ñ⁄Oêà∞Ωf+™ë:•åÛÅ	(¸¸—≥fëß8ÀB`ye®˘üˇ˙∑ˇ&˝ˆ¡ŸÈq«ºTπYÜMÈû¥øàmöŒGõ1@nRóOW$¥|‰–¶Œ–'o,Uº[õıøeπòj≠2gZqˆ„ÿ
+»èy¨È`•XÊ=#gÃëÿ◊Só˚¢`ûÖÎ-˜–*”§C¢–€Ü··ò9ù^ìIEE∑JNÉï˛í _i+ƒÒΩ∆ °q@F8HÜ∂'Rå m“±ûy¥ ˆùòÑÓ‡òå+9Äÿ0?,õ≈´<A„cC£%-˜#É‰#Ä°<˙Ñ≈3œΩrÄ<ìoIÉ¨ò˝o	QN˛î–-8Ü9¯—í_„:- ï!í≠∂ß√hô§4)ˇX:¿∆…â¥"2@+˝ÕO\·›À›–}∆cˆg:¨imŸ∫å3lT˛†iÃvgZ¶õ≈6Ü‹ÃY<^{xsüëz¬í’≤eÊ0	YGí^éiN¯÷§É§à´Çò»àùìÂWZ)Æ7n,[C#ÿBç2Â^MFÛR∏ﬁ'gîWì6'◊">LiòtàÿÊÄ<Ö˘Ãè£AÀõrèbäY}˘ˆœà√EQÏé^i`¿ﬁüè´P¬ç≤uŒH:êWWfC∏éú) Mé®wkÜjˆêØ HåEC0Ãï€"sLv⁄-ÈQ+∑ë#±4¿+∏◊>©Ïèax∂OÄÇ˘Î–ì¿?mÊÁ9¥≠ëgM|]Í \ ,‚r®”·gwäY{2*Ca'£¥˘\áç"tïÉT⁄¥K£*ı⁄X˛uH[õó—“πÜ:ﬂ\olùΩmŸ‘¡—`uMπ˘Â{æC+∞Œ=GaLL_ñWX¨o˛Û≤qóÂÜñ¢ﬂÿG˜ÍO∏∏¥§Ãì€âáZrèzg.0≠∑/W¶n5ºï˜r^n–<∂A√‚<[-aà‚%ìâ£2‚Î˛Îﬂˇëv§ráÁ∞Ü·AdÉ4ÍÕ-Ù∏=ƒ|mï∆⁄=˘„+S÷˝œƒ(ï"(&-‰Ÿ¯÷g±Êæ=öZ¡‹CÁ¶ê&2Ù=òêôr@P•«› §d[k⁄ûj≤ΩÊÇÙƒ´z,«ƒdˆhwﬁG_˚¯Ë_:‰∏s∫”%Gp›ïª§}ÇâùOO…ﬂ˛ı?»€Nóy1ì„”˝ˆ1È˝t≤ØóBsh ãÔsKy{rŸ:\’
+£â(:	˚¿ÛLµFmŸ }¶^p˛Ì?ˇ„ˇ˝˜ˇ&Ω£◊'Ëª~xH^˝D–%˛¥ªNäg«§Ã.≥⁄ÔÙ˙¸wçŸJøFz˘Wøjˆ)‹G	•˝NÍ8ëvˇº€Ÿ!?g/√ÿ¥ÅÒøSﬁMº+[ d∑°ƒ≥k  V&ø2|∆jé^EÊΩìâ`Õﬁ˝*¢XyT‡˛È[V"»¶ı[èå·)F)FV§≈Û√íx¿Ú!•„
+≥–w)∫bº_`†.Ö÷S¯_ôø‚‚√R!Å äáæÓút∫Ìúx¿cVçøÜaÅK*–¸®e7J¬Fù∑˚Go;§◊ÔvN^˜»Èƒ£√˘ÄV*÷` Ï/å6`»ƒ†Ê»¸¡ùÚV∑æ∂ˇGBdÑ»±˜%≈nêﬁ˘õ7ÌÓO °º6≥>øéà√O¿…ä:|@Wce$úÓ<>Td£NC‹õO&ñwÀCï@Æ
+\| ∫_:tQ^î∞3aÒ  —+NnÈÏgxÔÜ™˘2>ª	÷˛i_x'uzπéª≈√ßh8ä¶6{⁄&Ü)·„˛—õŒ‚∆íNπ≈uÜ:y¬VWL?d¢˛|≤ND5‚˘ËMíÖA`wÕãT"á[—XŸûÃÑÊ0¨Î8÷åß™SáÿÍ√Üø∂4!cz◊ıÿR)[
+Ú¬ﬁÏŸXP^ßdd¶†Ü7s¸Üb ‚≈ËÒPàE^N®∞ƒÈR«≤icXw5kJ]PÕwl8ıu≤’Z!\‰¯-ç˛.ä˝†∂m•xÂ+ó+cqÈAöÚ#4Õ!§ÚÜÊ>ıDr∆EK◊'îã(BEB)µ§c)#d*ñAF[YV◊°.NRm›–≤ d0^Î£1ŸÑ]ßıÂ›÷}jÚ…HŸ[+È?≠≠>•µﬂ‘j5Ê£fòSÊtO&ÆGÖ≥óOËt¿ X·ÎZÛOÈ≈VÈ¢ïß8
+:-)§g:(¢>ëJı_öªÕz>•®√≥2¢{d¡¸‰’—…p‡Ô?á¢PNÍ◊=aËàl;Ø~"˚Ì3,.¨0,íñ’x+±≥)˘.â™{SBÆm„h0¢}Guÿ∂èôˆpÎ”û‘wïo4JÔo2·öF$¸¢ƒ!µ0¥L,Êóâ);Q.ñŸ=}u⁄m¡©ËÒ#¬múJ&bie¥IçÇú:#µÖwf‚t@z`\ƒk{BQπ/R††°äﬂRZ’≠N3ÁÛñA*ƒ|sLnŒJ"Ÿ0ˇ@∂øïhYPn÷Ú;¡˜IM1ÛÒÔÔ|Qµ7!(æ"é[•Q/¶Å˝ƒ≤iB‰ã‘úetú 'pë$-®ˆ‘ÒBÒìHú/'ˆ#∞OŒﬂºÍHQ±±jÁ5®]ä˘¨Pò	1„û|Ç9é9≤@kO…ä@+¿Ì!∫v…à'pØπœ"ºÎ∞Ú´Î$2≤[SZ;¨b®Ô:6J"C2±|fb§#ÊvÀ(˚
+‡ª|qE ¯2S≈¢‰‡µ¥_…∆Ü!ÈÃÚêè†®ùró›ÅÂ·óÔÁ"(1˘D[ö¯^Ë‚5ñ?
+É±…’-AI©3±Ï¥ôêG ≥jIt∏CÓ»≈ßvX¢ÌÈËrá°LÔ}qIÓ…KróI∏¨ÄLX¡é5Û®pu≤®ìéΩë0z8e6^CÑø„‰cº\#…Ô–Ã≈eˆÕ‰CµŸ‹„ µﬁØej¢ã÷SÊ	X˘ŸØàˆB—[]'£#mö(>Q65±/”cÚx*k˝äõ;òÄ\sŒ≈îoñG+WÏ¶*àö∑∏ hqª»Kπ≥RHB◊x(g'õæ®_~â‡hç°|Î2ç‚µ’id‚∫
+lQ„ )Áíô!ãÀ,“i]ÜÆxºåª’Bé:W^∏ŸdW%ç¡K≈p‡•5øE:Éå∫∫†F ."GrÆP∑ŒLdÄ¡-R)=„ÆÙ¬ø ≤ÁËÕIG¢f#$ıë⁄h"z÷ñπNi34û¯∫\]∂µF‘oVΩ·WÕT‘*	RÊ[9tsøÀ&RF
+±÷,/	H¶ˇ£ìÉ£∑GÁËÕô5ó‰»4‹cÑ*À2Eπ˚¢†z8ÀÅ)•6w&ˇ]i@»’íÊπ˛”26ÉhŸåî7(™öÌyoá" Ï%ö€∞Qg‘≥›·¢≠î2%‰5ÜÊ	µ<¢jœ ^ﬂÚﬂì zÒ±“ê\⁄åª#sO¶4|Ü$ú|à:3ød<!∏ß¸†ú»lQÃj—\0.E£ƒoH`üI ÇHºX∫…‹ˆYƒ)kØhÚ∆BCN®lZi™1u ¿&æmgﬂñU⁄¬∂fM≥å‰!<*ú+˚»¨)üæte√®ñn°8l‘x6ìÛsnéó9B≈p∏t6Òk÷“∞M|rnE=JeGŒÑíkËMã|¨nm%p‚õ™à)P¿ò∑ÆdÓ • ò¸^ë#ì≤A r∑#’¿–t]©ap‹◊g0CCÃ<¶k$LƒGÇQﬂ™z¯«„0Jª%,ÌîP\≈¢¸Ñ˛=Ót+®i#¡ç`P´|+≤ù5dL∫X‡k—¶ƒÈåp…66e6dRÅÃwêÀÛòù‡ÛxL÷Ø†√äîôg¬÷÷Ú˘ó«Á\èg1∑úµZ¨Ÿe‹1cÑÃÃF¶`ÎC∞C˚◊/ =6+¥@ﬂ‚îÊp=2ÉË‡Ä xÆ,ÈM1{dß0wÉAê≠fäª¡–Ã·”@∫¨¶πªS÷∆R ÿÒt¿Ê∆§√¢‹óxî£]—2oX
+lT˛ôb[Ω.—13&%u—<¿Kı‹RzÎYË/=ûtîOΩ‡áÆ!È"ü≈˝”}’„p;˝0†W;p§—∞A˜ƒmHl,„Ü’h&Û©‹∆@”„¶´’D_RÉ4 &Ó”}ˇªˇ  ˇˇ …—3

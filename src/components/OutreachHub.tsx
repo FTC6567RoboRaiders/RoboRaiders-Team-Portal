@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { OutreachEvent, OutreachImage, UserAccount } from '../types';
 import { compressAndResizeImage } from '../utils/image';
+import { formatEventDate, getTodayLocalDateString } from '../utils/date';
 
 interface OutreachHubProps {
   currentUser: UserAccount | null;
@@ -114,8 +115,8 @@ export default function OutreachHub({
   const openCreateModal = () => {
     setEditingEventId(null);
     setEventTitle('');
-    // Default to today
-    setEventDate(new Date().toISOString().split('T')[0]);
+    // Default to today in local timezone
+    setEventDate(getTodayLocalDateString());
     setEventLocation('');
     setEventDescription('');
     setEventImpactMetrics('');
@@ -399,8 +400,15 @@ export default function OutreachHub({
 
           <button
             onClick={() => {
-              setExportScope('all');
-              setIsExportModalOpen(true);
+              if (onPrintPDF) {
+                const isFiltered = searchQuery !== '' || filterMinHours !== '0' || filterStartDate !== '' || filterEndDate !== '';
+                const targetSet = isFiltered && filteredEvents.length > 0 ? filteredEvents : events;
+                const subtitle = isFiltered ? 'Filtered Field Campaigns Report' : 'All Documented Community Campaigns';
+                onPrintPDF(targetSet, subtitle);
+              } else {
+                setExportScope('all');
+                setIsExportModalOpen(true);
+              }
             }}
             className="bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5 cursor-pointer border border-slate-600 dark:bg-slate-950"
             title="Export Outreach events catalog to high-quality print PDF"
@@ -612,7 +620,7 @@ export default function OutreachHub({
                   <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 dark:text-slate-500">
                     <div className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
-                      <span>{new Date(ev.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      <span>{formatEventDate(ev.date)}</span>
                     </div>
                     <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-405 border border-emerald-100 dark:border-emerald-900 px-1.5 py-0.5 rounded font-black uppercase text-[9px]">
                       <Clock className="w-3 h-3" />

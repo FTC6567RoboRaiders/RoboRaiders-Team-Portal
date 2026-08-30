@@ -156,6 +156,39 @@ service cloud.firestore {
         && data.active is bool;
     }
 
+    function isValidInventoryItem(data) {
+      return data.keys().hasAll(['id', 'name', 'category', 'quantity', 'minQuantity', 'unit', 'location', 'status', 'condition', 'createdAt', 'createdBy', 'createdByEmail', 'updatedAt', 'updatedBy'])
+        && data.keys().size() >= 14 && data.keys().size() <= 23
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 300
+        && data.category in ['REV Robotics Parts', 'goBILDA & Motion', 'Electronics & Power', 'Hardware & Fasteners', 'Raw Stock & Materials', 'Tools & Equipment', 'Game Elements & Field', 'Consumables & Lab Supplies', 'Other']
+        && data.quantity is number
+        && data.minQuantity is number
+        && data.unit is string && data.unit.size() <= 50
+        && data.location is string && data.location.size() <= 200
+        && data.status in ['In Stock', 'Low Stock', 'Out of Stock', 'Checked Out', 'Ordered', 'Damaged/Repair']
+        && data.condition in ['New', 'Good', 'Fair', 'Damaged/Needs Repair', 'Retired']
+        && data.createdAt is number
+        && data.createdBy is string
+        && data.createdByEmail is string
+        && data.updatedAt is number
+        && data.updatedBy is string;
+    }
+
+    function isValidInventoryTransaction(data) {
+      return data.keys().hasAll(['id', 'itemId', 'itemName', 'type', 'quantityChanged', 'resultingQuantity', 'performedBy', 'performedByEmail', 'timestamp'])
+        && data.keys().size() >= 9 && data.keys().size() <= 10
+        && data.id is string && data.id.size() <= 128
+        && data.itemId is string && data.itemId.size() <= 128
+        && data.itemName is string && data.itemName.size() <= 300
+        && data.type in ['check_out', 'check_in', 'restock', 'consume', 'audit_adjustment', 'damage_report']
+        && data.quantityChanged is number
+        && data.resultingQuantity is number
+        && data.performedBy is string
+        && data.performedByEmail is string
+        && data.timestamp is number;
+    }
+
     // Collection Rules
     
     // 1. Users
@@ -253,6 +286,22 @@ service cloud.firestore {
         getUserDoc().primarySubteam == 'Programming' || 
         getUserDoc().role in ['mentor_captain', 'mentor', 'captain']
       ) && isValidNotification(request.resource.data);
+    }
+
+    // 11. Inventory Items
+    match /inventoryItems/{itemId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidInventoryItem(request.resource.data);
+      allow update: if isApprovedUser() && isValidInventoryItem(request.resource.data);
+      allow delete: if isMentorOrCaptain();
+    }
+
+    // 12. Inventory Transactions
+    match /inventoryTransactions/{txId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && isValidInventoryTransaction(request.resource.data);
+      allow update: if isMentorOrCaptain() && isValidInventoryTransaction(request.resource.data);
+      allow delete: if isMentorOrCaptain();
     }
   }
 }

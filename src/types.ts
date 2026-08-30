@@ -165,5 +165,73 @@ export interface LedgerTransaction {
   createdAt: number;
 }
 
+export type InventoryCategory =
+  | 'REV Robotics Parts'
+  | 'goBILDA & Motion'
+  | 'Electronics & Power'
+  | 'Hardware & Fasteners'
+  | 'Raw Stock & Materials'
+  | 'Tools & Equipment'
+  | 'Game Elements & Field'
+  | 'Consumables & Lab Supplies'
+  | 'Other';
+
+export type InventoryItemStatus =
+  | 'In Stock'
+  | 'Low Stock'
+  | 'Out of Stock'
+  | 'Checked Out'
+  | 'Ordered'
+  | 'Damaged/Repair';
+
+export type InventoryCondition =
+  | 'New'
+  | 'Good'
+  | 'Fair'
+  | 'Damaged/Needs Repair'
+  | 'Retired';
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: InventoryCategory;
+  sku?: string;
+  vendor?: string;
+  quantity: number;
+  minQuantity: number;
+  unit: string;
+  location: string;
+  status: InventoryItemStatus;
+  condition: InventoryCondition;
+  costPerUnit?: number;
+  itemUrl?: string;
+  notes?: string;
+  imageUrl?: string;
+  checkedOutBy?: string | null;
+  checkedOutByEmail?: string | null;
+  checkedOutDate?: string | null;
+  checkedOutExpectedReturn?: string | null;
+  checkedOutNotes?: string | null;
+  createdAt: number;
+  createdBy: string;
+  createdByEmail: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export interface InventoryTransaction {
+  id: string;
+  itemId: string;
+  itemName: string;
+  type: 'check_out' | 'check_in' | 'restock' | 'consume' | 'audit_adjustment' | 'damage_report';
+  quantityChanged: number;
+  resultingQuantity: number;
+  performedBy: string;
+  performedByEmail: string;
+  notes?: string;
+  timestamp: number;
+}
+
+
 
 
