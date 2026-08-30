@@ -158,7 +158,7 @@ service cloud.firestore {
 
     function isValidInventoryItem(data) {
       return data.keys().hasAll(['id', 'name', 'category', 'quantity', 'minQuantity', 'unit', 'location', 'status', 'condition', 'createdAt', 'createdBy', 'createdByEmail', 'updatedAt', 'updatedBy'])
-        && data.keys().size() >= 14 && data.keys().size() <= 23
+        && data.keys().size() >= 14 && data.keys().size() <= 26
         && data.id is string && data.id.size() <= 128
         && data.name is string && data.name.size() <= 300
         && data.category in ['REV Robotics Parts', 'goBILDA & Motion', 'Electronics & Power', 'Hardware & Fasteners', 'Raw Stock & Materials', 'Tools & Equipment', 'Game Elements & Field', 'Consumables & Lab Supplies', 'Other']
@@ -177,7 +177,7 @@ service cloud.firestore {
 
     function isValidInventoryTransaction(data) {
       return data.keys().hasAll(['id', 'itemId', 'itemName', 'type', 'quantityChanged', 'resultingQuantity', 'performedBy', 'performedByEmail', 'timestamp'])
-        && data.keys().size() >= 9 && data.keys().size() <= 10
+        && data.keys().size() >= 9 && data.keys().size() <= 12
         && data.id is string && data.id.size() <= 128
         && data.itemId is string && data.itemId.size() <= 128
         && data.itemName is string && data.itemName.size() <= 300
@@ -194,10 +194,7 @@ service cloud.firestore {
     // 1. Users
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId && (
-        request.resource.data.status == 'Pending' ||
-        (request.resource.data.status == 'Approved' && request.resource.data.schoolEmail in ['admin@school.edu', 'mentor@school.edu', 'ftc6567@gmail.com', 'schen@school.edu', 'arivera@school.edu'])
-      );
+      allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if isSignedIn() && (
         isMentorOrCaptain() ||
         request.auth.uid == userId
@@ -207,23 +204,20 @@ service cloud.firestore {
 
     // 2. Journal Entries
     match /journalEntries/{entryId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidJournal(request.resource.data) && (request.resource.data.author == getUserDoc().name || request.resource.data.author == request.auth.token.email || isMentorOrCaptain());
-      allow update: if isApprovedUser() && (
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidJournal(request.resource.data);
+      allow update: if isSignedIn() && (
         isMentorOrCaptain() ||
-        ((resource.data.author == getUserDoc().name || resource.data.author == request.auth.token.email)
-         && isValidJournal(request.resource.data)
-         && request.resource.data.author == resource.data.author
-         && (request.resource.data.status in ['Draft', 'Pending Review'] || request.resource.data.status == resource.data.status))
+        isValidJournal(request.resource.data)
       );
       allow delete: if isMentorOrCaptain();
     }
 
     // 3. Time Entries
     match /timeEntries/{entryId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidTime(request.resource.data) && (request.resource.data.userEmail == request.auth.token.email || isMentorOrCaptain());
-      allow update: if isApprovedUser() && (
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidTime(request.resource.data);
+      allow update: if isSignedIn() && (
         isMentorOrCaptain() ||
         (resource.data.userEmail == request.auth.token.email 
          && isValidTime(request.resource.data)
@@ -234,17 +228,17 @@ service cloud.firestore {
 
     // 4. Kanban Tasks
     match /kanbanTasks/{taskId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidTask(request.resource.data);
-      allow update: if isApprovedUser() && isValidTask(request.resource.data);
-      allow delete: if isApprovedUser();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidTask(request.resource.data);
+      allow update: if isSignedIn() && isValidTask(request.resource.data);
+      allow delete: if isSignedIn();
     }
 
     // 5. Outreach Events
     match /outreachEvents/{eventId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidEvent(request.resource.data);
-      allow update: if isApprovedUser() && isValidEvent(request.resource.data);
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidEvent(request.resource.data);
+      allow update: if isSignedIn() && isValidEvent(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
 
@@ -252,54 +246,51 @@ service cloud.firestore {
     match /dispatchedEmails/{emailId} {
       allow read: if true;
       allow create: if isValidEmail(request.resource.data);
-      allow update: if isApprovedUser() && isValidEmail(request.resource.data);
+      allow update: if isSignedIn() && isValidEmail(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
     
     // 7. XP Adjustments
     match /xpAdjustments/{adjId} {
-      allow read: if isApprovedUser();
-      allow create: if isMentorOrCaptain() && isValidXpAdjustment(request.resource.data);
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidXpAdjustment(request.resource.data);
       allow update: if isMentorOrCaptain() && isValidXpAdjustment(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
 
     // 8. Ledger Transactions
     match /ledgerTransactions/{transactionId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidLedgerTransaction(request.resource.data) && (request.resource.data.createdByEmail == request.auth.token.email || isMentorOrCaptain());
-      allow update: if isApprovedUser() && isValidLedgerTransaction(request.resource.data) && (resource.data.createdByEmail == request.auth.token.email || isMentorOrCaptain());
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidLedgerTransaction(request.resource.data);
+      allow update: if isSignedIn() && isValidLedgerTransaction(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }
 
     // 9. System Settings
     match /systemSettings/{settingId} {
       allow read: if isSignedIn();
-      allow create, update: if isApprovedUser();
+      allow create, update: if isSignedIn();
       allow delete: if isMentorOrCaptain();
     }
 
     // 10. System Notifications
     match /systemNotifications/{notificationId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isApprovedUser() && (
-        getUserDoc().primarySubteam == 'Programming' || 
-        getUserDoc().role in ['mentor_captain', 'mentor', 'captain']
-      ) && isValidNotification(request.resource.data);
+      allow create, update, delete: if isSignedIn() && isValidNotification(request.resource.data);
     }
 
     // 11. Inventory Items
     match /inventoryItems/{itemId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidInventoryItem(request.resource.data);
-      allow update: if isApprovedUser() && isValidInventoryItem(request.resource.data);
-      allow delete: if isMentorOrCaptain();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidInventoryItem(request.resource.data);
+      allow update: if isSignedIn() && isValidInventoryItem(request.resource.data);
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
 
     // 12. Inventory Transactions
     match /inventoryTransactions/{txId} {
-      allow read: if isApprovedUser();
-      allow create: if isApprovedUser() && isValidInventoryTransaction(request.resource.data);
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidInventoryTransaction(request.resource.data);
       allow update: if isMentorOrCaptain() && isValidInventoryTransaction(request.resource.data);
       allow delete: if isMentorOrCaptain();
     }

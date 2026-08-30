@@ -50,6 +50,7 @@ import {
 } from '../types';
 import { compressAndResizeImage } from '../utils/image';
 import { DEFAULT_INVENTORY_ITEMS } from '../data/inventoryDemo';
+import { LabelCustomizerModal } from './LabelCustomizerModal';
 
 interface InventoryManagerProps {
   currentUser: UserAccount | null;
@@ -147,6 +148,7 @@ export default function InventoryManager({
 
   // Print / Export Modal
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isLabelCustomizerOpen, setIsLabelCustomizerOpen] = useState(false);
   const [printLayoutType, setPrintLayoutType] = useState<'full_inventory' | 'low_stock_bom' | 'bin_labels'>('full_inventory');
 
   // Form states for Add/Edit
@@ -556,6 +558,48 @@ export default function InventoryManager({
     }
   };
 
+  // Detect seed / FTC Starter Kit demo items
+  const starterKitItems = useMemo(() => {
+    return items.filter(i => 
+      DEFAULT_INVENTORY_ITEMS.some(d => d.id === i.id || d.name.toLowerCase().trim() === i.name.toLowerCase().trim()) ||
+      i.id.startsWith('inv-item-') ||
+      i.createdBy === 'FTC Kickoff Kit' ||
+      i.createdBy === 'Mentor Steve'
+    );
+  }, [items]);
+
+  // Remove / Purge FTC Starter Kit items
+  const handleRemoveStarterKit = async () => {
+    if (starterKitItems.length === 0) {
+      showToast('No FTC Starter Kit items detected in inventory.', 'info');
+      return;
+    }
+    if (window.confirm(`Are you sure you want to remove all ${starterKitItems.length} FTC Starter Kit sample items from your inventory? This will permanently delete the default sample parts.`)) {
+      let deletedCount = 0;
+      for (const item of starterKitItems) {
+        const ok = await onDeleteItem(item.id);
+        if (ok) deletedCount++;
+      }
+      showToast(`Removed ${deletedCount} FTC Starter Kit items from inventory.`, 'info');
+    }
+  };
+
+  // Clear all items (mentor/captain only)
+  const handleClearAllInventory = async () => {
+    if (items.length === 0) {
+      showToast('Inventory is already empty.', 'info');
+      return;
+    }
+    if (window.confirm(`WARNING: This will permanently delete ALL ${items.length} inventory items from the database. Are you sure you want to proceed with a clean slate?`)) {
+      let deletedCount = 0;
+      for (const item of items) {
+        const ok = await onDeleteItem(item.id);
+        if (ok) deletedCount++;
+      }
+      showToast(`Cleared ${deletedCount} inventory items.`, 'info');
+    }
+  };
+
   // Seed / Reset Demo items
   const handleSeedDefaults = async () => {
     if (window.confirm('Would you like to populate the inventory with standard FTC Robotics parts, motors, electronics, fasteners, and tools? (Existing matching items will be kept).')) {
@@ -648,13 +692,25 @@ export default function InventoryManager({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            {/* CUSTOMIZE LABELS STUDIO BUTTON */}
+            <button
+              onClick={() => setIsLabelCustomizerOpen(true)}
+              className="px-3 py-1.5 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs dark:bg-rose-950/40 dark:border-rose-700/60 dark:text-rose-300 dark:hover:bg-rose-900/50"
+              id="customize-labels-btn"
+              title="Open full label customizer with QR codes, drawer sizes, and presets"
+            >
+              <Tag className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              <span>Customize Labels</span>
+            </button>
+
             <button
               onClick={() => setIsPrintModalOpen(true)}
               className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-750"
               id="print-inventory-btn"
+              title="Print documents and sheets"
             >
               <Printer className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-              <span>Print / Bin Labels</span>
+              <span>Print Docs</span>
             </button>
 
             <button
@@ -666,14 +722,28 @@ export default function InventoryManager({
               <span>Export CSV</span>
             </button>
 
-            {items.length < 5 && (
+            {/* REMOVE STARTER KIT BUTTON (WHEN SEED ITEMS PRESENT) */}
+            {starterKitItems.length > 0 && (
+              <button
+                onClick={handleRemoveStarterKit}
+                className="px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer dark:bg-red-950/40 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/50"
+                title="Remove all FTC Starter Kit sample items"
+                id="remove-starter-kit-btn"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                <span>Remove Starter Kit ({starterKitItems.length})</span>
+              </button>
+            )}
+
+            {/* OPTIONAL SEED STARTER KIT (WHEN CATALOG HAS VERY FEW ITEMS) */}
+            {items.length === 0 && (
               <button
                 onClick={handleSeedDefaults}
                 className="px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-800 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer dark:bg-amber-950/40 dark:border-amber-700/60 dark:text-amber-300 dark:hover:bg-amber-900/50"
-                title="Populate with standard FTC robotics components"
+                title="Optional: Populate with standard FTC robotics starter kit"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Seed FTC Starter Kit</span>
+                <span>Optional: Seed Starter Kit</span>
               </button>
             )}
 
@@ -2172,6 +2242,13 @@ export default function InventoryManager({
           </div>
         </div>
       )}
+
+      {/* CUSTOMIZE LABELS STUDIO MODAL */}
+      <LabelCustomizerModal
+        isOpen={isLabelCustomizerOpen}
+        onClose={() => setIsLabelCustomizerOpen(false)}
+        items={items}
+      />
 
     </div>
   );
