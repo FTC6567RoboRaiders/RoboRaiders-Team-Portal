@@ -18,3 +18,13 @@ View your app in AI Studio: https://ai.studio/apps/11121468-59c1-462f-885c-ec0c6
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Deploy to Vercel
+
+1. Push your code to a GitHub repository or use the Vercel CLI (`vercel`).
+2. Import the project in Vercel:
+   - **Framework Preset**: Vite
+   - **Build Command**: `npm run build` (or `vite build`)
+   - **Output Directory**: `dist`
+   - **Install Command**: `npm install`
+3. The included `vercel.json` ensures full Single Page Application (SPA) routing support and asset caching.
