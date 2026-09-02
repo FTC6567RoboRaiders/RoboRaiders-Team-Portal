@@ -1,7 +1,7 @@
 import React from 'react';
-import { OutreachEvent, OutreachImage } from '../types';
+import { OutreachEvent } from '../types';
 import { formatEventDate, formatEventDateLong } from '../utils/date';
-import { Users, Calendar, MapPin, Clock, Award, CheckCircle2, FileText, Image as ImageIcon, Heart } from 'lucide-react';
+import { Users, Award, FileText, Image as ImageIcon } from 'lucide-react';
 
 interface OutreachPrintLayoutProps {
   events: OutreachEvent[];
@@ -26,7 +26,6 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
   const totalAdults = events.reduce((sum, ev) => sum + (Number(ev.reachedAdults) || 0), 0);
   const totalReach = totalYouth + totalAdults;
 
-  const minHeightClass = paperSize === 'legal' ? 'min-h-[355mm]' : paperSize === 'a4' ? 'min-h-[297mm]' : 'min-h-[279mm]';
   const paperAspect = paperSize === 'letter' ? '8.5 / 11' : paperSize === 'a4' ? '210 / 297' : '8.5 / 14';
 
   const startingPageIndex = (showCover ? 1 : 0) + (showTOC ? 1 : 0) + 1;
@@ -189,8 +188,6 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
       {/* 3. INDIVIDUAL OUTREACH EVENT PAGES */}
       {events.map((ev, index) => {
         const refId = `OUT-${(index + 1).toString().padStart(2, '0')}`;
-        const hasYouth = ev.reachedChildren !== undefined && ev.reachedChildren > 0;
-        const hasAdults = ev.reachedAdults !== undefined && ev.reachedAdults > 0;
         const totalEventReach = (ev.reachedChildren || 0) + (ev.reachedAdults || 0);
 
         return (

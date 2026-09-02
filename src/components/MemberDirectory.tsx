@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
   Search, 
-  Filter, 
   ChevronLeft, 
   CheckCircle, 
   X, 
@@ -13,20 +12,14 @@ import {
   BookOpen, 
   Heart, 
   ShieldAlert, 
-  TrendingUp, 
-  Sliders, 
   Sparkles,
-  ChevronRight,
-  Info,
-  Calendar,
   Download,
   Printer,
   FileText,
   LayoutTemplate,
-  AlertTriangle,
   Trash2
 } from 'lucide-react';
-import { UserAccount, JournalEntry, TimeEntry, KanbanTask, OutreachEvent, XPAdjustment, Subteam } from '../types';
+import { UserAccount, JournalEntry, TimeEntry, KanbanTask, OutreachEvent, XPAdjustment } from '../types';
 import { computeUserGamification, calculateJournalQualityScore } from '../utils/gamification';
 
 interface MemberDirectoryProps {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import QRCode from 'qrcode';
 import {
   Printer,
@@ -8,16 +8,13 @@ import {
   Square,
   QrCode,
   Tag,
-  Layers,
   Sparkles,
   Search,
   Plus,
   Trash2,
   Maximize2,
   FileText,
-  RotateCcw,
   LayoutGrid,
-  Check,
   Info
 } from 'lucide-react';
 import { InventoryItem, InventoryCategory } from '../types';
@@ -107,7 +104,6 @@ export function LabelCustomizerModal({
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set(items.map(i => i.id)));
   const [searchFilter, setSearchFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
-  const [onlyLowStock, setOnlyLowStock] = useState(false);
 
   // Custom one-off labels created on the fly
   const [customLabels, setCustomLabels] = useState<CustomOneOffLabel[]>([]);
@@ -180,7 +176,6 @@ export function LabelCustomizerModal({
   // Filtered inventory items for selection tab
   const filteredInventory = useMemo(() => {
     return items.filter(item => {
-      if (onlyLowStock && item.quantity > item.minQuantity) return false;
       if (categoryFilter !== 'All' && item.category !== categoryFilter) return false;
       if (searchFilter.trim()) {
         const q = searchFilter.toLowerCase();
@@ -191,7 +186,7 @@ export function LabelCustomizerModal({
       }
       return true;
     });
-  }, [items, onlyLowStock, categoryFilter, searchFilter]);
+  }, [items, categoryFilter, searchFilter]);
 
   // Combined active items to render
   const activeLabelsToRender = useMemo(() => {

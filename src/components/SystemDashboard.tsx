@@ -4,19 +4,12 @@ import {
   Power, 
   Bell, 
   EyeOff, 
-  Save, 
   Trash2, 
   Plus, 
-  Ban, 
   Eye, 
-  CheckCircle2, 
   AlertCircle,
   RefreshCw,
-  X,
   ChevronLeft,
-  LayoutGrid,
-  Info,
-  ShieldCheck,
   Megaphone,
   BookOpen,
   Clock,
@@ -28,7 +21,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SystemDashboardProps {
-  currentUser: any;
+  currentUser?: any;
   disabledModules: string[];
   systemNotifications: any[];
   onToggleModule: (moduleId: string) => Promise<void>;
@@ -40,7 +33,7 @@ interface SystemDashboardProps {
 }
 
 export default function SystemDashboard({
-  currentUser,
+  currentUser: _currentUser,
   disabledModules,
   systemNotifications,
   onToggleModule,

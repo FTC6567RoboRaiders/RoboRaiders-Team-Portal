@@ -12,7 +12,6 @@ import {
   ChevronRight, 
   ChevronLeft,
   ArrowRight,
-  MoreVertical,
   Layers
 } from 'lucide-react';
 import { KanbanTask, KanbanColumn, Subteam, UserAccount } from '../types';

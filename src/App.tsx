@@ -55,7 +55,8 @@ import {
   Terminal,
   Megaphone,
   Ban,
-  Boxes
+  Boxes,
+  HelpCircle
 } from 'lucide-react';
 import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction } from './types';
 import { compressAndResizeImage } from './utils/image';
@@ -112,6 +113,7 @@ import { jsPDF } from 'jspdf';
 
 import { DEMO_ENTRIES, DEFAULT_TIME_ENTRIES } from './data/journalDemo';
 import StudentHandbook from './components/StudentHandbook';
+import PortalHelpGuide from './components/PortalHelpGuide';
 import TimePicker from './components/TimePicker';
 import GeneralLedger from './components/GeneralLedger';
 import InventoryManager from './components/InventoryManager';
@@ -384,7 +386,7 @@ export default function App() {
   );
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'help_guide'>('landing');
 
   // Interactive System Notifications and disabled modules flags
   const [disabledModules, setDisabledModules] = useState<string[]>([]);
@@ -3860,17 +3862,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
     });
   }
 
-  if (currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor) {
-    sidebarLinks.push({
-      id: 'system_dashboard',
-      label: 'SysAdmin Controls',
-      sublabel: 'Software Terminal',
-      icon: Terminal,
-      badge: null,
-      color: 'text-rose-500'
-    });
-  }
-
   // Filter sidebar links dynamically based on disabled modules status
   const renderedSidebarLinks = sidebarLinks.filter(link => {
     if (disabledModules.includes(link.id)) {
@@ -3941,15 +3932,30 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
         {/* Global Toolbar */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
-          {/* THEME TOGGLE BUTTON */}
+          {/* HELP GUIDE QUESTION MARK BUTTON */}
+          <button 
+            onClick={() => setCurrentView('help_guide')}
+            className={`p-2 rounded text-xs font-bold transition-all border flex items-center justify-center cursor-pointer ${
+              currentView === 'help_guide'
+                ? 'bg-rose-600 text-white border-rose-500 shadow-sm ring-2 ring-rose-400/40'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 dark:bg-slate-950 hover:border-slate-600'
+            }`}
+            title="Help Guide & Full Portal User Manual (PDF Exportable)"
+            aria-label="Help Guide & User Manual"
+            id="portal-help-guide-header-btn"
+          >
+            <HelpCircle className="w-4 h-4 text-cyan-400" />
+          </button>
+
+          {/* THEME TOGGLE ICON BUTTON */}
           <button 
             onClick={() => setIsDark(!isDark)}
-            className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider border border-slate-700 flex items-center gap-1.5 dark:bg-slate-950"
-            title="Switch Workspace Theme"
+            className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-white transition-all border border-slate-700 flex items-center justify-center cursor-pointer dark:bg-slate-950 hover:border-slate-600"
+            title={isDark ? "Switch to Light Theme" : "Switch to Dark Theme"}
+            aria-label={isDark ? "Switch to Light Theme" : "Switch to Dark Theme"}
             id="theme-toggle-btn"
           >
-            {isDark ? <Sun className="w-3.5 h-3.5 text-yellow-400" /> : <Moon className="w-3.5 h-3.5 text-blue-400" />}
-            <span>{isDark ? 'Light Theme' : 'Dark Theme'}</span>
+            {isDark ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-blue-400" />}
           </button>
 
           {isUserAdminOrMentor && (
@@ -5872,6 +5878,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
         )
       )}
 
+      {/* PORTAL HELP GUIDE & USER MANUAL VIEW */}
+      {currentView === 'help_guide' && (
+        <PortalHelpGuide
+          currentUser={currentUser}
+          showToast={showToast}
+          onBack={() => setCurrentView('landing')}
+          onNavigate={(view: string) => setCurrentView(view as any)}
+        />
+      )}
+
       {/* OUTREACH EVENTS HUB VIEW */}
       {currentView === 'outreach' && (
         disabledModules.includes('outreach') && !isAuthorizedToAccessDisabled ? (
@@ -7509,6 +7525,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
       </main>
       </div>
       )}
+        </div>
+      </div>
+
 
 
 
@@ -9219,352 +9238,744 @@ FTC #6567 Captains & Mentors`
         )}
       </AnimatePresence>
 
-      {/* Time Card PDF Export Modal with Advanced Live Previews */}
-      <AnimatePresence>
-        {isTimeExportModalOpen && (
+      
+    {/* Time Card PDF Export Modal with Advanced Live Previews */}
+    <AnimatePresence>
+      {isTimeExportModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
+          onClick={() => setIsTimeExportModalOpen(false)}
+        >
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
-            onClick={() => setIsTimeExportModalOpen(false)}
+            initial={{ scale: 0.95, y: 15, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.95, y: 15, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className={`relative w-full ${timeExportShowPreview ? 'max-w-6xl' : 'max-w-xl'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              initial={{ scale: 0.95, y: 15, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 15, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className={`relative w-full ${timeExportShowPreview ? 'max-w-6xl' : 'max-w-xl'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
-                    Export Time Cards to PDF Scribe Sheets
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsTimeExportModalOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-none outline-none dark:text-slate-500"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-800 flex justify-between items-center shrink-0 dark:bg-slate-950">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
+                  Export Timesheets & Hours Log to PDF
+                </span>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsTimeExportModalOpen(false)}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-none outline-none dark:text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-              {/* Split Parent Pane */}
-              <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-                
-                {/* LEFT CONTEXT: FILTERS & DOCUMENT FORM SETTINGS */}
-                <div className="w-full md:w-[380px] p-5 border-r border-slate-200 overflow-y-auto flex flex-col justify-between h-full bg-slate-50/50 shrink-0 dark:border-slate-800">
-                  <div className="flex flex-col gap-4">
-                    <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
-                      Generate print-ready official timesheet logs. Define scope alignments, toggle index page inclusions, and choose paper sizes.
-                    </p>
+            {/* Split Content */}
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+              {/* Left Pane */}
+              <div className="w-full md:w-[380px] p-5 border-r border-slate-200 overflow-y-auto flex flex-col justify-between h-full bg-slate-50/50 shrink-0 dark:border-slate-800 dark:bg-slate-900/50">
+                <div className="flex flex-col gap-4">
+                  <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
+                    Export member service records, hours ledgers, and subteam timesheets in clean printable layouts.
+                  </p>
 
-                    {/* Scope Selection */}
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
-                        Report Target Scope
-                      </span>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setTimeExportScope('all')}
-                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
-                            timeExportScope === 'all'
-                              ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          <Users className="w-3.5 h-3.5" />
-                          <span>Entire Team</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTimeExportScope('members')}
-                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
-                            timeExportScope === 'members'
-                              ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          <User className="w-3.5 h-3.5" />
-                          <span>Select Members</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTimeExportScope('subteam')}
-                          className={`px-3 py-2 rounded border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
-                            timeExportScope === 'subteam'
-                              ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
-                              : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 bg-white dark:bg-slate-800 text-slate-605 dark:text-slate-400'
-                          }`}
-                        >
-                          <Layers className="w-3.5 h-3.5" />
-                          <span>Subteam Area</span>
-                        </button>
-                      </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
+                      Export Scope
+                    </span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTimeExportScope('all')}
+                        className={`px-2 py-2 rounded border text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
+                          timeExportScope === 'all'
+                            ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
+                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTimeExportScope('members')}
+                        className={`px-2 py-2 rounded border text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
+                          timeExportScope === 'members'
+                            ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
+                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        Members
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTimeExportScope('subteam')}
+                        className={`px-2 py-2 rounded border text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
+                          timeExportScope === 'subteam'
+                            ? 'border-cyan-600 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400'
+                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        Subteam
+                      </button>
+                    </div>
+                  </div>
+
+                  {timeExportScope === 'subteam' && (
+                    <div>
+                      <label className="block text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Subteam Filter
+                      </label>
+                      <select
+                        value={selectedTimeExportSubteam}
+                        onChange={(e) => setSelectedTimeExportSubteam(e.target.value as Subteam | 'All')}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 font-mono"
+                      >
+                        <option value="All">All Subteams</option>
+                        {SUBTEAM_LIST.map((sub) => (
+                          <option key={sub} value={sub}>{sub}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Print Layout Formatting */}
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex flex-col gap-3 dark:bg-slate-800 dark:border-slate-800">
+                    <span className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                      Print Formatting
+                    </span>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Show Visual Preview</span>
+                        <input type="checkbox" checked={timeExportShowPreview} onChange={(e) => setTimeExportShowPreview(e.target.checked)} className="rounded text-cyan-600" />
+                      </label>
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Title Cover</span>
+                        <input type="checkbox" checked={timeExportShowCover} onChange={(e) => setTimeExportShowCover(e.target.checked)} className="rounded text-cyan-600" />
+                      </label>
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Table of Contents</span>
+                        <input type="checkbox" checked={timeExportShowTOC} onChange={(e) => setTimeExportShowTOC(e.target.checked)} className="rounded text-cyan-600" />
+                      </label>
                     </div>
 
-                    {/* Subteam selection options */}
-                    {timeExportScope === 'subteam' && (
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col gap-1.5 animate-fade-in text-xs dark:bg-slate-800 dark:border-slate-800">
-                        <label className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
-                          Choose Subteam Focus Area
+                    <div className="flex flex-col gap-1.5 mt-1">
+                      <label className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                        Paper Size
+                      </label>
+                      <select
+                        value={timeExportPaperSize}
+                        onChange={(e) => setTimeExportPaperSize(e.target.value as 'letter' | 'a4' | 'legal')}
+                        className="w-full bg-white border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 font-mono"
+                      >
+                        <option value="letter">US Letter (8.5" x 11")</option>
+                        <option value="a4">A4 (210 x 297 mm)</option>
+                        <option value="legal">US Legal (8.5" x 14")</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2 mt-4 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsTimeExportModalOpen(false)}
+                    className="px-3 py-1.5 rounded text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrintTimePDF}
+                    className="px-4 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print / Save PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Pane Preview */}
+              {timeExportShowPreview && (
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 select-none pb-12 dark:bg-slate-900/95">
+                  <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10 dark:bg-slate-800 dark:border-slate-800">
+                    <div className="flex items-center gap-1.5">
+                      <LayoutTemplate className="w-4 h-4 text-cyan-500" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
+                        Timesheet Preview: <span className="text-cyan-600 dark:text-cyan-400 underline">{timeExportPaperSize.toUpperCase()}</span>
+                      </span>
+                    </div>
+                    <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
+                      PREVIEW
+                    </span>
+                  </div>
+
+                  <div className="w-full max-w-xl flex flex-col gap-6 scale-[0.9] origin-top">
+                    {timeExportShowCover && (
+                      <div className="bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 p-8 rounded-lg shadow-lg aspect-[8.5/11] flex flex-col justify-between text-slate-900 dark:text-slate-100">
+                        <div className="border-b-4 border-cyan-600 pb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Clock className="w-6 h-6 text-cyan-600" />
+                            <h3 className="text-xl font-black font-display uppercase tracking-wider text-slate-900 dark:text-white">
+                              FTC #6567 RoboRaiders
+                            </h3>
+                          </div>
+                          <h4 className="text-sm font-bold text-cyan-600 uppercase font-mono tracking-widest">
+                            Official Member Timesheets & Service Hours
+                          </h4>
+                        </div>
+
+                        <div className="my-auto flex flex-col gap-3 py-6 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
+                          <div className="flex justify-between text-xs font-mono">
+                            <span className="text-slate-500 dark:text-slate-400">Scope:</span>
+                            <span className="font-bold uppercase">{timeExportScope}</span>
+                          </div>
+                          <div className="flex justify-between text-xs font-mono">
+                            <span className="text-slate-500 dark:text-slate-400">Total Records:</span>
+                            <span className="font-bold">{timeEntries.length} entries</span>
+                          </div>
+                          <div className="flex justify-between text-xs font-mono">
+                            <span className="text-slate-500 dark:text-slate-400">Generated:</span>
+                            <span className="font-bold">{getTodayLocalDateString()}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-center text-[10px] font-mono text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-3">
+                          Official FIRST Tech Challenge Verification Document â€¢ Team 6567
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* Journal Entries PDF Export Modal */}
+    <AnimatePresence>
+      {isExportModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
+          onClick={() => setIsExportModalOpen(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 15, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.95, y: 15, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className={`relative w-full ${exportShowPreview ? 'max-w-6xl' : 'max-w-xl'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-800 flex justify-between items-center shrink-0 dark:bg-slate-950">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
+                  Export Engineering Notebook Journal to PDF
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-none outline-none dark:text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Split Content */}
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+              <div className="w-full md:w-[380px] p-5 border-r border-slate-200 overflow-y-auto flex flex-col justify-between h-full bg-slate-50/50 shrink-0 dark:border-slate-800 dark:bg-slate-900/50">
+                <div className="flex flex-col gap-4">
+                  <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
+                    Compile judges portfolio sections, subteam log sheets, and binder documentation with clean headers.
+                  </p>
+
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider dark:text-slate-500">
+                      Export Scope
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setExportScope('all')}
+                        className={`px-3 py-2 rounded border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          exportScope === 'all'
+                            ? 'border-indigo-600 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400'
+                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        All Entries
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportScope('filtered')}
+                        className={`px-3 py-2 rounded border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          exportScope === 'filtered'
+                            ? 'border-indigo-600 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400'
+                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        Filtered Scope
+                      </button>
+                    </div>
+                  </div>
+
+                  {exportScope === 'filtered' && (
+                    <div className="flex flex-col gap-3 p-3 bg-white dark:bg-slate-850 rounded border border-slate-200 dark:border-slate-800">
+                      <div>
+                        <label className="block text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Subteam
                         </label>
                         <select
-                          value={selectedTimeExportSubteam}
-                          onChange={(e) => setSelectedTimeExportSubteam(e.target.value as Subteam | 'All')}
-                          className="w-full bg-white border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-cyan-600 font-mono cursor-pointer dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
+                          value={exportSubteam}
+                          onChange={(e) => setExportSubteam(e.target.value as Subteam | 'All')}
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 font-mono"
                         >
-                          <option value="All">All Focus Areas</option>
-                          {ATTENDANCE_SUBTEAMS.map((sub) => (
+                          <option value="All">All Subteams</option>
+                          {SUBTEAM_LIST.map((sub) => (
                             <option key={sub} value={sub}>{sub}</option>
                           ))}
                         </select>
                       </div>
-                    )}
 
-                {/* Member selection checklist options */}
-                {timeExportScope === 'members' && (
-                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex flex-col gap-3 animate-fade-in dark:bg-slate-800 dark:border-slate-800">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
-                        Roster Participants Check-List
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const allEmails = Array.from(
-                              new Set([
-                                ...accounts.filter(a => a.status === 'Approved').map(a => a.schoolEmail),
-                                ...timeEntries.map(t => t.userEmail)
-                              ])
-                            );
-                            setSelectedTimeExportMembers(allEmails);
-                          }}
-                          className="text-[9px] font-mono uppercase bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded cursor-pointer dark:bg-slate-800 dark:hover:bg-slate-500"
+                      <div>
+                        <label className="block text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Status
+                        </label>
+                        <select
+                          value={exportStatus}
+                          onChange={(e) => setExportStatus(e.target.value as JournalEntry['status'] | 'All')}
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 font-mono"
                         >
-                          Select All
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedTimeExportMembers([])}
-                          className="text-[9px] font-mono uppercase bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded cursor-pointer dark:bg-slate-800 dark:hover:bg-slate-500"
-                        >
-                          Clear
-                        </button>
+                          <option value="All">All Statuses</option>
+                          <option value="Approved">Approved Only</option>
+                          <option value="Pending Review">Pending Review</option>
+                          <option value="Draft">Drafts</option>
+                        </select>
                       </div>
                     </div>
+                  )}
 
-                    <div className="max-h-[160px] overflow-y-auto border border-slate-200 rounded bg-white p-2 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5 dark:bg-slate-900 dark:border-slate-800">
-                      {Array.from(
-                        new Map(
-                          [
-                            ...accounts.filter(a => a.status === 'Approved').map(a => ({ name: a.name, email: a.schoolEmail })),
-                            ...timeEntries.map(t => ({ name: t.userName, email: t.userEmail }))
-                          ].map(item => [item.email, item])
-                        ).values()
-                      )
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((member) => {
-                          const isChecked = selectedTimeExportMembers.includes(member.email);
-                          return (
-                            <label
-                              key={member.email}
-                              className="flex items-center gap-2 px-1.5 py-1 hover:bg-slate-50 rounded cursor-pointer select-none text-xs text-slate-700 transition-colors dark:text-slate-300 dark:hover:bg-slate-800"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedTimeExportMembers(prev => [...prev, member.email]);
-                                  } else {
-                                    setSelectedTimeExportMembers(prev => prev.filter(email => email !== member.email));
-                                  }
-                                }}
-                                className="rounded border-slate-300 text-brand focus:ring-brand cursor-pointer dark:border-slate-800"
-                              />
-                              <div className="flex flex-col min-w-0">
-                                <span className="font-bold truncate">{member.name}</span>
-                                <span className="text-[9px] text-slate-400 font-mono truncate leading-none mt-0.5 dark:text-slate-500">{member.email}</span>
-                              </div>
-                            </label>
-                          );
-                        })}
+                  {/* Print Layout Formatting */}
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex flex-col gap-3 dark:bg-slate-800 dark:border-slate-800">
+                    <span className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                      Print Formatting
+                    </span>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Show Visual Preview</span>
+                        <input type="checkbox" checked={exportShowPreview} onChange={(e) => setExportShowPreview(e.target.checked)} className="rounded text-indigo-600" />
+                      </label>
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Title Cover</span>
+                        <input type="checkbox" checked={exportShowCover} onChange={(e) => setExportShowCover(e.target.checked)} className="rounded text-indigo-600" />
+                      </label>
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Table of Contents</span>
+                        <input type="checkbox" checked={exportShowTOC} onChange={(e) => setExportShowTOC(e.target.checked)} className="rounded text-indigo-600" />
+                      </label>
                     </div>
-                  </div>
-                )}
 
-                {/* Print Layout & Formatting Settings */}
-                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex flex-col gap-3 animate-fade-in dark:bg-slate-800 dark:border-slate-800">
-                  <span className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
-                    Print Layout & Formatting
-                  </span>
-                  
-                  <div className="flex flex-col gap-2">
-                    <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none dark:hover:bg-slate-700">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Show Visual Preview</span>
-                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowPreview ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
-                        <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowPreview ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
-                      </div>
-                      <input type="checkbox" className="hidden" checked={timeExportShowPreview} onChange={(e) => setTimeExportShowPreview(e.target.checked)} />
-                    </label>
-
-                    <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none dark:hover:bg-slate-700">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Title Cover</span>
-                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowCover ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
-                        <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowCover ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
-                      </div>
-                      <input type="checkbox" className="hidden" checked={timeExportShowCover} onChange={(e) => setTimeExportShowCover(e.target.checked)} />
-                    </label>
-
-                    <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors user-select-none dark:hover:bg-slate-700">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Table of Contents</span>
-                      <div className={`w-8 h-4.5 rounded-full relative transition-colors ${timeExportShowTOC ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
-                        <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full transition-transform ${timeExportShowTOC ? 'translate-x-3.5' : 'translate-x-0'}`}></div>
-                      </div>
-                      <input type="checkbox" className="hidden" checked={timeExportShowTOC} onChange={(e) => setTimeExportShowTOC(e.target.checked)} />
-                    </label>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5 mt-2">
-                    <label className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
-                      Paper Size
-                    </label>
-                    <select
-                      value={timeExportPaperSize}
-                      onChange={(e) => setTimeExportPaperSize(e.target.value as 'letter' | 'a4' | 'legal')}
-                      className="w-full bg-white border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-cyan-600 font-mono cursor-pointer dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
-                    >
-                      <option value="letter">US Letter (8.5" x 11")</option>
-                      <option value="a4">A4 (210 x 297 mm)</option>
-                      <option value="legal">US Legal (8.5" x 14")</option>
-                    </select>
+                    <div className="flex flex-col gap-1.5 mt-1">
+                      <label className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                        Paper Size
+                      </label>
+                      <select
+                        value={exportPaperSize}
+                        onChange={(e) => setExportPaperSize(e.target.value as 'letter' | 'a4' | 'legal')}
+                        className="w-full bg-white border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 font-mono"
+                      >
+                        <option value="letter">US Letter (8.5" x 11")</option>
+                        <option value="a4">A4 (210 x 297 mm)</option>
+                        <option value="legal">US Legal (8.5" x 14")</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                {/* Score Live counter and disclaimer */}
-                <div className="bg-slate-100 p-3.5 rounded-md border border-slate-200 flex flex-col gap-1 text-slate-800 text-xs dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800">
-                  {(() => {
-                    let matchingEntries = [];
-                    if (timeExportScope === 'all') {
-                      matchingEntries = timeEntries;
-                    } else if (timeExportScope === 'members') {
-                      matchingEntries = timeEntries.filter(t => selectedTimeExportMembers.includes(t.userEmail));
-                    } else if (timeExportScope === 'subteam') {
-                      matchingEntries = timeEntries.filter(t => selectedTimeExportSubteam === 'All' || t.subteam === selectedTimeExportSubteam);
-                    }
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2 mt-4 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsExportModalOpen(false)}
+                    className="px-3 py-1.5 rounded text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrintPDF}
+                    className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print / Save PDF</span>
+                  </button>
+                </div>
+              </div>
 
-                    const totalHr = matchingEntries.reduce((sum, e) => sum + e.durationHours, 0);
+              {/* Right Pane Preview */}
+              {exportShowPreview && (
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 select-none pb-12 dark:bg-slate-900/95">
+                  <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10 dark:bg-slate-800 dark:border-slate-800">
+                    <div className="flex items-center gap-1.5">
+                      <LayoutTemplate className="w-4 h-4 text-indigo-500" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
+                        Journal Portfolio Format: <span className="text-indigo-600 dark:text-indigo-400 underline">{exportPaperSize.toUpperCase()}</span>
+                      </span>
+                    </div>
+                    <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
+                      PORTFOLIO PREVIEW
+                    </span>
+                  </div>
 
-                    return (
-                      <div className="flex flex-col gap-1 gap-y-1.5">
-                        <div className="flex justify-between items-center font-mono">
-                          <span className="text-slate-500 uppercase font-black tracking-wider text-[9px] dark:text-slate-400">Matched Records:</span>
-                          <span className="font-extrabold text-cyan-600 dark:text-cyan-400">
-                            {matchingEntries.length} Records
-                          </span>
+                  <div className="w-full max-w-xl flex flex-col gap-6 scale-[0.9] origin-top">
+                    {exportShowCover && (
+                      <div className="bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 p-8 rounded-lg shadow-lg aspect-[8.5/11] flex flex-col justify-between text-slate-900 dark:text-slate-100">
+                        <div className="border-b-4 border-indigo-600 pb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <BookOpen className="w-6 h-6 text-indigo-600" />
+                            <h3 className="text-xl font-black font-display uppercase tracking-wider text-slate-900 dark:text-white">
+                              FTC #6567 RoboRaiders
+                            </h3>
+                          </div>
+                          <h4 className="text-sm font-bold text-indigo-600 uppercase font-mono tracking-widest">
+                            Official Engineering Notebook Portfolio
+                          </h4>
                         </div>
-                        <div className="flex justify-between items-center font-mono">
-                          <span className="text-slate-500 uppercase font-black tracking-wider text-[9px] dark:text-slate-400">Cumulative Time:</span>
-                          <span className="font-bold text-slate-900 dark:text-slate-400">
-                            {totalHr.toFixed(2)} Hours
-                          </span>
+
+                        <div className="my-auto flex flex-col gap-3 py-6 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
+                          <div className="flex justify-between text-xs font-mono">
+                            <span className="text-slate-500 dark:text-slate-400">Included Records:</span>
+                            <span className="font-bold">{entries.length} Logs</span>
+                          </div>
+                          <div className="flex justify-between text-xs font-mono">
+                            <span className="text-slate-500 dark:text-slate-400">Generated On:</span>
+                            <span className="font-bold">{getTodayLocalDateString()}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-center text-[10px] font-mono text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-3">
+                          Official FIRST Tech Challenge Engineering Documentation â€¢ Team 6567
                         </div>
                       </div>
-                    );
-                  })()}
-                  <p className="text-[9px] text-slate-400 font-mono leading-normal border-t border-slate-200 pt-2.5 mt-1.5 dark:text-slate-500 dark:border-slate-800">
-                    * The system compiles individual records per page if selecting members, or a unified report for team/subteams. Choose "Save as PDF" to generate the printable document.
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* Outreach Events PDF Export Modal */}
+    <AnimatePresence>
+      {isOutreachExportModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
+          onClick={() => setIsOutreachExportModalOpen(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 15, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.95, y: 15, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className={`relative w-full ${outreachExportShowPreview ? 'max-w-6xl' : 'max-w-xl'} bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-800 flex justify-between items-center shrink-0 dark:bg-slate-950">
+              <div className="flex items-center gap-2">
+                <Heart className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
+                  Export Community Outreach Portfolio to PDF
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOutreachExportModalOpen(false)}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer border-none outline-none dark:text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Split Content */}
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+              <div className="w-full md:w-[380px] p-5 border-r border-slate-200 overflow-y-auto flex flex-col justify-between h-full bg-slate-50/50 shrink-0 dark:border-slate-800 dark:bg-slate-900/50">
+                <div className="flex flex-col gap-4">
+                  <p className="text-[11px] leading-relaxed font-sans text-slate-500 dark:text-slate-400">
+                    Generate FIRST Inspire Award submission dossiers and community impact portfolios.
+                  </p>
+
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex flex-col gap-3 dark:bg-slate-800 dark:border-slate-800">
+                    <span className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                      Print Formatting
+                    </span>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Show Visual Preview</span>
+                        <input type="checkbox" checked={outreachExportShowPreview} onChange={(e) => setOutreachExportShowPreview(e.target.checked)} className="rounded text-emerald-600" />
+                      </label>
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Title Cover</span>
+                        <input type="checkbox" checked={outreachExportShowCover} onChange={(e) => setOutreachExportShowCover(e.target.checked)} className="rounded text-emerald-600" />
+                      </label>
+                      <label className="flex items-center justify-between hover:bg-slate-100 p-1.5 -mx-1.5 rounded cursor-pointer transition-colors dark:hover:bg-slate-700">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Include Table of Contents</span>
+                        <input type="checkbox" checked={outreachExportShowTOC} onChange={(e) => setOutreachExportShowTOC(e.target.checked)} className="rounded text-emerald-600" />
+                      </label>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 mt-1">
+                      <label className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                        Paper Size
+                      </label>
+                      <select
+                        value={outreachExportPaperSize}
+                        onChange={(e) => setOutreachExportPaperSize(e.target.value as 'letter' | 'a4' | 'legal')}
+                        className="w-full bg-white border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-800 font-mono"
+                      >
+                        <option value="letter">US Letter (8.5" x 11")</option>
+                        <option value="a4">A4 (210 x 297 mm)</option>
+                        <option value="legal">US Legal (8.5" x 14")</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2 mt-4 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsOutreachExportModalOpen(false)}
+                    className="px-3 py-1.5 rounded text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOutreachExportModalOpen(false);
+                      setTimeout(() => {
+                        window.print();
+                      }, 150);
+                    }}
+                    className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print / Save PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Pane Preview */}
+              {outreachExportShowPreview && (
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 select-none pb-12 dark:bg-slate-900/95">
+                  <OutreachPrintLayout 
+                    events={outreachEventsToPrint || outreachEvents}
+                    paperSize={outreachExportPaperSize}
+                    showCover={outreachExportShowCover}
+                    showTOC={outreachExportShowTOC}
+                    subtitle={outreachPrintSubtitle}
+                    isPreview={true}
+                  />
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* BATCH PRINT MEDIA LAYOUT: JOURNAL ENTRIES */}
+    {entriesToPrint && (
+      <div className="hidden print:block w-full bg-white text-slate-950" id="print-journal-batch">
+        {exportShowCover && (
+          <div className="print-page w-full min-h-[100vh] flex flex-col justify-between p-12 bg-white text-slate-900 border-b border-slate-300 page-break-after">
+            <div className="border-b-8 border-slate-900 pb-8">
+              <div className="flex items-center gap-3 mb-4">
+                <RoboraidersLogo className="w-16 h-16" />
+                <div>
+                  <h1 className="text-3xl font-black font-display tracking-tight text-slate-950">
+                    FTC TEAM #6567 ROBORAIDERS
+                  </h1>
+                  <p className="text-sm font-mono font-bold text-slate-600 uppercase tracking-widest">
+                    FIRST Tech Challenge Engineering Notebook & Evidence Dossier
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* VISUAL PAGE PREVIEW CONTAINER PANEL */}
-            {timeExportShowPreview && (
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 select-none pb-12">
-                <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10 dark:bg-slate-800 dark:border-slate-800">
-                  <div className="flex items-center gap-1.5">
-                    <LayoutTemplate className="w-4 h-4 text-cyan-500 animate-[pulse_3s_infinite]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
-                      Live Timesheets Format: <span className="text-cyan-600 dark:text-cyan-400 underline">{timeExportPaperSize.toUpperCase()}</span>
-                    </span>
-                  </div>
-                  <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
-                    SCALED PREVIEW
-                  </span>
+            <div className="my-auto flex flex-col gap-4 py-8 border-y-2 border-slate-200">
+              <div className="grid grid-cols-2 gap-4 text-sm font-mono">
+                <div>
+                  <span className="text-slate-500 block text-xs uppercase">Documentation Scope:</span>
+                  <span className="font-extrabold text-slate-900">{exportScope.toUpperCase()}</span>
                 </div>
+                <div>
+                  <span className="text-slate-500 block text-xs uppercase">Total Log Entries:</span>
+                  <span className="font-extrabold text-slate-900">{entriesToPrint.length} Entries</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-xs uppercase">Compiled Timestamp:</span>
+                  <span className="font-extrabold text-slate-900">{getTodayLocalDateString()}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-xs uppercase">Affiliation:</span>
+                  <span className="font-extrabold text-slate-900">Northwestern Lehigh High School</span>
+                </div>
+              </div>
+            </div>
 
-                {(() => {
-                  let matchingEntries: TimeEntry[] = [];
-                  if (timeExportScope === 'all') {
-                    matchingEntries = timeEntries;
-                  } else if (timeExportScope === 'members') {
-            xœì}İrÛHzèı>E²Q‘")Ñ–YZ¢<JdIERLTª1DB$b` %¢ªœ'8©Jªö&U¹=7ç>÷û&û'p¾¯»4€îFƒ”lÏŒX»ıóıÿÂ>+Œé¨3}ÇÈk:›«];nhû•¼Ş#íÚƒĞöñ÷Û™ç‡ïìÉ•í5g:pçC;¨„µy`û‰å¸kkû’û<Ûlâ\“JÓx3›¼~ıš¬ó«Ğ¶&«kä^òôr³í±±Ù‹Ú®»Jşå_HX„ËÊ‡ä‹ùƒä".-3ËškOGá˜¾¡®Z™o‡sJ*Ò	Ù:ŸÈÀµ‚àÄšØ¯W&wÕF“„ömXØSX5™U·É•çáOöŸêĞ
-Æö0ú¸VhW7ëuâ{óéUoÆNhÃ®ŞVoªÁ„ÇnÜ‚‡–ÿqîbW^EW„»Zñ]âK¶ëõ•=ÅB`)m×öÃ¾ïXÓ‘k‹‹º%ŒáÿlYwÖ”?¹­ZóĞ#“«js…lh‰ƒÑAnríMÃêÄ›zì¯+Ï’ùlfû 1ô­ÁG8ªêó_Ù;ñH×ÀbòOÑînÌJ½ò¢QŸİ^’IXm×¶†8øÔó'–KœĞrÁÊŞ;oè\ß‘;oîüß’3ßğµ‰7ooJÂ±#\‡ïLƒ€&ùäs	¡ÀéÚaPÓLpwÀFş£9D`:8˜ü>`\º}{8Ø•J0Ÿ¬{"ß|B¾#vm8÷-\Î°Ò`€_öR6şÌ‚#iÓEvñ™µ)á=çN%\;ˆ_%ß“ÕíZ‹lFc•ìèîY®xûŞ¾ÚÀ?k[ğíoeëÖbd¯]û–à?Õç’‘5«¾ 7Õë¹ërìšáøíI£ë]µI¬©3A„¹¶†vÕ™*‘Fqù~ãoÈ¾÷	F;³F6€ıÉ±oÈßl<¨ˆîØ»aÏ~û­’êä×ÓŒ4©áÄ¥U ´†ŞMÕÁò/6·). iJoPj+şy„€ÑW¼¼‚q×.9v†C{
-Ç?9Ÿlê4l…ák¿¾¿'V\;yp{xPc9lÃ¸‘§-.§(.¤°ó¾h¶èÚEM)Ø2—˜Ètm<ŒİqCûúÌ)ÜT/€R6„'tòªúbeOƒò|,%ÉJ(e†Â+È%Rau²İß;ìï“>²×­/µ¤T>³WÊ‰mi'FÉ¯nv-œİıĞå ¾VÖj¡wì,×Æ¯= lÓQeí¡hÆY®FÜëb;>üd3ëà3ã˜4zÂ¦¦¢Kó[:Ñ ô½éh¯·zÖÙÙİà_SìÂ9îé>ì).ÿÊ×ğ[qàşi¿}LúGïÒ£3¦£:·ö°Ò\{ ?œw{º=Õ°öç5)Ã’Êşéş‚„ŸüdòE†L~¤°™CS¥¤/û*½~\ÊH!R¬- ‡ÖÊ=×ÀÊ ¦a Ô°Yëò¼·™E5JGŠpD6lÄ›®ìğÆ†-Ï®H%cÃúa*¢ÔÌšî5j¤7ŸL,ÿœÂ±#¼bá/f›Ü\È+¾¶MiÖÈ‚v	£S6ÊeĞ2;ÓüjwFFç—ÔµÄ…oD9£©R-hÎß’ölæ{Ÿ,·Ôîe°'Ì€"ö&HÖ­‡GÙã§áDª[R=ù¯tç.Y/¼£Qg«ùŞ,t³V´Ô‰3­«u"È’ZÜ-[Å|d“HñéAhùa1–N‹Ş…€—S_¦åTJ·g~(Z`öW°È°já61&ø*ˆƒxFº§½~§[¼N#¢€âÀ–VŸ€ï¾•1º¤l#¡3‡‘ÒÔxÁ”&>ÀêØ5ŒÖ('Nšú@z[¥z×¾ğU•ôW<fLğ`Ü¼Ï˜D.ê—ßSK(î	ZW{Ü°H¸ÉtõôĞzóañ)D¦R>¥éŞÄş0xH^[…hRÌóLÁÂ§'-Å—40È˜^V±,^N3ROºıÓîAOÔMäFÚF2Œ™y‡‰ò3öúàè½02¢ò_1}Úä(DvK)’œehœ	SÙŠû)c5“ÑfæÎDñ?¢ŸÀ\kÆiˆ	„c -â±ú&,§%pBÒ”¶“˜P·²öôí…A›/Lœ.0’²à&+{hÂØİÇËÄÈÕcŒE°²÷¢Ù˜pŸopÌ†ç¼^yÃ;#f’%ëìJ}´ÖjkV©0[·Ú(~¯O>Úw¯ïíš3|(´æÂÂ~òÆaö(àøadÕã—TfƒÉá5 ½‡F(cöÊücÎıv=zcÄ'ï­³‘9R’y‹­ZôSÄ»Û|Vf
-ªÉšÓW8÷HKoŠJMÉlFìVØQÏíĞ÷ú~óA²»¢Í2£ª2Ç–ªä†WÃIòr#ª fk8tğà,—¸Şh–ÏëW60§Z­fºüÇ?fqËˆÁmÈ3G›.aWã¤',4^„hpÕ/{ÊÑìâE­¥q-´4fgT0¯]v³JûfÕÄeˆYw!0š<VßuŞ½étIïèíI»ŞíPïâ»ÎIÿ´KŞwºG‡Gn²Q¬n-cÑü¨üIâ«}X«ä Zò|Úö’‡;´Å·ˆ¶äj†èíÎ[â%fšXšU·H8#½¹•‡Dfâ‚±ïL?V%Ò˜vÙ%ÛŞÍpVôçÉïŞtHâÇ×÷æ·Ã£@ˆœñ†–{:³§•kËl)­)ğ-5ÃpBYR”µ%h&ØàG‚H!`ŠŸc”â“=@dm}PšŠ²¶çd <Ñó«3ÏIiEB,»–)n2ĞÛw½ÀÎŸÅÛí'9¥±5ºö€Fˆ§tvpX|$[‹H:ä$vá¾Ïƒ^y³OæO†BzÊ• Şˆ,–Á${vWêÄ›‡®3µ«Soj›É.İÛOkn•cüW˜ÃŒÆoí©í£ğÛ{¼åôNuÈ2³»1ñp7j™_ä×cÛİh³¨‹3ßìéÀiÒ%œ!CQòÎÎ	ET<íæ^pïÜÎÊi»É¼Rq¦pª–‹Ö]ofœğn‡ÔÉC y¨Hê¦Fö&ûÖ	õÃˆr1°È"~A«]ı²Dœ¥Â£Ä¢¹±İ"W ÚCß›U¯Ü¹1/S¯:CÀI™Œ8ÆÌñ+v3µŸzôaj¯Zëwş£ŞœÔ.óGô¹úºf×“}/ûº¥ñi$V;d%À­¬Ìà¯Ò„apë¯§vìtJä†JöşCì\à¦•?ŞÛ±+;ò}ƒØÂT±·.•WØ7w´úæi½Ìš­ÔU#Âˆ¾N“š·nÎ’¹1(‡­OãËœ¹2¦xÛµ ôfg mÖˆjoYá$KC¿°-œ	yãUš
-GtSáÜŞnÕu®;
-!°H&„È<9²ß”
-²»‡k÷aúiº½Û¼Å–u08Ô‘oƒ J™‘?Y)•>9©ı{Ğ»Q‡Cê{àæÍGÉ5¤BìãJo‹InÀ3bĞvZÛŠù¾ e±DQ$I9ºTç6ãòÿ()p0j	ê½õ!	f®ÂZ¦¡³õÉÍP#è’{ŠêîĞ I)ÑhdÈd¸CÿF÷¥ÂJr´mlÉ.w[½=ï¶ûG§'ğíøüİ‰4Š(°ÇBA‡;‰9¦p5ú¦–|“Ùb¿sLYâ¥ß±ğiQUÊĞXz³¥ÀtiØa÷!òı ×B‰$±ù/áÚ÷€wº6ÀÒàÌFŠ¢ „Ø‹±3W¯.0ŞkõçŒŠ*«`(v@#±'Î/tF>2¡}åyá”üB‹é¯ÎÙ	ƒİ@nl¢1„Ò_¤˜IùqDULZñÎ7Ğ`¯2 È½ÖÙ¸O©‘Th©«T)8¹ïZÓQ^¿‹vKgÉîÂi
-şƒ»€–¯æ„| %Kˆ>E¬!úäY„`#ªP¯³Ö(
-l¨ß³ˆğ8€ÉYyRàğŠâ:S3ìãòd”ècË|éæ2,#j†’ÒúGÕM|»ì—ˆÑo/êU¼°Ñh	@8‰t¯è;ñ;‹$ÒœIBj©@!N#ğşBN—t~Ğ8âµÀcëÎF	ÀŒARŒj´p9+ •{;íö^+2@ª­/ñŸµXš—=üâW¼´g$ûBHÖ³ÃØÛÂhÖ·ü‘‘>0Ğ²8Ul¶WŠ‡*ºˆSRËJÃVfp5Ì„È+í5âG°İŒm„å´íEbø?‚ù&zz…ßU½ùFüD¦œŞ®‰8ØUj5Hù16E‰Ê¶’¦A
-û{N|_ü©DÊbYD™&I?bi‘7Ïµ®l·0óGˆ¨4NZÄõ­~yş]×N¾È]I7²à½Ÿ,w€k§B÷
->9FQ:6‰%œ’P±k!EşXA¼¾a9Ğ…^ê¼«˜n
-ùÅÀu›ÔE³Y1ô¢±Y\{ƒy°ƒŠjôÉÆÆ@0
-˜.‹ø)tÃ³Ô\~R+°{+T¨â;ìn°
-ıÉ½ó7ıNûİÏÇG½>‹$
-æW†±DÑ$h,<öş½w‰ÆÑé#lÒ±LçV›ór”Ê€=~§D¦Ël]l¾…¡¯^‚ÀĞç3ôå™˜ÄŸ…‰	İWÛ˜˜dÆ9ğ­ëpeşgÁ!Îì)šã8Œ®ì¥¿/8(Ë5²‡°Hş×‚Ø6Íšşäpue/ıİlĞDLı³Ü÷,~Ø ö?§?Ôù=¤çü‚pHi»,V†ü[°²8{Ğ:lÕOa,Üä*{<ß'+çv_¹ˆJO¬ƒ^±…ÿ²Ò—(YÑ:<48ø¥Ÿ›Kçò¿èÉª©UEmW‰Ëeà¼õ/KYUâ¨Û†N‘7·¤âhDĞ£ ™lŠ\beM66šÈJ“®)üR(ª%6C£l€øËF+Ş,víK¾£«¯øÃ®mE…b§k‘á¦Œé¦Øå¢›ÎîRÄs$H )‰´–"/+{ˆFÙ¦rú¶-!o¼ZÏ•ëÈ•ÿêK5éŒ>0Y}šòç?‘Fc£,¢;€xà¯ÍFıÏj¾z9™ĞŒøæ­•G-²×ªeı%ìN‘÷>Næ'×¦î|RéŸî¯³z5ëÄkKp²&OL­'‘	“YNYv(ÕÌ¹!¨ª&q&¼1gd.Brù!iş JyĞÃ‡ê¡œ’¤ˆ4I›Í'öĞ™çB…ua#“¸äÑ	›úraÎt6×é6ŒÿÆöàã•w«ã€ô{øZ‡¢à¨Ã5
-=hAü†~‰•´3BÂMì÷9å¥¤2¢«—Faäˆïã…¤úNèÚä5bÚ—VºŠ4ÓghëÄ,Kğğo’$]~€$Ï(h¶X‚0›IH“H$ W¾â“‚!¥Zù ¿jpLL/™_Ù;ÆxÙTu¨C³÷w{3˜—kg‚›ö.ŠêÈ¼aN† .ÿ±@´º›Zg zæœNÜ™^{Æ"”ÂídèsâÆƒlúH‰TcÜ0*«“:À\Lªï¤bLnMÁiƒ† 	J%¸}ËÌñëÂS°Sè–‚kS›õæÇNû­º^)¹¯0E_¯à²ú›‘w¡‹¼–‡ş¨$Çèó=I‡•İ¿ßÏK÷ÚÅÓ'Ík`ĞJ­Éœeu~íTßÔ²š¤Š×QãlæmÌ‘}YrU¼ÍäU¼ìhjiß~+¾»x”‡5~ ú[…Ê®gş4¤Ğ
-«dÄc8ÖU}|'ş†Eñ„_R ¤/_â‡?Ş§ßıÓ8ªÜd&ßÀv6Po¨º¼úğA÷Y¶bò)"Ôå&Õô;IxÄøÓ ‹ø UOTÑYòÇJõ¨ŠÎÕ#M,ŒËEÌã'“ï(M®ã!Ã†¼õQ’ù„/TŒ2lYšùHOHkÏyÄó2!Yø1É„4:¬|6$ãtñN²¸6úõq³!ËÌbùôIJhèã˜à¢#<ºCVå¸(¨Òœ÷G½óö19k¿í³nçıQçGLaè·N:]¸|Ò9–R iº˜Ì—¡ÈÇÈ¦ä›²Ù©ÃÂü3Ìıª_¦QXTÒ°PbÓØ§JÃà©n)*à(¤bğÊsMLÍ|¼>:Ëd–ÄC’ôÊfIªsÒCzÎã„ÆÈâŒ½yØ·'3|Ÿ2q,ñjDeÌ/fs ğ?o?ƒn‚‘|ö¥¾`¡ÏQ—S¤
-…½HÕW.g"„j½ï\ÙÜ°Ê;ŠIòÅ·äş<i£Ä2÷?R¡ÛbaE¥Rdêáš­“>Šä2Ùz¿}Ü9ˆÈÏæj­Z\ àllğ@X‚,%ÀÜ“#hŠ\›ŞÉ²;QÄ<Ö¹»¸áøâR%sbç©Ö¤jùáe8x­Vã‘ò5¼…Šée¬Ï¤X}…jEêAÚ©‚ş¢ˆØ‚`fö0bšì@…ó¸¬á•ŠµN®
-4s®›ÁÌÛ¨’Yñ6c9ÉÕµt¡võB’aŞà0WCöĞ¹ F‡[‹6˜^¯¹´x>¦İY¾]aw¨Ç‹zkX´àX4™ôWâoÊãX“öî–NUÈ¥4ÛÔ¡(ÖH@@Ìôm¦³Ì/HC9Gº¯Âu‚Ä}Ó9~;‚èrÌº%Âˆq» :úã¶ŠÊ¼´PdÃ–ê'u\óLë
- [¶µ	°,Ø!ùg`_Ü2ˆÎNü¦¡ZTªUÇÔŞ¬³ô^C‘tñá!¬Áå
-Q¨8ú`[ßÚ‡+œúPQP¥D³Î~:\£*Û{ª®	Zœ>^:ëß¦‰9æ¦àpìÔò:CÊ¾ûÎÈ®WÅ®ß`‰ÏvÛ¤Ú«QÔFi›¿*Ê»÷C§Ó'÷Ñ~= äİ'ÔüTúGıãyÓ>}»0ÃR±=÷J–cÙl©‚»8`¼b‚Š¦#•ìeîOUuûÅ…ëÚ¨€FU½~“W¯oĞúDÚ•™VÚ•Õ²Œ‘…ã®ºm^™5ßÍ©‰İœXC”hI™n@¯¢º2º€ÆÈÆÀˆc„%Šm9¢ù§"f‘v»¦ĞÍßdV›ß<Ş4î8C/`æZw™y¦µØ¨6/ÄŒŸ®wåu-B«ÌŸùµ\ãÍoï…DpÈÔR72—PI)”¡•[øéõµ3p@°èu6¢5ãåKÉg9Ãà±Ôbïf‚&¥`r‰ãz%éqIh[?,|X‡Gİ^àôàı±å¢"c3p¥Õäû¸JìçB•gY`¶ñGR‡ö¥¦
-m]oß*³Éf=Dâ»g{ıŸÎ:;Qµš!9¶‡#¼3Æˆ,ˆ±¥•½³öY§»C²6Çl7ó•£ØÊöe¸Ñ,nÛ@îe:ø¶*Òe²cÊ6«×o÷Ïá-ï~];ê›0`	 7½Õ´CÄ#uĞ˜i"'zÒ¬±Şzi(Qo½Ï ŸÄFGK<àCG .İ.lj<«CåÔ¡öP‡N©²sÒïıjt"‘?m:¬-–¸V^·òŠº"‹Ze]ÁÁ£ãÊT7*èş”ÏM¤nY?ÈÂ®D|:Šæ\š"ô[­¹‹qK[*0‘7´ú›¹æcÌ€…¬ë=SxDWM7l&g2²$Kû%â¬0·òùe3YÌ¢Mn…Udá &_ÅkÕMĞU;‡äè ¤¾ªğ İï<Öp[@FYyˆÇ±™ê¼ƒ<ºÌÈKñğ¨zGøIX=ÜÔÕmeÈñ,ÌCµ1dÄÆ¸ƒO£µğA¿î:q†·%zùÄ‹e}pˆlSŸb´É¸Üf4–UÈµ ZÜ§4ê‘Îã~d‡ÔŞµ¯m³×÷½¡m#÷5¯%d.2k“‚ ü@x#£Ç›Ç–ÂÄÂ·« \Ù¦05î‚}ÔÙ‰X®>fmV1Ìğ ıY¹ôLK)‹fığ#ÕÉ ³yK$:=‰U&×¨†÷4A®ÅQT´ ';\6æ(û©Õj4LE¾Ê*¬òL<ßæN<â:AHø‡j1æÍJÙÜOç±µ[‰#;ä¶ö0±ç¡ëù6U/´úÎãµYfŸD<ì¾9mãÎÁ[ƒ«¿BÅ³FOßPåºG^¤û÷Š”ÿ4€ËñWã¦T³øß®šaSxÄ¿E}ëó(ê·h›Qìl¬üË…T­*jˆMŠ•cš"›ŠM^ˆ¿i-\‹+u‰­¶5°*7ê:İª‹…è™·p99\V‰/…Vk€WŞÈØÊ¼”.˜—pd5+RNE®3% íy8ö|t.ĞYôkvv¨¬VV×.ê—¥$Æ%tLAèU,’f™z7¾5K¯3²Ôµ!ñùI˜kB%İ&ıåÉ¼†$
-`4²Ãğ9øXÏ¤WÜ@5a¹ôú@BîS™3œ`şÌ_Je6‰*IU!¤6	!™zCÅ¯J5ÚÖ;5Z#F¡—ÈjóOZ©3+p£0¨_µ®ÇVH~´É™‹UB†q_ò…\â´d#|ŸàçU®—ªôŒÍÁÜ‘iıÏÀ±p´{
-*êø!d3+«G °YÂ„Áåk—3ß»rA"¥†çÎi’ô#’”´LW^f|fíé064áÄÔ·Y-/Ze„ˆamõià*R?'4EàÛo‰ø=1‚•²- «&É’£ª=±}Ëòú†\ŠLA_ZüŠ”zKôpÚ@]]Ş-dœ¹œÁ}EšE3}ÂµWÂîjóVöŞuÚ`,Ë"E)¼fS†²8À&Ó(k0¶A©=Ÿ¹5,(ì$™R)iØüf#å×e]ÓU¦Ğ–ªªu¡kì”Éç‹•é»7ÆªR†däXXªMQ‚©3ñù ÌZ>ÈÈ7%Ò2ê0³‚ì .&3ãL3-)iW‡¶U$áØ&+ŠjW+$¸q0OÒ™ÒûŞôÚÍ}Öì×,ñØo®}FéFÜ#1äÕ[V°y:Ìt4¥A´´Y.pâ‰­i”'»,‡aƒNôOÒ"úô¼ßí´÷`½¢ÿñì´Û'ï:'çäİéAûØ´Wôé<„íŒŸ{F/Ñ3Z±‰Ï½£³w´—ÚdƒÒ“á×ĞCzû¹‡´fjÛCZú¿p'é}o2™OQXhÍÅ¹ö\Ç“ò–/ØPÚœzEŸçÆÒÏ¥ŸKgü2¥1¡‰ø# Ïµ@ÜeÖ,TPÆØ¤l. £h¼•w¡B¸Ïò‡´Ç4†È’è`˜eî«gé/Ï¦e»õëì0­‰’æ'bj£´”ÃkÖÄ2ß'ÀÏ•­ae[¤õZÖ
-^&Î“Ş÷hi¼
-{¿ùÓô)ô¯cÅú
-–
-Š›OÀ29`?ÂJı6vöüz{	{ùÓ_ g· ÉeÍ¹c+m¹ö4¿¾ÂÊæİ¦t<RÜÍ›á©Ü§±õ×ĞÒ{1Z–4şş}brùîàÏèüùÛ„/†Ğ¼Ná×Ğ5œüø íĞîá‡Q-Aˆ*é1k&*ÙÜ°_y›l*¦ÕZ*7C™^ËJ„F¢õc6°Íˆ×-Q¼^Ù;ô½	9€ÌzËu*Áã(şéÆMh3À‚á¨8£Òıh‹[äyIô²lóÚâ²úéN	 *goTcóS¹.¬Ei?xÀ%°0Ú§Úÿ<öF#xËŞkR9™c’N%½kïœ)}dcêÓÏ¼n¾/İ#œâ,«ºù‰U`ÜËŞSúUij·èôá‚ä}»Š[KtOHm)Ô’“ï0°Q3…ÇSğ£T"È*C+âàç)-—é,ïô²¨{²_ùŞ¿*jÛ÷¾.ZËqésPZşªg:Ëè¬‚çÉ	®âæ)o!‰ß]„Ä?ÓZúùÓÚ¢0Æe)ñ#ÒaÀbr`Ìû
-¬4y—õĞn ”ÌFDC<¥©lÆFï)Kd9‘€§<p²—‚’;³qTjœ·)ù"Tø‹H¿N™/K‹(ñ¯š†ŞŒºî©YÁ¼é]DÄØo¥ ªÛ¦õPHß‘±¿Ğ(Ma”&²Ød¶„a¶Œ‡Ùİ`¤¹9•şQ•ö2ZH‘ôX|#ëü¶ªlÅÎÄ´[õSøV7¹µ<]¶W3·ûÊET1~Öƒ_Ç
-ò#Ë]½$VÀˆ0/ôüRXà§ØÙAX9€à=!2õ‰È¢‚ÒÜ=®Û‰ó7¥~÷’¶SéÜÜşië–éÏyMŠBŠÊzM
-Ü$YGIº=@ğK!¿4r“$dÁQòdÎ“2î“â ıÛt¾B†”%NÙ´{Ö_J$<+{ˆ8&#
-Ê·-!|<%¹ñhÙêËâTn˜Š¬áÄ
-ùóŸH£±‚Á¬Ñ¼ÍD³QÿóŸš¯^N&QŸ	vóÖÊª1‹W\ì‡U—HZÂÙEKÄuIÇ¥‘J©ôO÷×	­„ºNìp°¶k¢ÿ&iI=8É‘‰f–$=¤,£4Ñõ]ÏTMd%
-zQÉ$	ábåb™ª‡rŠ±" 7Ó›%eèr¶à‡Ğn±\Í§èjŸ>§`Y¶·ı©|˜'êp/²¡Ï}[<^·û(‘!-écPyƒÉñõIŒ ¿g@"¸<˜Á ¿= “”èıÀ˜¼f\“UõÃXEÑ¹B_4ğY ”Ç¶/¥| ß¤æÒYÿiU¶·"’ìöf0/×Î„ùlbÏgi˜ÏxğÜW^úyœÄü<÷—ÿ*úË€Fm;YÃô×¤âÉlÆhÈ–ş ÄXÓĞ®ïåOkØyÂÀx¥eœoƒşÑ¾3±a^4nœéĞ»©ÑìZ]»×‡u:˜ºÏ£Šm-b“eÚú’à\tñe:¿2q
-Êe”Y1¢VíÒC‚AÓ\V>Æ5ñŸL¬b}vp¨ïƒ­FPUº¢‚s ßxÔ;o§{¶`[öÑ	m6yÒ9–rm:p‰šÙ,²|)O<¡éCÃübÌí­_¦É°(çaõË¦±A•QGS™İ‘IÙ]‰$ÚÔ¯‰)Øƒw@Öf™$A’kÓQ®Ù¬xEºoùˆVÃ8Ú‚ˆÚò(è(?¾z1››şy3øÙ™^cRœ}©.v„èò…Ómï^ä}y%*šR11ŸWÌ]";Š™Æ{ĞRÙˆñĞ}L²îÖíBj‘ªóŠÉKÅ¥Â¸Y×Ô€VTLgBÛow"Ê´€éLkı,`•L±9'F÷DrHY)d's¿¶¯¸8ÿh6ÏÆóË1k0.R²_A‹ñGoá]Ü6;•˜Éøƒ®6Ï×÷"˜ê¬³ˆ f!	eÔ<Dß…,Ê3ä-`$x‚jòh*o•–Ô6Q•U´è±Ln­ãÉ	¸Xöú>ôçš½Q‚ïs©1:ÏçRcÏ¥Æ¾T©±·Ç§İ£Óó9î¼ïWÏÏH·}òd¿sÜyÃk…”(:æ©uÏgVhıêÊŒµ>{™±1À”k8ÁÄ	‚c¶uVQŒVøjÕ?SA1úTµèu†Åé‚b¨æ–*(Õ“…÷8ÁĞ2˜#ŠzºĞP¡i@F&ÖSn}•‰yˆ$ÕH÷ÆêbB¡1´A“ä0úšc)x˜ÑÓÔ ë{32ò#½Bß‘•åÏòXë*ÀRÆ67C Y…ÿğsc#‘Q5´zUŸ\ûŞ$éF>9Vu†Vd;pƒ3:#š¡÷Ôõ™Pte0€ƒc¼àâˆn8qiaæs¯âä›[0í—È}_¦gÍ_@ç=¸³¦qª»W¥ğYØ±è°Y˜0zÖÌøWe")U[uëÚQü
-æùw ú¡3@OÊŠÒêp÷U,Æ»NhÂuÒl]²ğÄ¡=Z'"DQM[ğCC™D&PF5nÓ´şiDKnÔH”Â( ¸ªfTIÅ!$aír]~?Ìàî†Ûª¤¹÷]WÜOhĞÿÁ½Ò[ù*.`p_­Én®5/%wK—™&}C.…ìMĞ	(!ş$p …¾=³ÑÜsÄÌWwÑ• t0_Ü‚zmKş&)6"±¸³]$-­¬-3’Ü÷æ_lIİ?q#À˜øfë¯Wd“‘	@÷ùkÒdf$ÃùÏÿC©ë_şï¿I´•ÌƒŸµ|5âÌ@¼Jl} wã;îg• 2r<ôPÉA†á™b"xA¨ªÕfò"Ù°4”HÆ G
-Ô$M,IîÊ‚WşÉÜRjI-°Í­,9¿ÊÒó&%ŒEG:Iu‰Ì]ÑeñÖVš„ªä‘åşªÚÊØ„Øp°Í¸»—;ŠÛqd³,|ç––äÓ‚˜0;2¶\Ï¨r^Œ~‘˜™æ	lM¹‹r¾±Y_ÿs³üŒ–\Ë¬Û{
-½"?Gj%3Ş´|O4/£|Ë·ò¢şóÖìöçFşñGWV¥¹ÕZo´¶×õzmsMftO#´}AJawhŠ –È[Hª}Jmöt›Ó¡ÕÑÎÊqÊÊ Ooi0°Š4z­:‰ÿ²Op“ÖpLYéõmzòí·Â…Efñ&Í§´CÄ0·ÍÌn½<næö-˜¨³iäFjõJ‹Úç!¯uHõ”ÆX£?ö`ìÀ_Ãork7%+jäVDåë	›Â&ü-¶/L']QD¦'ÉĞ	fÀe³}=R#,KÄØE³uçWŒ3Ï«ÿãF~­r?â¸:»UÈÕ¢@Š’u&à?¹´]Ï	°“;,ˆ)—Må¦hÏ/›ÆÅ1÷b‹<ÛU#—Ù¾7…õ†s—²Ã`]Ö˜Æ¨oìyØş÷µ)EÜæò“7GMk0:ÀĞÑ‚zĞÕœ¿rĞôFğ-D.Ğ.¯cB)±ƒù$š$p`: z}¢ÂwxløÇÈ@Õõ®¼®…Øı1jÃğĞô.ŠôY3“¬$'' #gÒ³aÊgÔ¤X¨üÜ Th¥ê İÆËPÚ÷"¯IolÇÚs&"?F¼'§4ËÆ[i% .-|tÏÌãÈcüG!¾Dj]Z}ç…ÒHÖÚšP@‚&Çï»Ôä)¡“YY¢!khHí1BÊëå.×36_C3Šİµoç°¡Ö­…ÕîW}µï,/ÛNMR}É„rM;_R‰BN7äd¼TµoŞ&u²ÿµœ	aQ92$VÄÌé£åŒíì“îı"‡¬Ê¼”ıÄÒUXpUÓxñø¾V:Ş*+Ë	a^×©(¡O i™:‹‰VÀfÀ¿'³ ø Õ…ªÔÔ[{µ}YÍ%Ü§Ş-µI8èIÈ9²¬G7ıGÀG¡m Ğ†
-ó§İèµ÷;¤·ßítNh´Vç¤Ÿ‹ÕÒ?{tĞyÓî’ïHñ…cüØmŸuºtÁÿpÀ½,o°d aûq‰õ*9=9ş‰P#º=\'´ÁÚîğÌONàĞ$)¨Û¾mO×™]" ÖÊA7YC$ËTöğÙ(Â*îyU!Î"}EÙù,åŒwW½)¼16S˜ddŸUngs$h0—C;›ÄÊh"å"RôYøSÜÀú¿¸¯*Yí Ãwˆú¶	kÌÍ?ùJİ»tÿàıÓ‘(¸w=;<ÂŸúï_ßßÿüó8œ¸;äC
-:ÿó$,şÆ¬¬ğwtbcÌÕŞÙÂ–¤Öf’&A>j4œ)ÊÒ»“ÊÉ„¤2(ñÉ-xò!ïiXşÈ™¢·úÆ™à¸Ö4ÌŞ˜%ˆWŞğNİ’Ø›wXC`Íşãb{cº£IÖµwÍ¬ázNt·eR 6¿®íp>i:¬øíÃÃêÿxíõ;,(4|âh‰|-Ï]‰©N™š¡œ¡CŠh˜‰K¦qºÂĞ›#‰Éµ?ŸH@_åCåc;)"Áß¶>¶¯®w°döu¬®ÓB36ê”
-ØfÕ¼Aâ€İÜ¢=è8úÄY­ğÊ"%Äx‡	¢e´E£ÉäÒ Lb*„-{‘ÛßdG%ê”)…ÇG™	®2á¡ÉDA§Ç(¨n·l»‰ùa+29Ø’N3)CÆ¨ 'ŒåµaUãQwìÛÖ„ÆZ®dhXÈ]Íëó‘YH6Ÿ|…9o½j£’$3—TÀß&5n¦œõÔ¶‘À±í4¿KWñ™fàK¦w¤öÎødº½>œ)ˆGûcYA&±ÙÿÕ‹Ö‹—&û¤0âd£,CŞm…gj%¦édãf `½´€ñV&¹2£>¾¬ËÃÁwÕåf{Üê³wpºşÅÌşOgØ‚õR’cÚãD¤Åúíu@ôºŸÚ7´Ìfe­zG½Ó^ˆà
-ßh[ Êjuí¢~©îÏ+¼á¬‚pïèŸÄ™få xË9BÎ>@NeM5®:¥O¦õûšj7ÂüºıÓîAì·{½£Ã£ÎAj2ùp˜^6Y¯ßîŸ÷„1ßê_;pJ¬yj¹ëlí¥´‘J(í7 ¡œFªKO-¨ôO÷—SÔb‰¨4ÄòÉ¯QîˆDI¸ş¯¢d #*gE3mÎ7‰_¤Â…ÈuM	o.]ÆL›FÌ4EóŒ˜i+òN³‰ş>c	Í‹|ß8˜şñxœ‚Ë‡è’[H7.ï¨H,’xJ½Œ„cÛ*èLèKOÂÌÊ”÷L¦*ÓÍæš2`3™OíØ ûnçìn„ãEG8h÷;?¥ñÎû?œv—¡wş¦ßi¿#û0“·§İŸÊ•0':b£¹²‡
-¢zøÅ—3%dì†Ts^@hW‚ÀşˆİŠ³Ìr>VE{š¯gxkï`LÀwŒU>”¼Å¤Ÿ¬Úû=i ­­¯‘ïÄßÓ¿4TÙÅI€4 ‹wc>¤B0ÂãßôEsÃaæ7<`Ô«–Ê7²C îºöµí£¥rßÚÑæò}G!(T`½é¼àUlİ˜/½äx=qr+TúÙkAÀ{şâ/ååÉSB´tSÁ¼·š‹€°RY¾%AÒı‘ÏP 9‡óQa>~”é$òdJd’$å_£CåóÑhEŒ\&I.xE–_²P*Ú2°ÎáI(‚ìÈDa’%?Óıi›T¦MbÜ´iı]tğPÛD,ISëg´},’^Aû¼´,$]:ÙUøª@›Ñ²vÕBa»Š²7›óEe…•2»Ñ‹¹\¯C |T_‡"'ÒR…”Ö°HRú°ƒIÒ—Ù)ÍÀëÚœyM·é%:U—‹>cZŠ6éryMèºPÀ"IÜo©MG2–ZTİEÉĞ3ì@!oiÒ Ç[j?|.è*µ*¹1”+CeÖ	 zŞ=iĞÚ»?)V2Ş*WI?yıÄz«£ã/¥ÄåÀ4¥$;ª‚ÅÈòG7x¾ŠP>â6	d4…5cÂ•®Ä¨¸`Ôt²¦¨X”ÓaPS¨B¥)Ê^ÏÔ¦d:÷«D™.«©f"+¥¡´T©z¹¶ZCQ¥‚Hw™®2ó½kÇµ±çÂtXÁoø$ş—FÎQ¾"ÎsÕ¿F–Ó
-µœÖ $&]	#¬80û¾ZÃ™çÚ}k¤«2`Tg@r0Î”¶¢—ÃâªP¨‘­>·]Ï‹äIMaF›°K†ì§XD4^³•NÕÈ`)•|`~¾ñ­Y)NëŸ˜|Q*Bşç¿şí¿I¿}pvzÜÑoUa•a]¹'å/ü˜¦s×UVPäƒëÌßåËq+9tlww–,ß-OMØşßÑZL³Vœ–\Â‰ı8¶Bò£2Öt
-°bVyO+SE$‰õTÕ¾0¬s!	½eQJcš€$»m”e‘³5à5d\t«ä2ÛéĞØN«D!Fï^E 2ÂA:µ=UbThĞzæÛUŠØt|*ÄÑ9W
- ±= qXÍWy†Æ§†FKØî'É' Cqö‹g¾wå{&ß’&YÑøúß,¢ü9¡1ŞpLsâ-¿Æ}Z *#"ÅGmO‡ñ1¦*I)JşÑ¨ ÇËŠˆ -7?ñxt/tÃğŸúŸíaMéËVUœ¡³RÈMmµ;İvPûÛ,ñ1VÎbùÚÃÛ‡œÖµ¬í(3—BH$:²”ôrBs*¶&›ä dPXåp„`¼"vA•_a§˜İ¸±lK…boDEÎ½,™Œ×%	½O¯¨¨'mA=®E|èÊ0©3ˆ4 y
-ë'XGA–1ånÅ³êöí_†ÿ†$
-"9µÑ@C½¿œT!…5d«‚‘T /ïÌ†pS ™ÙşªéM2 5ÃĞwn{ˆ,pÙ)¤gØ¹ñ­YÁ»HeÓs,X‡7!üçÆ¡qCÇùÖ$P•®,@“C•?R”É:“Q;eİç*j“«¸¤Ô§ÕXšTÉ÷Æ
-fhCºØÚØ¼Œ§­5”²ùFc«ümË–— »««íÈ>?`ç0´BëÜw%ÎÄìÇrCöÍõ-¾_tîÒÚĞBöıÓ»úgÜÜKZ’Vø)|‰VrßöÏ<Zï^¯L½jt©èá¢Ú EbƒBÒäy¶ZÜ'çK¦G92’Ïÿü×¿ÿ/"œHåñ°†éAdƒ4êÍ-Œ¸=Äzm•ÆÚù‡7ºªû_HP*ÅPtVÈ³ñ]@sÍg4µÂ¹"Î­‘%2Š=˜…˜™	@•ÇİÊ9¤D_kÖŸªó½‚¼‰uõXNˆaÅìÑï¼.¾öñÑ?uÈqçàm§Kà†+wIû;Ÿ’¿üë÷.b&Ç§ûícÒûéd_­DîĞ6?`òöô²OöpU©Œæ4¢#Rş—¹nÊ¶êJ½
-àüËşÇÿûïÿMzGoO0vığ¼ù‰`Hüiw'Z«iS¿Ìj¿Óë³ßn+õ©õ_õFÈÅ[äp742.ûÍƒÔq!íşy·³C~Î4sS&ÆÿAz5õ¬èÃ†R÷®IX©şÂÚğ=V«>{…÷N.ƒ5õW‘ÅÊ²÷OßÓÎùÜ@º¬ß{~`²	Ï9‚Ï9‚°#-Vş³ä–Oa(HIhT…¾k# KæûfªJh=§ÿ•Iÿ3W–J	¤Pfø¶sÒé¶òi7.ü¥.‘(!ó_m2 RÜ(•u~Üî½ï^¿Û9yÛÿ¡à%¾=œìJÅ@œbÑL™Ô¢™?xs ~ êÖ×Öáÿ±Ù%rìMù…¤wşî]»ûh(oõ¢Ïo#ãğ3H2FY‡j,Í„Sáãce6ª,Ä½ùdbùw,…Q
-ä²ÄÅGâû¥SÅäE:š"½sKW?[ z72Í—‰ÙM°öOû<:ù¨Ó+Ü5OŸÒá8›Zi›š¦@ûGï:‹G6å³ª,ä)_™}HÇ‚ùdğnÄó	ğ;Ír^ÕoR‰n¦)°¢?™*ÍQXÏu­+U'O±U§9¦¿¶)cêĞõÄS)z
-ŠÂ5Ñìù\PÖ§t¦4	 š'©püÎÆ’Å‹Ğc©‹<œ2apˆS$ÏeSæ°î*Ö¤¶ Zà:€õu²ÕZã)\ŸÄü-…ı.Îı$÷mexå;—KsqëRIšŸŠ34õ!¤²æíóâŒ‹–íO(6Q„7˜¤R*_Í¥Œ‰)ß‘låeXÕUy’rï†š=  óZIì¹= ¨¯ï·2‹Oç@ŠÑZéøie÷)¥ÿ¦V«Ñ5Íšª°¦2ñ|›{Äh+|\éş)½Ù2[´‹ã¤Ó’JzŞ¡ƒ*º1FJÍYé6ù”á/Ê¨î±‡Ë{ _7G'èÀÿ1R…
-J¿îqGGìÛyóÙoŸasa‰Ã`‘²¬ÚK©“Íèw©”H4İ³œríø˜Gƒåk@´a;VÚÃ£ÏFRßW¾Q½¿Éi„k
-•ğ«R‡äÊĞ2¹˜__&¦D¹TZf÷ôÍi·}XÑc(Â|œR!bic´ÎŠœ¼"µ …oUâtA{`\ÂëøÜP¹ÏK ²#/>%õ:ÊGPa.`#ƒVˆõ:æXÜœ¶Dr`ı¡è+12çÜtä\î†¢îã?Ş¼#j?‚s|I·Ì¢nfıÌºiJå‹ÍœelœÒ;p“+¨ë¿z¥øY%.V‰SçˆØ'çïŞt„¬ØÄ´óˆÔ®õ¬P™‰(•‚5±@ëLÉ
-'+ í!¹öÈˆğ®YÌ"<ëÒö«ë$v²[KZ»´chà¹j"C2±êb´G¬írö w+øà
-'$ğe&ËE) kÙ¸’CØ3ËG9ÂFËè”…ì,¿Ø‹pÍâ‹O¥Èï…W¼ÅöGQ26¹º#¨)u&–“u²`Ú-Éî{raã];´Ğött¹CI&Í÷¾¸$ä5¹Ï\–@&ì`ÇŒYV¸<™÷IÇ·‘({8e>_S„¿áóds¼\#éï0ÌÅeşÉôMµÙ<àóÊ%µ>¬åz¢óÖS	Xı9¨ğñ"ÕG]'£#e™(¶Pº4~¯³s
- x*kıŠ¹;¨‚\s)ÍÅ’o–oW®èEY5?ô@Ñb~‘×âËJ	Õà‘ú¢~ù}¬‚£7ÆfG—D“¯-/#ƒf«À¡œb-™Š¸Ô#µe¨šÇ‹´[®äÈkÅà›ìÊb¡¢1ø‘	øQº_Ìg‘­ #ï.¨P€MôH&ÕéVÅ‚ñ
-0xD2£gò*µò/ó¬$5zÊ‘ÈÅÁ|$wšğ7+Û\g¬ŠH|U­.
-ÛJ'jA4«Úñ+*5f•«ê­zƒy`$²ñ‰Bb5+*’{ÿÑÉÁÑû£ƒsŒæÌ;ŒKJd
-é1&•e…¢ÂsQ'P=ç@WRY;“ı.u äQµ¤û@ìÿ´ŒÏ ^E¾"å-ªªz¿AÑÓ‘
-H{‰aÆÔ™í;ŞpÑQJ¹ŠC÷„‹VŞµge¯oÉy	°ÓØÚŒ{#ı›teø4E8ÙUnöé—Š“rb·…™×¢¹`^ŠÂˆßÀ>W”‰¸Y¹ÉÂñiÆ)Ï´x£Ñ”3*_VFÁšjÔHğ@ˆ€ïÀÛé·%f•õ†P‚­ØÓÅ<#ESˆP…Ie7Ô;‰éËv6Œ{a©6*d;°ƒïPí°¸æ¦½ô*äRùø¯yOÃ6IÉq(¹™$z”ªœK%Wğ›¹©nm¥hâ»šˆ.Q@[·®dí ©"˜ş^3“òI r·cÓÀĞt]jap½³gPCSÌ|1¦kdL$@‚ÖŞ™%vø§“0J‡%,”ğXRÅ¢ò„ú9t¨#%`P«ü(¢Ÿ5LºØàkÑ¡8öqA¸ä›¢2­@”;È‰åûÔOğe"&Œí+hÆ°b£Fîè‡µµbùåé%—§“Yô#çU­v™pŒÅ!½°‘kØúâĞ_şõßM¢§…x7ÇÒ©G"„~	¨LäÊ’Ñ³'–qŒ¥L‚l53Ò¦fnğ˜Òí`7Í…Ä²>ƒdÇÓy‡?“Ír_2áQÌjôøÈl`!±QúÃÊmLõn´tFÇÔ™”¶E³R ¯åkËØ­gQ<¼p{:P>ó@…†dˆcF$ôO÷e·ÃåìÍ@^ĞfC'İã—i"±¶v£™Ì§Nx— M¹®VSïêd0u„î‡?ü   ÿÿ —Ya
+            <div className="text-center text-xs font-mono text-slate-500 pt-4 border-t border-slate-200">
+              Confidential Engineering Material â€¢ FTC 6567 RoboRaiders â€¢ Gracious ProfessionalismÂ®
+            </div>
+          </div>
+        )}
+
+        {entriesToPrint.map((entry, idx) => (
+          <div key={entry.id || idx} className="print-page w-full min-h-[100vh] p-8 bg-white text-slate-900 border-b border-slate-200 page-break-after">
+            <div className="border-b-4 border-slate-900 pb-3 flex justify-between items-center mb-6">
+              <div>
+                <span className="text-xs font-mono font-black border border-slate-800 px-2 py-0.5 rounded bg-slate-100 uppercase mr-2">
+                  {entry.subteam}
+                </span>
+                <span className="text-xs font-mono font-bold text-slate-500">
+                  REF: {getEntryReferenceCode(entry, entries)}
+                </span>
+              </div>
+              <div className="text-right text-xs font-mono text-slate-600">
+                <div><strong>DATE:</strong> {entry.date}</div>
+                <div><strong>AUTHOR:</strong> {entry.author}</div>
+              </div>
+            </div>
+
+            <h2 className="text-xl font-black text-slate-950 mb-4 font-display uppercase">
+              {entry.title || 'Engineering Session Log'}
+            </h2>
+
+            <div className="space-y-4 text-xs font-sans leading-relaxed text-slate-800">
+              <div>
+                <h3 className="font-mono font-extrabold uppercase text-slate-500 text-[10px] mb-1 tracking-wider">
+                  1. Objectives & Goals Planned
+                </h3>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap">
+                  {entry.planned || 'No planned goals specified.'}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-mono font-extrabold uppercase text-slate-500 text-[10px] mb-1 tracking-wider">
+                  2. Work Accomplished & Implementation
+                </h3>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap">
+                  {entry.accomplished || 'No work accomplished recorded.'}
+                </div>
+              </div>
+
+              {entry.challenges && (
+                <div>
+                  <h3 className="font-mono font-extrabold uppercase text-slate-500 text-[10px] mb-1 tracking-wider">
+                    3. Engineering Challenges & Troubleshooting
+                  </h3>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap">
+                    {entry.challenges}
+                  </div>
+                </div>
+              )}
+
+              {entry.nextSteps && (
+                <div>
+                  <h3 className="font-mono font-extrabold uppercase text-slate-500 text-[10px] mb-1 tracking-wider">
+                    4. Next Steps & Future Action Items
+                  </h3>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap">
+                    {entry.nextSteps}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 pt-4 border-t border-slate-300 flex justify-between text-[9px] font-mono text-slate-500">
+              <span>FIRST Tech Challenge Team #6567</span>
+              <span>Status: {entry.status}</span>
+              <span>Entry {idx + 1} of {entriesToPrint.length}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* BATCH PRINT MEDIA LAYOUT: TIME CARDS */}
+    {timeEntriesToPrint && (
+      <div className="hidden print:block w-full bg-white text-slate-950" id="print-time-batch">
+        <div className="print-page w-full p-8 bg-white text-slate-900">
+          <div className="border-b-4 border-cyan-600 pb-3 flex justify-between items-center mb-6">
+            <div>
+              <h1 className="text-xl font-black font-display uppercase tracking-tight text-slate-950">
+                FTC #6567 RoboRaiders â€” Timesheets Report
+              </h1>
+              <p className="text-xs font-mono text-slate-500">
+                Generated on {getTodayLocalDateString()} â€¢ Total Entries: {timeEntriesToPrint.length}
+              </p>
+            </div>
+            <div className="text-right font-mono text-sm font-black text-cyan-700">
+              {timeEntriesToPrint.reduce((s, e) => s + (e.durationHours || 0), 0).toFixed(2)} Total Hours
+            </div>
+          </div>
+
+          <table className="w-full text-left text-xs border-collapse font-mono">
+            <thead>
+              <tr className="border-b-2 border-slate-800 text-slate-600 uppercase text-[10px]">
+                <th className="py-2 px-2">Date</th>
+                <th className="py-2 px-2">Member Name</th>
+                <th className="py-2 px-2">Subteam</th>
+                <th className="py-2 px-2">Duration</th>
+                <th className="py-2 px-2">Activity / Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeEntriesToPrint.map((entry, idx) => (
+                <tr key={entry.id || idx} className="border-b border-slate-200">
+                  <td className="py-2 px-2">{entry.date}</td>
+                  <td className="py-2 px-2 font-bold">{entry.userName || entry.userEmail}</td>
+                  <td className="py-2 px-2">{entry.subteam}</td>
+                  <td className="py-2 px-2 font-bold text-cyan-700">{entry.durationHours.toFixed(2)} hrs</td>
+                  <td className="py-2 px-2 text-slate-600">{entry.description || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
+
+    {/* BATCH PRINT MEDIA LAYOUT: OUTREACH EVENTS */}
+    {outreachEventsToPrint && (
+      <div className="hidden print:block w-full bg-white text-slate-950" id="print-outreach-batch">
+        <OutreachPrintLayout 
+          events={outreachEventsToPrint}
+          paperSize={outreachExportPaperSize}
+          showCover={outreachExportShowCover}
+          showTOC={outreachExportShowTOC}
+          subtitle={outreachPrintSubtitle}
+          isPreview={false}
+        />
+      </div>
+    )}
+
+    </div>
+  );
+}

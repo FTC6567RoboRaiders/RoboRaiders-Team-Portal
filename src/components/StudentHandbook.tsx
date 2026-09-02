@@ -7,40 +7,25 @@ import {
   Printer, 
   Clock, 
   Compass, 
-  Award, 
   Mail, 
-  Scroll, 
   Briefcase, 
   Heart,
-  UserCheck,
-  HelpCircle,
   AlertTriangle,
   X
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { HANDBOOK_CHAPTERS, HANDBOOK_METADATA, HandbookChapter, HandbookSection } from '../data/handbookData';
+import { HANDBOOK_CHAPTERS, HANDBOOK_METADATA, HandbookChapter } from '../data/handbookData';
 
 interface StudentHandbookProps {
-  currentUser: any;
-  showToast: (msg: string, type: 'success' | 'danger' | 'info' | 'warning') => void;
+  currentUser?: any;
+  showToast?: (msg: string, type: 'success' | 'danger' | 'info' | 'warning') => void;
   onBack: () => void;
 }
 
-export default function StudentHandbook({ currentUser, showToast, onBack }: StudentHandbookProps) {
+export default function StudentHandbook({ onBack }: StudentHandbookProps) {
   const [activeChapterIndex, setActiveChapterIndex] = useState<number>(0);
-  const [activeSectionId, setActiveSectionId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const activeChapter = HANDBOOK_CHAPTERS[activeChapterIndex] || HANDBOOK_CHAPTERS[0];
-
-  // Set first section active when active chapter shifts if not already set
-  React.useEffect(() => {
-    if (activeChapter && activeChapter.sections.length > 0) {
-      setActiveSectionId(activeChapter.sections[0].id);
-    }
-  }, [activeChapterIndex]);
-
-
 
   // Search filter index
   const filteredChapters = useMemo(() => {

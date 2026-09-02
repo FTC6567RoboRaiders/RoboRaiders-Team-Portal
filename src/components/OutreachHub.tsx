@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Calendar, 
-  MapPin, 
-  Users, 
   Award, 
   Plus, 
   Search, 
@@ -12,12 +10,9 @@ import {
   X, 
   Clock, 
   Sparkles, 
-  TrendingUp, 
-  BarChart3,
   Heart,
   Upload,
   ArrowRight,
-  Info,
   Printer,
   FileText,
   ChevronLeft,

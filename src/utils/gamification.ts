@@ -158,7 +158,7 @@ export const computeUserGamification = (
   user: UserAccount,
   entries: JournalEntry[],
   timeEntries: TimeEntry[],
-  kanbanTasks?: KanbanTask[],
+  _kanbanTasks?: KanbanTask[],
   outreachEvents?: OutreachEvent[],
   xpAdjustments?: XPAdjustment[]
 ): { stats: UserStats; badges: Badge[]; quests: Quest[] } => {
@@ -224,8 +224,6 @@ export const computeUserGamification = (
 
   const totalHours = userHours.reduce((sum, h) => sum + h.durationHours, 0);
   const totalJournals = userJournals.length;
-
-  const levelInfo = getLevelInfo(totalXp);
 
   // Define Achievements / Badges list
   const initialBadges: Omit<Badge, 'unlocked' | 'progress'>[] = [
@@ -497,7 +495,6 @@ export const computeUserGamification = (
         progress = Math.min(100, Math.floor((distinctSubteams / 2) * 100));
         break;
       case "debugger":
-        const problemEntries = userJournals.filter(j => (j.problemsAndSolutions?.length || 0) >= 1).length;
         // solved if they have either written 2 separate entries with problems, or scored problems count
         const totalProblemsDocs = userJournals.reduce((sum, j) => sum + (j.problemsAndSolutions?.length || 0), 0);
         unlocked = totalProblemsDocs >= 2;
