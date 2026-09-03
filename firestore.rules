@@ -31,7 +31,7 @@ service cloud.firestore {
     // Entity Schema Validators
     function isValidUser(data) {
       return data.keys().hasAll(['id', 'name', 'schoolEmail', 'schoolId', 'primarySubteam', 'secondarySubteam', 'role', 'status', 'createdAt'])
-        && data.keys().size() >= 9 && data.keys().size() <= 11
+        && data.keys().size() >= 9 && data.keys().size() <= 30
         && data.id is string && data.id.size() <= 64
         && data.name is string && data.name.size() <= 128
         && data.schoolEmail is string && data.schoolEmail.size() <= 128
@@ -49,9 +49,9 @@ service cloud.firestore {
         && data.subteam is string
         && data.author is string
         && data.date is string
-        && data.planned is string && data.planned.size() <= 5000
-        && data.accomplished is string && data.accomplished.size() <= 5000
-        && data.planNextTime is string && data.planNextTime.size() <= 5000
+        && data.planned is string && data.planned.size() <= 50000
+        && data.accomplished is string && data.accomplished.size() <= 50000
+        && data.planNextTime is string && data.planNextTime.size() <= 50000
         && data.status in ['Draft', 'Pending Review', 'Approved', 'Needs Revision']
         && data.createdAt is number
         && data.updatedAt is number;
@@ -68,7 +68,7 @@ service cloud.firestore {
         && data.startTime is string
         && data.endTime is string
         && data.durationHours is number
-        && data.taskDescription is string && data.taskDescription.size() <= 5000
+        && data.taskDescription is string && data.taskDescription.size() <= 10000
         && data.createdAt is number;
     }
 
@@ -76,7 +76,7 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'title', 'description', 'column', 'subteam', 'assignedTo', 'priority', 'createdAt', 'updatedAt', 'updatedBy'])
         && data.id is string
         && data.title is string && data.title.size() <= 500
-        && data.description is string && data.description.size() <= 5000
+        && data.description is string && data.description.size() <= 10000
         && data.column in ['todo', 'inprogress', 'review', 'done']
         && data.subteam is string
         && data.assignedTo is string
@@ -91,8 +91,8 @@ service cloud.firestore {
         && data.id is string
         && data.title is string && data.title.size() <= 500
         && data.location is string && data.location.size() <= 500
-        && data.description is string && data.description.size() <= 5000
-        && data.impactMetrics is string && data.impactMetrics.size() <= 5000
+        && data.description is string && data.description.size() <= 10000
+        && data.impactMetrics is string && data.impactMetrics.size() <= 10000
         && data.hoursLogged is number
         && data.participants is list
         && data.images is list
@@ -115,7 +115,7 @@ service cloud.firestore {
 
     function isValidXpAdjustment(data) {
       return data.keys().hasAll(['id', 'userId', 'userName', 'userEmail', 'amount', 'reason', 'awardedBy', 'awardedByEmail', 'createdAt'])
-        && data.keys().size() == 9
+        && data.keys().size() >= 9 && data.keys().size() <= 15
         && data.id is string
         && data.userId is string
         && data.userName is string
@@ -129,7 +129,7 @@ service cloud.firestore {
 
     function isValidLedgerTransaction(data) {
       return data.keys().hasAll(['id', 'amount', 'type', 'category', 'account', 'fundingSource', 'paidBy', 'description', 'date', 'createdBy', 'createdByEmail', 'createdAt'])
-        && data.keys().size() == 12
+        && data.keys().size() >= 12 && data.keys().size() <= 20
         && data.id is string
         && data.amount is number
         && data.type in ['income', 'expense']
@@ -137,7 +137,7 @@ service cloud.firestore {
         && data.account in ['Self-Raised Funds', 'School Allocated Budget']
         && data.fundingSource in ['School Direct Payment', "Steve's Credit Card", 'Out-of-Pocket Reimbursement', 'Sponsor/Donation Check', 'Other']
         && data.paidBy is string && data.paidBy.size() <= 200
-        && data.description is string && data.description.size() <= 2000
+        && data.description is string && data.description.size() <= 5000
         && data.date is string
         && data.createdBy is string
         && data.createdByEmail is string
@@ -146,10 +146,10 @@ service cloud.firestore {
 
     function isValidNotification(data) {
       return data.keys().hasAll(['id', 'title', 'message', 'type', 'createdAt', 'createdBy', 'active'])
-        && data.keys().size() == 7
+        && data.keys().size() >= 7 && data.keys().size() <= 15
         && data.id is string
         && data.title is string && data.title.size() <= 200
-        && data.message is string && data.message.size() <= 2000
+        && data.message is string && data.message.size() <= 5000
         && data.type in ['info', 'warning', 'danger', 'success']
         && data.createdAt is number
         && data.createdBy is string
@@ -158,7 +158,7 @@ service cloud.firestore {
 
     function isValidInventoryItem(data) {
       return data.keys().hasAll(['id', 'name', 'category', 'quantity', 'minQuantity', 'unit', 'location', 'status', 'condition', 'createdAt', 'createdBy', 'createdByEmail', 'updatedAt', 'updatedBy'])
-        && data.keys().size() >= 14 && data.keys().size() <= 26
+        && data.keys().size() >= 14 && data.keys().size() <= 35
         && data.id is string && data.id.size() <= 128
         && data.name is string && data.name.size() <= 300
         && data.category in ['REV Robotics Parts', 'goBILDA & Motion', 'Electronics & Power', 'Hardware & Fasteners', 'Raw Stock & Materials', 'Tools & Equipment', 'Game Elements & Field', 'Consumables & Lab Supplies', 'Other']
@@ -177,7 +177,7 @@ service cloud.firestore {
 
     function isValidInventoryTransaction(data) {
       return data.keys().hasAll(['id', 'itemId', 'itemName', 'type', 'quantityChanged', 'resultingQuantity', 'performedBy', 'performedByEmail', 'timestamp'])
-        && data.keys().size() >= 9 && data.keys().size() <= 12
+        && data.keys().size() >= 9 && data.keys().size() <= 20
         && data.id is string && data.id.size() <= 128
         && data.itemId is string && data.itemId.size() <= 128
         && data.itemName is string && data.itemName.size() <= 300
@@ -223,7 +223,7 @@ service cloud.firestore {
          && isValidTime(request.resource.data)
          && request.resource.data.userEmail == resource.data.userEmail)
       );
-      allow delete: if isMentorOrCaptain();
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
 
     // 4. Kanban Tasks
@@ -239,7 +239,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidEvent(request.resource.data);
       allow update: if isSignedIn() && isValidEvent(request.resource.data);
-      allow delete: if isMentorOrCaptain();
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
 
     // 6. Dispatched Emails
@@ -247,15 +247,15 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidEmail(request.resource.data);
       allow update: if isSignedIn() && isValidEmail(request.resource.data);
-      allow delete: if isMentorOrCaptain();
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
     
     // 7. XP Adjustments
     match /xpAdjustments/{adjId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidXpAdjustment(request.resource.data);
-      allow update: if isMentorOrCaptain() && isValidXpAdjustment(request.resource.data);
-      allow delete: if isMentorOrCaptain();
+      allow update: if isSignedIn() && isValidXpAdjustment(request.resource.data);
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
 
     // 8. Ledger Transactions
@@ -263,14 +263,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidLedgerTransaction(request.resource.data);
       allow update: if isSignedIn() && isValidLedgerTransaction(request.resource.data);
-      allow delete: if isMentorOrCaptain();
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
 
     // 9. System Settings
     match /systemSettings/{settingId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn();
-      allow delete: if isMentorOrCaptain();
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
 
     // 10. System Notifications
@@ -291,8 +291,8 @@ service cloud.firestore {
     match /inventoryTransactions/{txId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidInventoryTransaction(request.resource.data);
-      allow update: if isMentorOrCaptain() && isValidInventoryTransaction(request.resource.data);
-      allow delete: if isMentorOrCaptain();
+      allow update: if isSignedIn() && isValidInventoryTransaction(request.resource.data);
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
   }
 }

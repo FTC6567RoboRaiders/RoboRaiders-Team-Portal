@@ -1,5 +1,5 @@
 {
-  "name": "Remix: BACKUP FTC Team Journal",
+  "name": "Team Portal",
   "description": "An engineering journal, outreach portfolio, and robotics room inventory management system for FTC #6567, designed to log subteam engineering notes, outreach campaigns, laboratory parts, and tool loans.",
   "requestFramePermissions": [
     "camera"
