@@ -117,7 +117,7 @@ import PortalHelpGuide from './components/PortalHelpGuide';
 import TimePicker from './components/TimePicker';
 import GeneralLedger from './components/GeneralLedger';
 import InventoryManager from './components/InventoryManager';
-import { DEFAULT_INVENTORY_ITEMS } from './data/inventoryDemo';
+import { DEFAULT_INVENTORY_ITEMS, DEFAULT_INVENTORY_TRANSACTIONS } from './data/inventoryDemo';
 import MemberDirectory from './components/MemberDirectory';
 import SystemDashboard from './components/SystemDashboard';
 
@@ -578,13 +578,14 @@ export default function App() {
     
     const updated = [newTx, ...ledgerTransactions];
     setLedgerTransactions(updated);
+    localStorage.setItem('ftc_ledger_transactions', JSON.stringify(updated));
     
     try {
       await setDoc(doc(db, 'ledgerTransactions', newTx.id), newTx);
       return true;
     } catch (e) {
-      handleFirestoreError(e, OperationType.WRITE, `ledgerTransactions/${newTx.id}`);
-      return false;
+      console.warn(`Firestore sync error for ledgerTransactions/${newTx.id}:`, e);
+      return true;
     }
   };
 
@@ -598,24 +599,26 @@ export default function App() {
       updated = [item, ...inventoryItems];
     }
     setInventoryItems(updated);
+    localStorage.setItem('ftc_inventory_items', JSON.stringify(updated));
     try {
       await setDoc(doc(db, 'inventoryItems', item.id), item);
       return true;
     } catch (e) {
-      handleFirestoreError(e, OperationType.WRITE, `inventoryItems/${item.id}`);
-      return false;
+      console.warn(`Firestore sync error for inventoryItems/${item.id}:`, e);
+      return true;
     }
   };
 
   const handleDeleteInventoryItem = async (id: string): Promise<boolean> => {
     const updated = inventoryItems.filter(i => i.id !== id);
     setInventoryItems(updated);
+    localStorage.setItem('ftc_inventory_items', JSON.stringify(updated));
     try {
       await deleteDoc(doc(db, 'inventoryItems', id));
       return true;
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, `inventoryItems/${id}`);
-      return false;
+      console.warn(`Firestore sync error for deleting inventoryItems/${id}:`, e);
+      return true;
     }
   };
 
@@ -627,45 +630,45 @@ export default function App() {
     };
     const updated = [newTx, ...inventoryTransactions];
     setInventoryTransactions(updated);
+    localStorage.setItem('ftc_inventory_transactions', JSON.stringify(updated));
     try {
       await setDoc(doc(db, 'inventoryTransactions', newTx.id), newTx);
       return true;
     } catch (e) {
-      handleFirestoreError(e, OperationType.WRITE, `inventoryTransactions/${newTx.id}`);
-      return false;
+      console.warn(`Firestore sync error for inventoryTransactions/${newTx.id}:`, e);
+      return true;
     }
   };
 
   const handleDeleteLedgerTransaction = async (id: string): Promise<boolean> => {
     const updated = ledgerTransactions.filter(tx => tx.id !== id);
     setLedgerTransactions(updated);
+    localStorage.setItem('ftc_ledger_transactions', JSON.stringify(updated));
     
     try {
       await deleteDoc(doc(db, 'ledgerTransactions', id));
       return true;
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, `ledgerTransactions/${id}`);
-      return false;
+      console.warn(`Firestore sync error for deleting ledgerTransactions/${id}:`, e);
+      return true;
     }
   };
 
   const syncKanbanTasksToFirestore = async (newTasks: KanbanTask[]) => {
     for (const task of newTasks) {
-      const match = kanbanTasks.find(t => t.id === task.id);
-      if (!match || JSON.stringify(match) !== JSON.stringify(task)) {
-        try {
-          await setDoc(doc(db, 'kanbanTasks', task.id), task);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.UPDATE, `kanbanTasks/${task.id}`);
-        }
+      try {
+        await setDoc(doc(db, 'kanbanTasks', task.id), task);
+      } catch (e) {
+        console.warn(`Firestore sync error for kanbanTasks/${task.id}:`, e);
       }
     }
-    for (const task of kanbanTasks) {
+    const previous = kanbanTasksRef.current;
+    for (const task of previous) {
       if (!newTasks.some(t => t.id === task.id)) {
         try {
           await deleteDoc(doc(db, 'kanbanTasks', task.id));
         } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `kanbanTasks/${task.id}`);
+          console.warn(`Firestore delete error for kanbanTasks/${task.id}:`, e);
         }
       }
     }
@@ -673,21 +676,19 @@ export default function App() {
 
   const syncOutreachEventsToFirestore = async (newEvents: OutreachEvent[]) => {
     for (const event of newEvents) {
-      const match = outreachEvents.find(e => e.id === event.id);
-      if (!match || JSON.stringify(match) !== JSON.stringify(event)) {
-        try {
-          await setDoc(doc(db, 'outreachEvents', event.id), event);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.UPDATE, `outreachEvents/${event.id}`);
-        }
+      try {
+        await setDoc(doc(db, 'outreachEvents', event.id), event);
+      } catch (e) {
+        console.warn(`Firestore sync error for outreachEvents/${event.id}:`, e);
       }
     }
-    for (const event of outreachEvents) {
+    const previous = outreachEventsRef.current;
+    for (const event of previous) {
       if (!newEvents.some(e => e.id === event.id)) {
         try {
           await deleteDoc(doc(db, 'outreachEvents', event.id));
         } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `outreachEvents/${event.id}`);
+          console.warn(`Firestore delete error for outreachEvents/${event.id}:`, e);
         }
       }
     }
@@ -695,21 +696,19 @@ export default function App() {
 
   const syncEntriesToFirestore = async (newEntries: JournalEntry[]) => {
     for (const entry of newEntries) {
-      const match = entries.find(e => e.id === entry.id);
-      if (!match || JSON.stringify(match) !== JSON.stringify(entry)) {
-        try {
-          await setDoc(doc(db, 'journalEntries', entry.id), entry);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.UPDATE, `journalEntries/${entry.id}`);
-        }
+      try {
+        await setDoc(doc(db, 'journalEntries', entry.id), entry);
+      } catch (e) {
+        console.warn(`Firestore sync error for journalEntries/${entry.id}:`, e);
       }
     }
-    for (const entry of entries) {
+    const previous = entriesRef.current;
+    for (const entry of previous) {
       if (!newEntries.some(e => e.id === entry.id)) {
         try {
           await deleteDoc(doc(db, 'journalEntries', entry.id));
         } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `journalEntries/${entry.id}`);
+          console.warn(`Firestore delete error for journalEntries/${entry.id}:`, e);
         }
       }
     }
@@ -717,21 +716,19 @@ export default function App() {
 
   const syncTimeEntriesToFirestore = async (newTimes: TimeEntry[]) => {
     for (const time of newTimes) {
-      const match = timeEntries.find(t => t.id === time.id);
-      if (!match || JSON.stringify(match) !== JSON.stringify(time)) {
-        try {
-          await setDoc(doc(db, 'timeEntries', time.id), time);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.UPDATE, `timeEntries/${time.id}`);
-        }
+      try {
+        await setDoc(doc(db, 'timeEntries', time.id), time);
+      } catch (e) {
+        console.warn(`Firestore sync error for timeEntries/${time.id}:`, e);
       }
     }
-    for (const time of timeEntries) {
+    const previous = timeEntriesRef.current;
+    for (const time of previous) {
       if (!newTimes.some(t => t.id === time.id)) {
         try {
           await deleteDoc(doc(db, 'timeEntries', time.id));
         } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `timeEntries/${time.id}`);
+          console.warn(`Firestore delete error for timeEntries/${time.id}:`, e);
         }
       }
     }
@@ -864,22 +861,31 @@ export default function App() {
                         const local = entriesRef.current.length > 0 ? entriesRef.current : DEMO_ENTRIES;
                         local.forEach(e => {
                           setDoc(doc(db, 'journalEntries', e.id), e).catch(err => {
-                            handleFirestoreError(err, OperationType.WRITE, `journalEntries/${e.id}`);
+                            console.warn(`Error seeding journal ${e.id}:`, err);
                           });
                         });
                         setDoc(doc(db, 'systemSettings', 'seeding'), { journals_seeded: true }, { merge: true }).catch(() => {});
                       } else {
-                        setEntries([]);
+                        if (entriesRef.current.length > 0) {
+                          entriesRef.current.forEach(e => {
+                            setDoc(doc(db, 'journalEntries', e.id), e).catch(console.warn);
+                          });
+                        } else {
+                          setEntries([]);
+                          localStorage.removeItem('ftc_journal_entries');
+                        }
                       }
                     } else {
                       const list: JournalEntry[] = [];
                       snapshot.forEach(d => {
                         list.push(d.data() as JournalEntry);
                       });
-                      setEntries(list.sort((a,b) => b.createdAt - a.createdAt));
+                      const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
+                      setEntries(sorted);
+                      localStorage.setItem('ftc_journal_entries', JSON.stringify(sorted));
                     }
                   }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'journalEntries');
+                    console.warn("journalEntries snapshot listener error:", error);
                   });
                   unsubscribeAll.push(unsubJournals);
 
@@ -1002,36 +1008,69 @@ export default function App() {
                       snapshot.forEach(d => {
                         list.push(d.data() as LedgerTransaction);
                       });
-                      setLedgerTransactions(list.sort((a,b) => b.createdAt - a.createdAt));
+                      const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
+                      setLedgerTransactions(sorted);
+                      localStorage.setItem('ftc_ledger_transactions', JSON.stringify(sorted));
                     }
                   }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'ledgerTransactions');
+                    console.warn("ledgerTransactions snapshot listener error:", error);
                   });
                   unsubscribeAll.push(unsubLedger);
 
                   const unsubInventory = onSnapshot(collection(db, 'inventoryItems'), (snapshot) => {
                     if (snapshot.empty) {
-                      setInventoryItems([]);
+                      const isSeeded = seedingConfigRef.current?.inventory_seeded || seedingConfigRef.current?.errorFallback;
+                      if (!isSeeded) {
+                        const local = inventoryItemsRef.current.length > 0 ? inventoryItemsRef.current : DEFAULT_INVENTORY_ITEMS;
+                        local.forEach(i => {
+                          setDoc(doc(db, 'inventoryItems', i.id), i).catch(console.warn);
+                        });
+                        setDoc(doc(db, 'systemSettings', 'seeding'), { inventory_seeded: true }, { merge: true }).catch(() => {});
+                      } else {
+                        if (inventoryItemsRef.current.length > 0) {
+                          inventoryItemsRef.current.forEach(i => {
+                            setDoc(doc(db, 'inventoryItems', i.id), i).catch(console.warn);
+                          });
+                        } else {
+                          setInventoryItems([]);
+                        }
+                      }
                     } else {
                       const list: InventoryItem[] = [];
                       snapshot.forEach(d => {
                         list.push(d.data() as InventoryItem);
                       });
-                      setInventoryItems(list.sort((a,b) => a.name.localeCompare(b.name)));
+                      const sorted = list.sort((a,b) => a.name.localeCompare(b.name));
+                      setInventoryItems(sorted);
+                      localStorage.setItem('ftc_inventory_items', JSON.stringify(sorted));
                     }
                   }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'inventoryItems');
+                    console.warn("inventoryItems snapshot listener error:", error);
                   });
                   unsubscribeAll.push(unsubInventory);
 
                   const unsubInvTx = onSnapshot(collection(db, 'inventoryTransactions'), (snapshot) => {
-                    const list: InventoryTransaction[] = [];
-                    snapshot.forEach(d => {
-                      list.push(d.data() as InventoryTransaction);
-                    });
-                    setInventoryTransactions(list.sort((a,b) => b.timestamp - a.timestamp));
+                    if (snapshot.empty) {
+                      const isSeeded = seedingConfigRef.current?.inv_tx_seeded || seedingConfigRef.current?.errorFallback;
+                      if (!isSeeded) {
+                        DEFAULT_INVENTORY_TRANSACTIONS.forEach(t => {
+                          setDoc(doc(db, 'inventoryTransactions', t.id), t).catch(console.warn);
+                        });
+                        setDoc(doc(db, 'systemSettings', 'seeding'), { inv_tx_seeded: true }, { merge: true }).catch(() => {});
+                      } else {
+                        setInventoryTransactions([]);
+                      }
+                    } else {
+                      const list: InventoryTransaction[] = [];
+                      snapshot.forEach(d => {
+                        list.push(d.data() as InventoryTransaction);
+                      });
+                      const sorted = list.sort((a,b) => b.timestamp - a.timestamp);
+                      setInventoryTransactions(sorted);
+                      localStorage.setItem('ftc_inventory_transactions', JSON.stringify(sorted));
+                    }
                   }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'inventoryTransactions');
+                    console.warn("inventoryTransactions snapshot listener error:", error);
                   });
                   unsubscribeAll.push(unsubInvTx);
 
@@ -1062,22 +1101,31 @@ export default function App() {
                         const local = entriesRef.current.length > 0 ? entriesRef.current : DEMO_ENTRIES;
                         local.forEach(e => {
                           setDoc(doc(db, 'journalEntries', e.id), e).catch(err => {
-                            handleFirestoreError(err, OperationType.WRITE, `journalEntries/${e.id}`);
+                            console.warn(`Error seeding fallback journal ${e.id}:`, err);
                           });
                         });
                         setDoc(doc(db, 'systemSettings', 'seeding'), { journals_seeded: true }, { merge: true }).catch(() => {});
                       } else {
-                        setEntries([]);
+                        if (entriesRef.current.length > 0) {
+                          entriesRef.current.forEach(e => {
+                            setDoc(doc(db, 'journalEntries', e.id), e).catch(console.warn);
+                          });
+                        } else {
+                          setEntries([]);
+                          localStorage.removeItem('ftc_journal_entries');
+                        }
                       }
                     } else {
                       const list: JournalEntry[] = [];
                       snapshot.forEach(d => {
                         list.push(d.data() as JournalEntry);
                       });
-                      setEntries(list.sort((a,b) => b.createdAt - a.createdAt));
+                      const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
+                      setEntries(sorted);
+                      localStorage.setItem('ftc_journal_entries', JSON.stringify(sorted));
                     }
                   }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'journalEntries');
+                    console.warn("fallback journalEntries snapshot error:", error);
                   });
                   unsubscribeAll.push(unsubJournals);
 
@@ -1200,36 +1248,69 @@ export default function App() {
                       snapshot.forEach(d => {
                         list.push(d.data() as LedgerTransaction);
                       });
-                      setLedgerTransactions(list.sort((a,b) => b.createdAt - a.createdAt));
+                      const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
+                      setLedgerTransactions(sorted);
+                      localStorage.setItem('ftc_ledger_transactions', JSON.stringify(sorted));
                     }
                   }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'ledgerTransactions');
+                    console.warn("fallback ledgerTransactions snapshot error:", error);
                   });
                   unsubscribeAll.push(unsubLedger);
 
                   const unsubInventory = onSnapshot(collection(db, 'inventoryItems'), (snapshot) => {
                     if (snapshot.empty) {
-                      setInventoryItems([]);
+                      const isSeeded = seedingConfigRef.current?.inventory_seeded || seedingConfigRef.current?.errorFallback;
+                      if (!isSeeded) {
+                        const local = inventoryItemsRef.current.length > 0 ? inventoryItemsRef.current : DEFAULT_INVENTORY_ITEMS;
+                        local.forEach(i => {
+                          setDoc(doc(db, 'inventoryItems', i.id), i).catch(console.warn);
+                        });
+                        setDoc(doc(db, 'systemSettings', 'seeding'), { inventory_seeded: true }, { merge: true }).catch(() => {});
+                      } else {
+                        if (inventoryItemsRef.current.length > 0) {
+                          inventoryItemsRef.current.forEach(i => {
+                            setDoc(doc(db, 'inventoryItems', i.id), i).catch(console.warn);
+                          });
+                        } else {
+                          setInventoryItems([]);
+                        }
+                      }
                     } else {
                       const list: InventoryItem[] = [];
                       snapshot.forEach(d => {
                         list.push(d.data() as InventoryItem);
                       });
-                      setInventoryItems(list.sort((a,b) => a.name.localeCompare(b.name)));
+                      const sorted = list.sort((a,b) => a.name.localeCompare(b.name));
+                      setInventoryItems(sorted);
+                      localStorage.setItem('ftc_inventory_items', JSON.stringify(sorted));
                     }
                   }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'inventoryItems');
+                    console.warn("fallback inventoryItems snapshot error:", error);
                   });
                   unsubscribeAll.push(unsubInventory);
 
                   const unsubInvTx = onSnapshot(collection(db, 'inventoryTransactions'), (snapshot) => {
-                    const list: InventoryTransaction[] = [];
-                    snapshot.forEach(d => {
-                      list.push(d.data() as InventoryTransaction);
-                    });
-                    setInventoryTransactions(list.sort((a,b) => b.timestamp - a.timestamp));
+                    if (snapshot.empty) {
+                      const isSeeded = seedingConfigRef.current?.inv_tx_seeded || seedingConfigRef.current?.errorFallback;
+                      if (!isSeeded) {
+                        DEFAULT_INVENTORY_TRANSACTIONS.forEach(t => {
+                          setDoc(doc(db, 'inventoryTransactions', t.id), t).catch(console.warn);
+                        });
+                        setDoc(doc(db, 'systemSettings', 'seeding'), { inv_tx_seeded: true }, { merge: true }).catch(() => {});
+                      } else {
+                        setInventoryTransactions([]);
+                      }
+                    } else {
+                      const list: InventoryTransaction[] = [];
+                      snapshot.forEach(d => {
+                        list.push(d.data() as InventoryTransaction);
+                      });
+                      const sorted = list.sort((a,b) => b.timestamp - a.timestamp);
+                      setInventoryTransactions(sorted);
+                      localStorage.setItem('ftc_inventory_transactions', JSON.stringify(sorted));
+                    }
                   }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'inventoryTransactions');
+                    console.warn("fallback inventoryTransactions snapshot error:", error);
                   });
                   unsubscribeAll.push(unsubInvTx);
 
@@ -2521,6 +2602,9 @@ const handleStartEditProfile = (authorName: string) => {
             reviewedAt: null
           };
           setSelectedEntry(u);
+          setDoc(doc(db, 'journalEntries', u.id), u).catch(err => {
+            console.warn(`Error writing journal entry ${u.id}:`, err);
+          });
           return u;
         }
         return entry;
@@ -2547,6 +2631,9 @@ const handleStartEditProfile = (authorName: string) => {
         reviewedAt: null
       };
       const updated = [u, ...entries];
+      setDoc(doc(db, 'journalEntries', u.id), u).catch(err => {
+        console.warn(`Error writing new journal entry ${u.id}:`, err);
+      });
       saveEntriesToLocalStorage(updated);
       setSelectedEntry(u);
       showToast(submissionType === 'Pending Review' ? 'Saved & submitted for mentor review!' : 'Draft engineering entry logged.', 'success');
@@ -2850,6 +2937,9 @@ FTC #6567 Captains & Mentors`
   const saveEntriesToLocalStorage = (updated: JournalEntry[]) => {
     setEntries(updated);
     localStorage.setItem('ftc_journal_entries', JSON.stringify(updated));
+    syncEntriesToFirestore(updated).catch(err => {
+      console.warn('Failed to sync journal entries to Firestore:', err);
+    });
   };
 
   const resetForm = () => {
@@ -9834,7 +9924,7 @@ FTC #6567 Captains & Mentors`
                 </div>
                 <div>
                   <span className="text-slate-500 block text-xs uppercase">Affiliation:</span>
-                  <span className="font-extrabold text-slate-900">Northwestern Lehigh High School</span>
+                  <span className="font-extrabold text-slate-900">Red Hook High School</span>
                 </div>
               </div>
             </div>

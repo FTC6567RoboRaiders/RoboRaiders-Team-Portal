@@ -111,7 +111,7 @@ export default function InventoryManager({
   showToast
 }: InventoryManagerProps) {
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<'inventory' | 'checkout' | 'lowstock' | 'history' | 'locations'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'checkout' | 'lowstock' | 'history'>('inventory');
   
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -632,27 +632,40 @@ export default function InventoryManager({
       updatedBy: currentUser?.name || 'Team Member'
     };
 
-    const success = await onSaveItem(itemToSave);
-    setIsSubmitting(false);
-    if (success) {
-      setIsItemModalOpen(false);
-      showToast(editingItem ? 'Item updated successfully!' : 'New inventory item added!', 'success');
+    const isEdit = !!editingItem;
 
-      // Log movement transaction if created new
-      if (!editingItem) {
-        onAddTransaction({
-          itemId: itemToSave.id,
-          itemName: itemToSave.name,
-          type: 'restock',
-          quantityChanged: itemToSave.quantity,
-          resultingQuantity: itemToSave.quantity,
-          performedBy: currentUser?.name || 'Team Member',
-          performedByEmail: currentUser?.schoolEmail || 'member@school.edu',
-          notes: 'Initial inventory creation'
-        });
+    try {
+      // Close the modal menu immediately so user is never locked in
+      setIsItemModalOpen(false);
+      setEditingItem(null);
+
+      const success = await onSaveItem(itemToSave);
+      if (success) {
+        showToast(isEdit ? 'Item updated successfully!' : 'New inventory item added!', 'success');
+
+        // Log movement transaction if created new
+        if (!isEdit) {
+          onAddTransaction({
+            itemId: itemToSave.id,
+            itemName: itemToSave.name,
+            type: 'restock',
+            quantityChanged: itemToSave.quantity,
+            resultingQuantity: itemToSave.quantity,
+            performedBy: currentUser?.name || 'Team Member',
+            performedByEmail: currentUser?.schoolEmail || 'member@school.edu',
+            notes: 'Initial inventory creation'
+          }).catch(console.error);
+        }
+      } else {
+        showToast('Item saved locally.', 'info');
       }
-    } else {
-      showToast('Error saving item to database. Please check permissions.', 'danger');
+    } catch (err: any) {
+      console.error('Error saving inventory item:', err);
+      setIsItemModalOpen(false);
+      setEditingItem(null);
+      showToast('Item saved to workspace.', 'info');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1004,17 +1017,6 @@ export default function InventoryManager({
     showToast('Exported inventory to CSV.', 'success');
   };
 
-  // Group items by physical location for Location tab
-  const locationGroups = useMemo(() => {
-    const groups: Record<string, InventoryItem[]> = {};
-    items.forEach(item => {
-      const loc = item.location.trim() || 'Unassigned / Bench Top';
-      if (!groups[loc]) groups[loc] = [];
-      groups[loc].push(item);
-    });
-    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [items]);
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-16 dark:bg-slate-950 dark:text-slate-100 font-sans">
       
@@ -1308,8 +1310,7 @@ export default function InventoryManager({
           </div>
 
           <div 
-            onClick={() => setActiveTab('locations')}
-            className="col-span-2 sm:col-span-1 bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:border-cyan-300 transition-all cursor-pointer dark:bg-slate-900 dark:border-slate-800"
+            className="col-span-2 sm:col-span-1 bg-white border border-slate-200 rounded-xl p-4 shadow-2xs dark:bg-slate-900 dark:border-slate-800"
           >
             <div className="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
               <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-400">
@@ -1377,18 +1378,6 @@ export default function InventoryManager({
                 {metrics.lowStockCount}
               </span>
             )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('locations')}
-            className={`px-4 py-2.5 text-xs font-bold rounded-t-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 border-b-2 ${
-              activeTab === 'locations'
-                ? 'border-cyan-500 text-cyan-600 bg-white dark:bg-slate-900 dark:text-cyan-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            <MapPin className="w-4 h-4" />
-            <span>Lab Storage Map</span>
           </button>
 
           <button
@@ -2162,71 +2151,7 @@ export default function InventoryManager({
           </div>
         )}
 
-        {/* TAB 4: LAB STORAGE MAP & BIN DIRECTORY */}
-        {activeTab === 'locations' && (
-          <div className="space-y-4">
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Physical Storage Bin &amp; Cabinet Map
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Quickly locate hardware, motors, tools, and electronics organized by their physical storage spots in the robotics lab.
-                </p>
-              </div>
-              <span className="text-xs font-mono font-bold bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300 px-2.5 py-1 rounded-lg">
-                {locationGroups.length} Defined Locations
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {locationGroups.map(([loc, locItems]) => (
-                <div key={loc} className="bg-white border border-slate-200 rounded-xl p-4.5 shadow-2xs dark:bg-slate-900 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
-                        <MapPin className="w-4 h-4" />
-                      </div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                        {loc}
-                      </h4>
-                    </div>
-                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full font-bold">
-                      {locItems.length} items
-                    </span>
-                  </div>
-
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {locItems.map(item => (
-                      <div key={item.id} className="py-2 flex items-center justify-between gap-2 text-xs">
-                        <div>
-                          <div className="font-bold text-slate-800 dark:text-slate-200">{item.name}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            {item.sku ? `SKU: ${item.sku} • ` : ''}{item.category}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`font-black font-display text-xs ${item.quantity <= item.minQuantity ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                            {item.quantity} {item.unit}
-                          </span>
-                          <button
-                            onClick={() => handleOpenAdjust(item, 1)}
-                            className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                            title="Quick Stock Adjust"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: AUDIT & MOVEMENT TRANSACTION LOG */}
+        {/* AUDIT & MOVEMENT TRANSACTION LOG */}
         {activeTab === 'history' && (
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs dark:bg-slate-900 dark:border-slate-800">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">

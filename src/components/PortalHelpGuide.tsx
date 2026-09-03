@@ -408,7 +408,7 @@ export default function PortalHelpGuide({
         doc.text('ROBORAIDERS FTC #6567 — PORTAL USER & SYSTEM GUIDE', margin, 18);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(148, 163, 184);
-        doc.text('NORTHWESTERN LEHIGH HIGH SCHOOL', pageWidth - margin, 18, { align: 'right' });
+        doc.text('Red Hook High School', pageWidth - margin, 18, { align: 'right' });
 
         // Bottom footer
         doc.setDrawColor(226, 232, 240);

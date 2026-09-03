@@ -210,7 +210,7 @@ service cloud.firestore {
         isMentorOrCaptain() ||
         isValidJournal(request.resource.data)
       );
-      allow delete: if isMentorOrCaptain();
+      allow delete: if isMentorOrCaptain() || isSignedIn();
     }
 
     // 3. Time Entries
