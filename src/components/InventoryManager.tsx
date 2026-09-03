@@ -36,7 +36,8 @@ import {
   History,
   TrendingUp,
   TrendingDown,
-  FolderSync
+  FolderSync,
+  QrCode
 } from 'lucide-react';
 import { 
   InventoryItem, 
@@ -53,6 +54,7 @@ import { INVENTORY_UNITS, getDefaultUnitForCategory } from '../data/inventoryUni
 import { pullProductPhoto, isGobildaSku, isRevSku, normalizeSku } from '../utils/productImages';
 import { LabelCustomizerModal } from './LabelCustomizerModal';
 import { StorageLocationModal } from './StorageLocationModal';
+import { InventoryQrScannerModal } from './InventoryQrScannerModal';
 
 interface InventoryManagerProps {
   currentUser: UserAccount | null;
@@ -198,6 +200,7 @@ export default function InventoryManager({
   // Print / Export Modal
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isLabelCustomizerOpen, setIsLabelCustomizerOpen] = useState(false);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [printLayoutType, setPrintLayoutType] = useState<'full_inventory' | 'low_stock_bom' | 'bin_labels'>('full_inventory');
 
   // Form states for Add/Edit
@@ -1094,6 +1097,17 @@ export default function InventoryManager({
               <span>{selectedItemIds.length > 0 ? `Selected (${selectedItemIds.length})` : 'Bulk Edit'}</span>
             </button>
 
+            {/* QR SCANNER BUTTON */}
+            <button
+              onClick={() => setIsQrScannerOpen(true)}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-750"
+              id="open-qr-scanner-btn"
+              title="Scan QR codes or barcodes on bins, drawers, or parts using camera or image"
+            >
+              <QrCode className="w-3.5 h-3.5 text-rose-500" />
+              <span>Scan QR</span>
+            </button>
+
             {/* STORAGE LOCATIONS BUTTON */}
             <button
               onClick={() => setIsLocationModalOpen(true)}
@@ -1413,16 +1427,25 @@ export default function InventoryManager({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search by part name, SKU, vendor, storage shelf, notes, or borrower..."
-                    className="w-full pl-10 pr-9 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-rose-500 focus:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:text-slate-100 dark:focus:bg-slate-800"
+                    className="w-full pl-10 pr-16 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-rose-500 focus:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:text-slate-100 dark:focus:bg-slate-800"
                   />
-                  {searchQuery && (
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      onClick={() => setIsQrScannerOpen(true)}
+                      className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                      title="Open QR / Barcode Scanner"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <QrCode className="w-3.5 h-3.5" />
                     </button>
-                  )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -3744,6 +3767,27 @@ export default function InventoryManager({
         onSelectLocation={(locName) => {
           setFormLocation(locName);
           setIsCustomLocation(false);
+        }}
+      />
+
+      {/* QR CODE & BARCODE SCANNER MODAL */}
+      <InventoryQrScannerModal
+        isOpen={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        items={items}
+        onOpenItemDetails={(item) => handleOpenEditModal(item, 'details')}
+        onOpenQuickAdjust={(item) => handleOpenEditModal(item, 'details')}
+        onOpenCheckout={(item) => handleOpenCheckout(item)}
+        onFilterListByItem={(query) => {
+          setSearchQuery(query);
+          setActiveTab('inventory');
+        }}
+        onAddNewItemWithPrefill={(prefill) => {
+          setEditingItem(null);
+          setFormName(prefill.name);
+          if (prefill.sku) setFormSku(prefill.sku);
+          if (prefill.location) setFormLocation(prefill.location);
+          setIsItemModalOpen(true);
         }}
       />
 

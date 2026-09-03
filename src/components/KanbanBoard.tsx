@@ -86,6 +86,7 @@ export default function KanbanBoard({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSubteam, setFilterSubteam] = useState<string>('All');
   const [filterPriority, setFilterPriority] = useState<string>('All');
+  const [mobileActiveColumn, setMobileActiveColumn] = useState<KanbanColumn | 'all'>('all');
 
   // Drag and drop state
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -383,9 +384,46 @@ export default function KanbanBoard({
         </div>
       </div>
 
+      {/* MOBILE COLUMN SELECTOR TABS */}
+      <div className="flex xl:hidden items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
+        <button
+          type="button"
+          onClick={() => setMobileActiveColumn('all')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono tracking-tight shrink-0 transition-all cursor-pointer ${
+            mobileActiveColumn === 'all'
+              ? 'bg-brand text-white shadow-xs'
+              : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300'
+          }`}
+        >
+          All Columns ({filteredTasks.length})
+        </button>
+        {COLUMNS.map((col) => {
+          const count = filteredTasks.filter(t => t.column === col.id).length;
+          const isSelected = mobileActiveColumn === col.id;
+          return (
+            <button
+              key={col.id}
+              type="button"
+              onClick={() => setMobileActiveColumn(col.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono tracking-tight shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-brand text-white shadow-xs'
+                  : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${col.id === 'todo' ? 'bg-slate-400' : col.id === 'inprogress' ? 'bg-amber-450' : col.id === 'review' ? 'bg-blue-450' : 'bg-emerald-450'}`} />
+              <span>{col.name}</span>
+              <span className={`text-[10px] px-1 py-0.2 rounded ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-300/60 dark:bg-slate-700 text-slate-800 dark:text-slate-200'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* KANBAN GRID */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 overflow-x-auto min-h-[450px] select-none">
-        {COLUMNS.map((col) => {
+        {COLUMNS.filter(col => mobileActiveColumn === 'all' || col.id === mobileActiveColumn).map((col) => {
           const colTasks = filteredTasks.filter(t => t.column === col.id);
           const isDraggingOverThis = activeDragColumn === col.id;
 
@@ -444,7 +482,7 @@ export default function KanbanBoard({
                       key={task.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, task.id)}
-                      className="bg-white border border-slate-150 rounded-lg p-2.5 shadow-sm hover:shadow-md transition-all hover:border-brand/30 cursor-grab active:cursor-grabbing group relative flex flex-col gap-1.5 dark:bg-slate-900"
+                      className="bg-white border border-slate-150 rounded-lg p-3 shadow-sm hover:shadow-md transition-all hover:border-brand/30 cursor-grab active:cursor-grabbing group relative flex flex-col gap-2 dark:bg-slate-900"
                     >
                       {/* Subteam and priority tags */}
                       <div className="flex flex-wrap items-center gap-1">
@@ -454,49 +492,52 @@ export default function KanbanBoard({
 
                       {/* Title and Action menu */}
                       <div>
-                        <h4 className="text-[11px] font-black uppercase text-slate-800 leading-tight tracking-wide font-sans group-hover:text-brand transition-colors dark:text-slate-400">
+                        <h4 className="text-xs font-black uppercase text-slate-800 leading-tight tracking-wide font-sans group-hover:text-brand transition-colors dark:text-slate-200">
                           {task.title}
                         </h4>
                         {task.description && (
-                          <p className="text-[10px] text-slate-500 leading-snug font-sans mt-1 line-clamp-2 white-space-pre-line dark:text-slate-400">
+                          <p className="text-[11px] text-slate-500 leading-snug font-sans mt-1 line-clamp-2 white-space-pre-line dark:text-slate-400">
                             {task.description}
                           </p>
                         )}
                       </div>
 
                       {/* Assigned and updated status */}
-                      <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 mt-0.5 text-[9px] font-mono text-slate-400 dark:text-slate-500 dark:border-slate-800">
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 mt-0.5 text-[10px] font-mono text-slate-400 dark:text-slate-500 dark:border-slate-800">
                         <div className="flex items-center gap-1 text-slate-650 dark:text-slate-300">
-                          <User className="w-2.5 h-2.5 text-slate-400 dark:text-slate-500" />
-                          <span className="font-bold max-w-[95px] truncate">{task.assignedTo}</span>
+                          <User className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                          <span className="font-bold max-w-[120px] truncate">{task.assignedTo}</span>
                         </div>
                         <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                          <Clock className="w-2.5 h-2.5 text-slate-400 dark:text-slate-500" />
+                          <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                           <span>{new Date(task.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                         </div>
                       </div>
 
                       {/* Footer Actions Panel */}
-                      <div className="flex items-center justify-between mt-0.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                        {/* Column flow controls (very useful for touch devices or immediate mouse clicks!) */}
-                        <div className="flex items-center gap-1 text-[8px] font-mono">
+                      <div className="flex items-center justify-between mt-1 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        {/* Column flow controls */}
+                        <div className="flex items-center gap-1 text-[9px] font-mono">
                           {col.id !== 'todo' && (
                             <button
+                              type="button"
                               onClick={() => moveTaskColumn(task.id, COLUMNS[COLUMNS.findIndex(c => c.id === col.id) - 1].id)}
-                              title="Demote status"
-                              className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-800 transition-all cursor-pointer border border-slate-100 dark:text-slate-500 dark:border-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                              title="Move to previous stage"
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 dark:text-slate-300 font-bold transition-all cursor-pointer border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center gap-0.5 active:scale-95"
                             >
-                              <ChevronLeft className="w-2.5 h-2.5" />
+                              <ChevronLeft className="w-3 h-3" />
+                              <span className="hidden sm:inline">Back</span>
                             </button>
                           )}
-                          <span className="px-0.5 text-slate-420 font-bold uppercase tracking-wider">Move</span>
                           {col.id !== 'done' && (
                             <button
+                              type="button"
                               onClick={() => moveTaskColumn(task.id, COLUMNS[COLUMNS.findIndex(c => c.id === col.id) + 1].id)}
-                              title="Promote status"
-                              className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-800 transition-all cursor-pointer border border-slate-100 dark:text-slate-500 dark:border-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                              title="Move to next stage"
+                              className="px-2 py-1 bg-brand hover:bg-brand-hover text-white rounded font-bold transition-all cursor-pointer shadow-xs flex items-center gap-0.5 active:scale-95"
                             >
-                              <ChevronRight className="w-2.5 h-2.5" />
+                              <span>Next</span>
+                              <ChevronRight className="w-3 h-3" />
                             </button>
                           )}
                         </div>
@@ -504,24 +545,26 @@ export default function KanbanBoard({
                         {/* Edit and Delete operations */}
                         <div className="flex items-center gap-1">
                           <button
+                            type="button"
                             onClick={() => openEditModal(task)}
                             title="Edit task parameters"
-                            className="p-0.5 text-slate-400 hover:text-brand hover:bg-slate-100 rounded transition-all cursor-pointer dark:text-slate-500 dark:hover:bg-slate-700"
+                            className="p-1.5 text-slate-500 hover:text-brand hover:bg-slate-100 rounded-lg transition-all cursor-pointer dark:text-slate-400 dark:hover:bg-slate-800"
                           >
-                            <Edit className="w-2.5 h-2.5" />
+                            <Edit className="w-3.5 h-3.5" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeleteTask(task.id, task.title)}
-                            title="Purge task ticket"
-                            className="p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition-all cursor-pointer dark:text-slate-500"
+                            title="Delete task ticket"
+                            className="p-1.5 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-all cursor-pointer dark:text-slate-400"
                           >
-                            <Trash2 className="w-2.5 h-2.5" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
 
                       {/* Show last editors metadata */}
-                      <div className="text-[7.5px] font-mono text-slate-402 mt-[-4px] text-right">
+                      <div className="text-[8px] font-mono text-slate-400 mt-[-2px] text-right">
                         Ref: {task.updatedBy}
                       </div>
 

@@ -56,7 +56,9 @@ import {
   Megaphone,
   Ban,
   Boxes,
-  HelpCircle
+  HelpCircle,
+  Menu,
+  Smartphone
 } from 'lucide-react';
 import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction } from './types';
 import { compressAndResizeImage } from './utils/image';
@@ -89,6 +91,8 @@ import RoboraidersLogo from './components/RoboraidersLogo';
 import { computeUserGamification, calculateJournalQualityScore, isSignupBonus } from './utils/gamification';
 import { SUBTEAM_GUILDS, getSubteamStatsAndRank } from './data/subteamRanks';
 import OutreachPrintLayout from './components/OutreachPrintLayout';
+import JournalPrintLayout from './components/JournalPrintLayout';
+import TimesheetPrintLayout from './components/TimesheetPrintLayout';
 import { formatEventDate, formatEventDateLong, formatEventDateShort, getTodayLocalDateString } from './utils/date';
 
 export interface XPAuditLogEntry {
@@ -120,6 +124,9 @@ import InventoryManager from './components/InventoryManager';
 import { DEFAULT_INVENTORY_ITEMS, DEFAULT_INVENTORY_TRANSACTIONS } from './data/inventoryDemo';
 import MemberDirectory from './components/MemberDirectory';
 import SystemDashboard from './components/SystemDashboard';
+import { useDevice } from './utils/useDevice';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { MobileMenuDrawer } from './components/MobileMenuDrawer';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -211,79 +218,8 @@ export const getSubteamColorTheme = (subteam: Subteam) => {
   }
 };
 
-export const getEntryReferenceCode = (entry: JournalEntry, allEntries: JournalEntry[] = []): string => {
-  // If the entry already has a custom id format (e.g., demo-1), use a neat fallback
-  if (entry.id === 'demo-1') return 'FTC-BUIL-0001';
-  if (entry.id === 'demo-2') return 'FTC-PROG-0002';
-  
-  const subteamStr = (entry.subteam || '').toUpperCase();
-  let prefix = 'MISC';
-  if (subteamStr.startsWith('DESIGN') || subteamStr.includes('FABRICATION') || subteamStr.includes('BUILD')) {
-    prefix = 'DESI';
-  } else if (subteamStr.startsWith('PROGRAM')) {
-    prefix = 'PROG';
-  } else if (subteamStr.startsWith('OUTREACH')) {
-    prefix = 'OUTR';
-  } else if (subteamStr.startsWith('BUSINESS') || subteamStr.includes('MEDIA')) {
-    prefix = 'BUSI';
-  } else if (subteamStr.startsWith('INSPIRE')) {
-    prefix = 'INSP';
-  } else if (subteamStr.startsWith('STRATEGY')) {
-    prefix = 'STRA';
-  } else if (subteamStr.startsWith('MENTOR')) {
-    prefix = 'MENT';
-  } else {
-    prefix = subteamStr.substring(0, 4).toUpperCase();
-    if (prefix.length < 4) prefix = prefix.padEnd(4, 'X');
-  }
-
-  // Ensure unique reference index chronologically by filtering and sorting allEntries
-  const filterList = allEntries && allEntries.length > 0 ? allEntries : [entry];
-  const sameSubteamEntries = filterList
-    .filter((e) => {
-      const eSubStr = (e.subteam || '').toUpperCase();
-      let ePrefix = 'MISC';
-      if (eSubStr.startsWith('DESIGN') || eSubStr.includes('FABRICATION') || eSubStr.includes('BUILD')) {
-        ePrefix = 'DESI';
-      } else if (eSubStr.startsWith('PROGRAM')) {
-        ePrefix = 'PROG';
-      } else if (eSubStr.startsWith('OUTREACH')) {
-        ePrefix = 'OUTR';
-      } else if (eSubStr.startsWith('BUSINESS') || eSubStr.includes('MEDIA')) {
-        ePrefix = 'BUSI';
-      } else if (eSubStr.startsWith('INSPIRE')) {
-        ePrefix = 'INSP';
-      } else if (eSubStr.startsWith('STRATEGY')) {
-        ePrefix = 'STRA';
-      } else if (eSubStr.startsWith('MENTOR')) {
-        ePrefix = 'MENT';
-      } else {
-        ePrefix = eSubStr.substring(0, 4).toUpperCase();
-        if (ePrefix.length < 4) ePrefix = ePrefix.padEnd(4, 'X');
-      }
-      return ePrefix === prefix;
-    })
-    .sort((a, b) => {
-      // Sort chronologically by date first, then by createdAt or id
-      const dateA = a.date || '';
-      const dateB = b.date || '';
-      if (dateA !== dateB) {
-        return dateA.localeCompare(dateB);
-      }
-      const timeA = a.createdAt || 0;
-      const timeB = b.createdAt || 0;
-      if (timeA !== timeB) {
-        return timeA - timeB;
-      }
-      return (a.id || '').localeCompare(b.id || '');
-    });
-
-  const idx = sameSubteamEntries.findIndex((e) => e.id === entry.id);
-  const numVal = idx !== -1 ? idx + 1 : 1;
-  const paddedNum = String(numVal).padStart(4, '0');
-
-  return `FTC-${prefix}-${paddedNum}`;
-};
+import { getEntryReferenceCode } from './utils/referenceCode';
+export { getEntryReferenceCode };
 
 export const DEFAULT_PROFILES: AuthorProfile[] = [];
 
@@ -318,6 +254,10 @@ export const getGamifiedIcon = (iconName: string, sizeClass = "w-4 h-4") => {
 const DEFAULT_LEDGER_TRANSACTIONS: LedgerTransaction[] = [];
 
 export default function App() {
+  // --- DEVICE & RESPONSIVE STATE ---
+  const device = useDevice();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   // --- STATE ---
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [formSubteam, setFormSubteam] = useState<Subteam>('Design/Build/Fabrication');
@@ -1893,6 +1833,40 @@ export default function App() {
   const [outreachExportShowCover, setOutreachExportShowCover] = useState<boolean>(true);
   const [outreachExportShowTOC, setOutreachExportShowTOC] = useState<boolean>(true);
   const [outreachExportShowPreview, setOutreachExportShowPreview] = useState<boolean>(true);
+
+  // Memos for live export previewing with multi-page layout and TOC
+  const previewJournalEntries = React.useMemo(() => {
+    let filtered: JournalEntry[] = [];
+    if (exportScope === 'all') {
+      filtered = [...entries];
+    } else {
+      filtered = entries.filter(e => {
+        const subteamMatch = exportSubteam === 'All' || e.subteam === exportSubteam;
+        const statusMatch = exportStatus === 'All' || e.status === exportStatus;
+        return subteamMatch && statusMatch;
+      });
+    }
+    return filtered.sort((a, b) => {
+      const teamA = (a.subteam || '').toUpperCase();
+      const teamB = (b.subteam || '').toUpperCase();
+      if (teamA !== teamB) return teamA.localeCompare(teamB);
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      return dateA.localeCompare(dateB);
+    });
+  }, [entries, exportScope, exportSubteam, exportStatus]);
+
+  const previewTimeEntries = React.useMemo(() => {
+    let filtered: TimeEntry[] = [];
+    if (timeExportScope === 'all') {
+      filtered = [...timeEntries];
+    } else if (timeExportScope === 'members') {
+      filtered = timeEntries.filter(t => selectedTimeExportMembers.includes(t.userEmail));
+    } else if (timeExportScope === 'subteam') {
+      filtered = timeEntries.filter(t => selectedTimeExportSubteam === 'All' || t.subteam === selectedTimeExportSubteam);
+    }
+    return filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [timeEntries, timeExportScope, selectedTimeExportMembers, selectedTimeExportSubteam]);
 
   // Gamification dashboard selectors
   const [gamificationTab, setGamificationTab] = useState<'profile' | 'badges' | 'quests' | 'leaderboard' | 'subteamRanks'>('profile');
@@ -3978,24 +3952,36 @@ ${entry.planNextTime || '_No carry-over specified._'}
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans border-t-8 transition-colors duration-200 border-brand ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="main-root">
+    <div className={`min-h-screen flex flex-col font-sans border-t-8 transition-colors duration-200 border-brand ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} ${device.isMobile ? 'has-mobile-nav' : ''}`} id="main-root">
       
       {/* HIGH DENSITY HEADER SECTION */}
-      <header className="bg-slate-900 text-white p-4 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 shadow-lg no-print dark:bg-slate-950">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <RoboraidersLogo className="w-12 h-12" />
-          <div>
-            <h1 className="text-lg font-bold leading-none tracking-tight uppercase font-display text-slate-50 flex items-center gap-1.5">
-              <span>RoboRaiders Team Portal</span>
-              <span className="text-[10px] tracking-normal font-mono bg-brand/35 text-red-200 border border-brand/50 px-1.5 rounded uppercase">LIVE</span>
-            </h1>
-            <p className="text-xs text-slate-400 font-mono mt-0.5 dark:text-slate-500">FTC Team #6567 — ENGINEERING NOTEBOOK WRITER</p>
+      <header className="bg-slate-900 text-white p-3 sm:p-4 flex flex-col md:flex-row justify-between items-center gap-3 sm:gap-4 shrink-0 shadow-lg no-print dark:bg-slate-950">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <RoboraidersLogo className="w-9 h-9 sm:w-12 sm:h-12 shrink-0" />
+            <div>
+              <h1 className="text-base sm:text-lg font-bold leading-none tracking-tight uppercase font-display text-slate-50 flex items-center gap-1.5">
+                <span>RoboRaiders Team Portal</span>
+                <span className="text-[9px] sm:text-[10px] tracking-normal font-mono bg-brand/35 text-red-200 border border-brand/50 px-1.5 rounded uppercase">LIVE</span>
+              </h1>
+              <p className="text-[10px] sm:text-xs text-slate-400 font-mono mt-0.5 dark:text-slate-500">FTC Team #6567 — ENGINEERING NOTEBOOK WRITER</p>
+            </div>
           </div>
+
+          {/* Quick Mobile Drawer trigger */}
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="md:hidden p-2 rounded bg-slate-800 hover:bg-slate-700 text-white transition-all border border-slate-700 flex items-center justify-center cursor-pointer dark:bg-slate-950 hover:border-slate-600 active:scale-95 shrink-0"
+            title="Open Mobile Navigation Menu"
+            aria-label="Open Navigation Menu"
+          >
+            <Menu className="w-5 h-5 text-brand" />
+          </button>
         </div>
 
         {/* User Quick Stats - Utilizes Topbar for all users */}
         {currentUser && userGamification && (
-          <div className="flex flex-wrap items-center gap-3 bg-slate-800/50 border border-slate-800 px-3.5 py-1.5 rounded-lg text-slate-300">
+          <div className="hidden sm:flex flex-wrap items-center gap-3 bg-slate-800/50 border border-slate-800 px-3.5 py-1.5 rounded-lg text-slate-300">
             <div className="flex items-center gap-1.5" title="Your Core Level in RoboRaiders Arena">
               <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
               <span className="font-mono text-xs font-black text-amber-400">LVL {userGamification.stats.level}</span>
@@ -4021,7 +4007,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
         )}
 
         {/* Global Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+        <div className="hidden md:flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
           {/* HELP GUIDE QUESTION MARK BUTTON */}
           <button 
             onClick={() => setCurrentView('help_guide')}
@@ -9489,56 +9475,23 @@ FTC #6567 Captains & Mentors`
               </div>
 
               {/* Right Pane Preview */}
-              {timeExportShowPreview && (
-                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 select-none pb-12 dark:bg-slate-900/95">
-                  <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10 dark:bg-slate-800 dark:border-slate-800">
-                    <div className="flex items-center gap-1.5">
-                      <LayoutTemplate className="w-4 h-4 text-cyan-500" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
-                        Timesheet Preview: <span className="text-cyan-600 dark:text-cyan-400 underline">{timeExportPaperSize.toUpperCase()}</span>
-                      </span>
-                    </div>
-                    <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
-                      PREVIEW
-                    </span>
-                  </div>
-
-                  <div className="w-full max-w-xl flex flex-col gap-6 scale-[0.9] origin-top">
-                    {timeExportShowCover && (
-                      <div className="bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 p-8 rounded-lg shadow-lg aspect-[8.5/11] flex flex-col justify-between text-slate-900 dark:text-slate-100">
-                        <div className="border-b-4 border-cyan-600 pb-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Clock className="w-6 h-6 text-cyan-600" />
-                            <h3 className="text-xl font-black font-display uppercase tracking-wider text-slate-900 dark:text-white">
-                              FTC #6567 RoboRaiders
-                            </h3>
-                          </div>
-                          <h4 className="text-sm font-bold text-cyan-600 uppercase font-mono tracking-widest">
-                            Official Member Timesheets & Service Hours
-                          </h4>
-                        </div>
-
-                        <div className="my-auto flex flex-col gap-3 py-6 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
-                          <div className="flex justify-between text-xs font-mono">
-                            <span className="text-slate-500 dark:text-slate-400">Scope:</span>
-                            <span className="font-bold uppercase">{timeExportScope}</span>
-                          </div>
-                          <div className="flex justify-between text-xs font-mono">
-                            <span className="text-slate-500 dark:text-slate-400">Total Records:</span>
-                            <span className="font-bold">{timeEntries.length} entries</span>
-                          </div>
-                          <div className="flex justify-between text-xs font-mono">
-                            <span className="text-slate-500 dark:text-slate-400">Generated:</span>
-                            <span className="font-bold">{getTodayLocalDateString()}</span>
-                          </div>
-                        </div>
-
-                        <div className="text-center text-[10px] font-mono text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-3">
-                          Official FIRST Tech Challenge Verification Document • Team 6567
-                        </div>
-                      </div>
-                    )}
-                  </div>
+              {timeExportShowPreview ? (
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center max-h-[80vh] bg-slate-100/95 select-none pb-12 dark:bg-slate-900/95">
+                  <TimesheetPrintLayout 
+                    timeEntries={previewTimeEntries}
+                    paperSize={timeExportPaperSize}
+                    showCover={timeExportShowCover}
+                    showTOC={timeExportShowTOC}
+                    scope={timeExportScope === 'all' ? 'ALL MEMBERS' : timeExportScope === 'members' ? 'SELECTED MEMBERS' : 'SUBTEAM'}
+                    subteamFilter={timeExportScope === 'subteam' ? selectedTimeExportSubteam : 'All'}
+                    isPreview={true}
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                  <LayoutTemplate className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-3" />
+                  <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500">Preview Disabled</p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">Enable "Show Visual Preview" on the left to inspect pages before printing.</p>
                 </div>
               )}
             </div>
@@ -9713,52 +9666,23 @@ FTC #6567 Captains & Mentors`
               </div>
 
               {/* Right Pane Preview */}
-              {exportShowPreview && (
-                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 items-center max-h-[80vh] bg-slate-100/95 select-none pb-12 dark:bg-slate-900/95">
-                  <div className="w-full max-w-lg flex items-center justify-between border-b border-slate-200 pb-2 mb-2 sticky top-0 bg-slate-100 pb-1.5 px-3 rounded-lg backdrop-blur-md shrink-0 z-10 dark:bg-slate-800 dark:border-slate-800">
-                    <div className="flex items-center gap-1.5">
-                      <LayoutTemplate className="w-4 h-4 text-indigo-500" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600 font-mono dark:text-slate-300">
-                        Journal Portfolio Format: <span className="text-indigo-600 dark:text-indigo-400 underline">{exportPaperSize.toUpperCase()}</span>
-                      </span>
-                    </div>
-                    <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest leading-none dark:text-slate-500">
-                      PORTFOLIO PREVIEW
-                    </span>
-                  </div>
-
-                  <div className="w-full max-w-xl flex flex-col gap-6 scale-[0.9] origin-top">
-                    {exportShowCover && (
-                      <div className="bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 p-8 rounded-lg shadow-lg aspect-[8.5/11] flex flex-col justify-between text-slate-900 dark:text-slate-100">
-                        <div className="border-b-4 border-indigo-600 pb-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <BookOpen className="w-6 h-6 text-indigo-600" />
-                            <h3 className="text-xl font-black font-display uppercase tracking-wider text-slate-900 dark:text-white">
-                              FTC #6567 RoboRaiders
-                            </h3>
-                          </div>
-                          <h4 className="text-sm font-bold text-indigo-600 uppercase font-mono tracking-widest">
-                            Official Engineering Notebook Portfolio
-                          </h4>
-                        </div>
-
-                        <div className="my-auto flex flex-col gap-3 py-6 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
-                          <div className="flex justify-between text-xs font-mono">
-                            <span className="text-slate-500 dark:text-slate-400">Included Records:</span>
-                            <span className="font-bold">{entries.length} Logs</span>
-                          </div>
-                          <div className="flex justify-between text-xs font-mono">
-                            <span className="text-slate-500 dark:text-slate-400">Generated On:</span>
-                            <span className="font-bold">{getTodayLocalDateString()}</span>
-                          </div>
-                        </div>
-
-                        <div className="text-center text-[10px] font-mono text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-3">
-                          Official FIRST Tech Challenge Engineering Documentation • Team 6567
-                        </div>
-                      </div>
-                    )}
-                  </div>
+              {exportShowPreview ? (
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center max-h-[80vh] bg-slate-100/95 select-none pb-12 dark:bg-slate-900/95">
+                  <JournalPrintLayout 
+                    entries={previewJournalEntries}
+                    allEntries={entries}
+                    paperSize={exportPaperSize}
+                    showCover={exportShowCover}
+                    showTOC={exportShowTOC}
+                    scope={exportScope === 'all' ? 'ALL NOTEBOOK ENTRIES' : `${exportSubteam} • ${exportStatus}`}
+                    isPreview={true}
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                  <LayoutTemplate className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-3" />
+                  <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500">Preview Disabled</p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">Enable "Show Visual Preview" on the left to inspect pages before printing.</p>
                 </div>
               )}
             </div>
@@ -9892,163 +9816,30 @@ FTC #6567 Captains & Mentors`
     {/* BATCH PRINT MEDIA LAYOUT: JOURNAL ENTRIES */}
     {entriesToPrint && (
       <div className="hidden print:block w-full bg-white text-slate-950" id="print-journal-batch">
-        {exportShowCover && (
-          <div className="print-page w-full min-h-[100vh] flex flex-col justify-between p-12 bg-white text-slate-900 border-b border-slate-300 page-break-after">
-            <div className="border-b-8 border-slate-900 pb-8">
-              <div className="flex items-center gap-3 mb-4">
-                <RoboraidersLogo className="w-16 h-16" />
-                <div>
-                  <h1 className="text-3xl font-black font-display tracking-tight text-slate-950">
-                    FTC TEAM #6567 ROBORAIDERS
-                  </h1>
-                  <p className="text-sm font-mono font-bold text-slate-600 uppercase tracking-widest">
-                    FIRST Tech Challenge Engineering Notebook & Evidence Dossier
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="my-auto flex flex-col gap-4 py-8 border-y-2 border-slate-200">
-              <div className="grid grid-cols-2 gap-4 text-sm font-mono">
-                <div>
-                  <span className="text-slate-500 block text-xs uppercase">Documentation Scope:</span>
-                  <span className="font-extrabold text-slate-900">{exportScope.toUpperCase()}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-xs uppercase">Total Log Entries:</span>
-                  <span className="font-extrabold text-slate-900">{entriesToPrint.length} Entries</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-xs uppercase">Compiled Timestamp:</span>
-                  <span className="font-extrabold text-slate-900">{getTodayLocalDateString()}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-xs uppercase">Affiliation:</span>
-                  <span className="font-extrabold text-slate-900">Red Hook High School</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-center text-xs font-mono text-slate-500 pt-4 border-t border-slate-200">
-              Confidential Engineering Material • FTC 6567 RoboRaiders • Gracious Professionalism®
-            </div>
-          </div>
-        )}
-
-        {entriesToPrint.map((entry, idx) => (
-          <div key={entry.id || idx} className="print-page w-full min-h-[100vh] p-8 bg-white text-slate-900 border-b border-slate-200 page-break-after">
-            <div className="border-b-4 border-slate-900 pb-3 flex justify-between items-center mb-6">
-              <div>
-                <span className="text-xs font-mono font-black border border-slate-800 px-2 py-0.5 rounded bg-slate-100 uppercase mr-2">
-                  {entry.subteam}
-                </span>
-                <span className="text-xs font-mono font-bold text-slate-500">
-                  REF: {getEntryReferenceCode(entry, entries)}
-                </span>
-              </div>
-              <div className="text-right text-xs font-mono text-slate-600">
-                <div><strong>DATE:</strong> {entry.date}</div>
-                <div><strong>AUTHOR:</strong> {entry.author}</div>
-              </div>
-            </div>
-
-            <h2 className="text-xl font-black text-slate-950 mb-4 font-display uppercase">
-              {entry.title || 'Engineering Session Log'}
-            </h2>
-
-            <div className="space-y-4 text-xs font-sans leading-relaxed text-slate-800">
-              <div>
-                <h3 className="font-mono font-extrabold uppercase text-slate-500 text-[10px] mb-1 tracking-wider">
-                  1. Objectives & Goals Planned
-                </h3>
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap">
-                  {entry.planned || 'No planned goals specified.'}
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-mono font-extrabold uppercase text-slate-500 text-[10px] mb-1 tracking-wider">
-                  2. Work Accomplished & Implementation
-                </h3>
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap">
-                  {entry.accomplished || 'No work accomplished recorded.'}
-                </div>
-              </div>
-
-              {entry.challenges && (
-                <div>
-                  <h3 className="font-mono font-extrabold uppercase text-slate-500 text-[10px] mb-1 tracking-wider">
-                    3. Engineering Challenges & Troubleshooting
-                  </h3>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap">
-                    {entry.challenges}
-                  </div>
-                </div>
-              )}
-
-              {entry.nextSteps && (
-                <div>
-                  <h3 className="font-mono font-extrabold uppercase text-slate-500 text-[10px] mb-1 tracking-wider">
-                    4. Next Steps & Future Action Items
-                  </h3>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap">
-                    {entry.nextSteps}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-8 pt-4 border-t border-slate-300 flex justify-between text-[9px] font-mono text-slate-500">
-              <span>FIRST Tech Challenge Team #6567</span>
-              <span>Status: {entry.status}</span>
-              <span>Entry {idx + 1} of {entriesToPrint.length}</span>
-            </div>
-          </div>
-        ))}
+        <JournalPrintLayout 
+          entries={entriesToPrint}
+          allEntries={entries}
+          paperSize={exportPaperSize}
+          showCover={exportShowCover}
+          showTOC={exportShowTOC}
+          scope={exportScope === 'all' ? 'ALL NOTEBOOK ENTRIES' : `${exportSubteam} • ${exportStatus}`}
+          isPreview={false}
+        />
       </div>
     )}
 
     {/* BATCH PRINT MEDIA LAYOUT: TIME CARDS */}
     {timeEntriesToPrint && (
       <div className="hidden print:block w-full bg-white text-slate-950" id="print-time-batch">
-        <div className="print-page w-full p-8 bg-white text-slate-900">
-          <div className="border-b-4 border-cyan-600 pb-3 flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-xl font-black font-display uppercase tracking-tight text-slate-950">
-                FTC #6567 RoboRaiders — Timesheets Report
-              </h1>
-              <p className="text-xs font-mono text-slate-500">
-                Generated on {getTodayLocalDateString()} • Total Entries: {timeEntriesToPrint.length}
-              </p>
-            </div>
-            <div className="text-right font-mono text-sm font-black text-cyan-700">
-              {timeEntriesToPrint.reduce((s, e) => s + (e.durationHours || 0), 0).toFixed(2)} Total Hours
-            </div>
-          </div>
-
-          <table className="w-full text-left text-xs border-collapse font-mono">
-            <thead>
-              <tr className="border-b-2 border-slate-800 text-slate-600 uppercase text-[10px]">
-                <th className="py-2 px-2">Date</th>
-                <th className="py-2 px-2">Member Name</th>
-                <th className="py-2 px-2">Subteam</th>
-                <th className="py-2 px-2">Duration</th>
-                <th className="py-2 px-2">Activity / Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {timeEntriesToPrint.map((entry, idx) => (
-                <tr key={entry.id || idx} className="border-b border-slate-200">
-                  <td className="py-2 px-2">{entry.date}</td>
-                  <td className="py-2 px-2 font-bold">{entry.userName || entry.userEmail}</td>
-                  <td className="py-2 px-2">{entry.subteam}</td>
-                  <td className="py-2 px-2 font-bold text-cyan-700">{entry.durationHours.toFixed(2)} hrs</td>
-                  <td className="py-2 px-2 text-slate-600">{entry.description || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TimesheetPrintLayout 
+          timeEntries={timeEntriesToPrint}
+          paperSize={timeExportPaperSize}
+          showCover={timeExportShowCover}
+          showTOC={timeExportShowTOC}
+          scope={timeExportScope === 'all' ? 'ALL MEMBERS' : timeExportScope === 'members' ? 'SELECTED MEMBERS' : 'SUBTEAM'}
+          subteamFilter={timeExportScope === 'subteam' ? selectedTimeExportSubteam : 'All'}
+          isPreview={false}
+        />
       </div>
     )}
 
@@ -10065,6 +9856,32 @@ FTC #6567 Captains & Mentors`
         />
       </div>
     )}
+
+    {/* MOBILE BOTTOM NAVIGATION & DRAWER */}
+    <MobileBottomNav 
+      currentView={currentView}
+      onSelectView={(v: any) => setCurrentView(v)}
+      onOpenMenu={() => setIsMobileMenuOpen(true)}
+      isMenuOpen={isMobileMenuOpen}
+      activeSession={!!currentUser}
+      pendingReviewsCount={entries.filter(e => e.status === 'Pending Review' && canUserApproveEntry(currentUser, e)).length}
+      unassignedTasksCount={kanbanTasks.filter(t => !t.assigneeEmail && t.status !== 'done').length}
+    />
+
+    <MobileMenuDrawer 
+      isOpen={isMobileMenuOpen}
+      onClose={() => setIsMobileMenuOpen(false)}
+      currentUser={currentUser}
+      userGamification={userGamification}
+      currentView={currentView}
+      onSelectView={(v: any) => setCurrentView(v)}
+      isDark={isDark}
+      onToggleTheme={() => setIsDark(!isDark)}
+      onOpenSettings={openSettingsModal}
+      onLogout={handleLogout}
+      isUserAdminOrMentor={isUserAdminOrMentor}
+      device={device}
+    />
 
     </div>
   );

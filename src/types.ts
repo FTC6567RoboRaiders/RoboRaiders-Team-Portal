@@ -16,6 +16,7 @@ export interface JournalImage {
 
 export interface JournalEntry {
   id: string;
+  title?: string;
   subteam: Subteam;
   author: string;
   date: string; // YYYY-MM-DD
@@ -23,6 +24,8 @@ export interface JournalEntry {
   accomplished: string;
   problemsAndSolutions: string[]; // List of problems/solutions paragraphs which will be enumerated
   planNextTime: string;
+  challenges?: string;
+  nextSteps?: string;
   images: JournalImage[];
   attendees?: string[];
   createdAt: number;
