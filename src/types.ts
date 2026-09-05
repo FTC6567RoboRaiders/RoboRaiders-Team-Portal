@@ -235,6 +235,65 @@ export interface InventoryTransaction {
   timestamp: number;
 }
 
+export type GrantStatus = 
+  | 'Researching'
+  | 'Drafting'
+  | 'Submitted'
+  | 'Under Review'
+  | 'Awarded'
+  | 'Partially Awarded'
+  | 'Not Awarded'
+  | 'Closed';
+
+export type GrantCategory =
+  | 'Direct Funds'
+  | 'Parts & Hardware Voucher'
+  | 'Software License'
+  | 'Travel / Registration Subsidy'
+  | 'Tools & Machinery'
+  | 'General Sponsorship';
+
+export interface GrantRequirement {
+  id: string;
+  title: string;
+  completed: boolean;
+  dueDate?: string;
+  completedAt?: number;
+  completedBy?: string;
+}
+
+export interface GrantApplication {
+  id: string;
+  name: string;
+  organization: string;
+  season: string;
+  status: GrantStatus;
+  category: GrantCategory;
+  amountRequested: number;
+  amountAwarded?: number;
+  deadlineDate?: string;
+  submissionDate?: string;
+  decisionDate?: string;
+  leadMemberName?: string;
+  leadMemberEmail?: string;
+  subteamFocus?: Subteam | 'Team-wide';
+  applicationUrl?: string;
+  portalLoginNotes?: string;
+  description?: string;
+  requirements: GrantRequirement[];
+  notes?: string;
+  postAwardReportRequired?: boolean;
+  postAwardReportDeadline?: string;
+  postAwardReportCompleted?: boolean;
+  syncedToLedger?: boolean;
+  ledgerTransactionId?: string;
+  createdAt: number;
+  createdBy: string;
+  createdByEmail: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 
 
 

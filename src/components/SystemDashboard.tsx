@@ -16,7 +16,8 @@ import {
   Layers,
   Users,
   FileText,
-  DollarSign
+  DollarSign,
+  Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -55,7 +56,8 @@ export default function SystemDashboard({
     { id: 'kanban', label: 'Kanban Board', icon: Layers, desc: 'Collaborative task cards & priorities board' },
     { id: 'outreach', label: 'Outreach Logs', icon: Users, desc: 'Community impact event reports and logs' },
     { id: 'handbook', label: 'Student Handbook', icon: FileText, desc: 'Reference guidelines and team appendices' },
-    { id: 'finance', label: 'General Ledger', icon: DollarSign, desc: 'Championship ledger & transaction tracking' }
+    { id: 'finance', label: 'General Ledger', icon: DollarSign, desc: 'Championship ledger & transaction tracking' },
+    { id: 'grants', label: 'Grant Tracker', icon: Award, desc: 'Grant proposals, sponsor funding & deliverables' }
   ];
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {

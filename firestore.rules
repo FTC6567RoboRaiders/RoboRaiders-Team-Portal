@@ -189,6 +189,19 @@ service cloud.firestore {
         && data.timestamp is number;
     }
 
+    function isValidGrant(data) {
+      return data.keys().hasAll(['id', 'name', 'organization', 'season', 'status', 'category', 'amountRequested', 'requirements', 'createdAt', 'createdBy', 'createdByEmail', 'updatedAt', 'updatedBy'])
+        && data.id is string
+        && data.name is string && data.name.size() <= 300
+        && data.organization is string && data.organization.size() <= 300
+        && data.season is string
+        && data.status is string
+        && data.category is string
+        && data.amountRequested is number
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
     // Collection Rules
     
     // 1. Users
@@ -292,6 +305,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidInventoryTransaction(request.resource.data);
       allow update: if isSignedIn() && isValidInventoryTransaction(request.resource.data);
+      allow delete: if isMentorOrCaptain() || isSignedIn();
+    }
+
+    // 13. Grant Applications
+    match /grantApplications/{grantId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidGrant(request.resource.data);
+      allow update: if isSignedIn() && isValidGrant(request.resource.data);
       allow delete: if isMentorOrCaptain() || isSignedIn();
     }
   }

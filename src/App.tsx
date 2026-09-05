@@ -60,7 +60,7 @@ import {
   Menu,
   Smartphone
 } from 'lucide-react';
-import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction } from './types';
+import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction, GrantApplication } from './types';
 import { compressAndResizeImage } from './utils/image';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { 
@@ -123,8 +123,10 @@ import TimePicker from './components/TimePicker';
 import GeneralLedger from './components/GeneralLedger';
 import InventoryManager from './components/InventoryManager';
 import { DEFAULT_INVENTORY_ITEMS, DEFAULT_INVENTORY_TRANSACTIONS } from './data/inventoryDemo';
+import GrantTracker from './components/GrantTracker';
 import MemberDirectory from './components/MemberDirectory';
 import SystemDashboard from './components/SystemDashboard';
+import WeeklyDigestWidget from './components/WeeklyDigestWidget';
 import { useDevice } from './utils/useDevice';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MobileMenuDrawer } from './components/MobileMenuDrawer';
@@ -265,6 +267,25 @@ export default function App() {
   const [ledgerTransactions, setLedgerTransactions] = useState<LedgerTransaction[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>([]);
+  const [grants, setGrants] = useState<GrantApplication[]>(() => {
+    const stored = localStorage.getItem('ftc_grant_applications');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+          const defaultMockIds = ['grant_rev_2026', 'grant_haas_2026', 'grant_argosy_2026', 'grant_moto_2026', 'grant_ptc_2026'];
+          const userOnly = parsed.filter((g: any) => !defaultMockIds.includes(g.id));
+          localStorage.setItem('ftc_grant_applications', JSON.stringify(userOnly));
+          return userOnly;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const grantsRef = useRef<GrantApplication[]>(grants);
+  useEffect(() => {
+    grantsRef.current = grants;
+  }, [grants]);
   
   // Real User Accounts state
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
@@ -327,7 +348,7 @@ export default function App() {
   );
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'help_guide'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'help_guide' | 'grants'>('landing');
 
   // Interactive System Notifications and disabled modules flags
   const [disabledModules, setDisabledModules] = useState<string[]>([]);
@@ -596,6 +617,56 @@ export default function App() {
       console.error(`Firestore sync error for deleting ledgerTransactions/${id}:`, e);
       return false;
     }
+  };
+
+  const handleSaveGrant = async (grant: GrantApplication): Promise<boolean> => {
+    const existingIndex = grants.findIndex(g => g.id === grant.id);
+    let updated: GrantApplication[];
+    if (existingIndex >= 0) {
+      updated = [...grants];
+      updated[existingIndex] = grant;
+    } else {
+      updated = [grant, ...grants];
+    }
+    setGrants(updated);
+    localStorage.setItem('ftc_grant_applications', JSON.stringify(updated));
+    try {
+      const cleanGrant = cleanForFirestore(grant);
+      await setDoc(doc(db, 'grantApplications', grant.id), cleanGrant);
+      return true;
+    } catch (e: any) {
+      console.error(`Firestore sync error for grantApplications/${grant.id}:`, e);
+      return false;
+    }
+  };
+
+  const handleDeleteGrant = async (id: string): Promise<boolean> => {
+    const updated = grants.filter(g => g.id !== id);
+    setGrants(updated);
+    localStorage.setItem('ftc_grant_applications', JSON.stringify(updated));
+    try {
+      await deleteDoc(doc(db, 'grantApplications', id));
+      return true;
+    } catch (e: any) {
+      console.error(`Firestore sync error for deleting grantApplications/${id}:`, e);
+      return false;
+    }
+  };
+
+  const handleSyncGrantToLedger = async (grant: GrantApplication): Promise<boolean> => {
+    if (!currentUser) return false;
+    const amount = grant.amountAwarded || grant.amountRequested;
+    const txData: Omit<LedgerTransaction, 'id' | 'createdBy' | 'createdByEmail' | 'createdAt'> = {
+      type: 'income',
+      amount: amount,
+      category: 'Other',
+      account: 'Self-Raised Funds',
+      fundingSource: 'Sponsor/Donation Check',
+      paidBy: grant.organization,
+      description: `Grant Award: ${grant.name} (${grant.organization}) - ${grant.season}`,
+      date: grant.decisionDate || new Date().toISOString().split('T')[0]
+    };
+    return await handleAddLedgerTransaction(txData);
   };
 
   const syncKanbanTasksToFirestore = async (newTasks: KanbanTask[]) => {
@@ -996,6 +1067,25 @@ export default function App() {
         console.warn("inventoryTransactions snapshot listener error:", error);
       });
       unsubscribeAll.push(unsubInvTx);
+
+      // Grant applications listener
+      const unsubGrants = onSnapshot(collection(db, 'grantApplications'), (snapshot) => {
+        const defaultMockIds = ['grant_rev_2026', 'grant_haas_2026', 'grant_argosy_2026', 'grant_moto_2026', 'grant_ptc_2026'];
+        const list: GrantApplication[] = [];
+        snapshot.forEach(d => {
+          if (defaultMockIds.includes(d.id)) {
+            deleteDoc(doc(db, 'grantApplications', d.id)).catch(() => {});
+          } else {
+            list.push(d.data() as GrantApplication);
+          }
+        });
+        const sorted = list.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        setGrants(sorted);
+        localStorage.setItem('ftc_grant_applications', JSON.stringify(sorted));
+      }, (error) => {
+        console.warn("grantApplications snapshot listener error:", error);
+      });
+      unsubscribeAll.push(unsubGrants);
     };
 
     const handleAuthEvent = onAuthStateChanged(auth, async (authUser) => {
@@ -1227,7 +1317,15 @@ export default function App() {
   });
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'dispatchedEmails'), (snapshot) => {
+    if (!currentUser) {
+      setDisabledModules([]);
+      setSystemNotifications([]);
+      setDispatchedEmails([]);
+      return;
+    }
+
+    // 1. Listen to dispatched emails
+    const unsubEmails = onSnapshot(collection(db, 'dispatchedEmails'), (snapshot) => {
       const list: DispatchedEmail[] = [];
       snapshot.forEach(d => {
         list.push(d.data() as DispatchedEmail);
@@ -1236,19 +1334,10 @@ export default function App() {
       setDispatchedEmails(sorted);
       localStorage.setItem('ftc_dispatched_emails', JSON.stringify(sorted));
     }, (error) => {
-      console.error("Global dispatchedEmails subscription error:", error);
+      console.warn("DispatchedEmails subscription notice:", error);
     });
-    return () => unsub();
-  }, []);
 
-  useEffect(() => {
-    if (!currentUser) {
-      setDisabledModules([]);
-      setSystemNotifications([]);
-      return;
-    }
-
-    // 1. Listen to portal settings
+    // 2. Listen to portal settings
     const unsubPortal = onSnapshot(doc(db, 'systemSettings', 'portal'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -1260,7 +1349,7 @@ export default function App() {
       console.warn("Failed to subscribe to systemSettings/portal", error);
     });
 
-    // 2. Listen to system notifications
+    // 3. Listen to system notifications
     const unsubNotifications = onSnapshot(
       query(collection(db, 'systemNotifications'), orderBy('createdAt', 'desc')), 
       (snapshot) => {
@@ -1276,6 +1365,7 @@ export default function App() {
     );
 
     return () => {
+      unsubEmails();
       unsubPortal();
       unsubNotifications();
     };
@@ -3612,7 +3702,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
   const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
 
   const sidebarLinks: {
-    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard';
+    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'grants';
     label: string;
     sublabel: string;
     icon: any;
@@ -3687,6 +3777,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
       icon: DollarSign,
       badge: null,
       color: 'text-teal-400'
+    },
+    {
+      id: 'grants',
+      label: 'Grant Tracker',
+      sublabel: 'Funding & proposals',
+      icon: Award,
+      badge: grants.filter(g => g.status === 'Drafting' || g.status === 'Submitted' || g.status === 'Under Review').length || null,
+      badgeColor: 'bg-amber-500',
+      color: 'text-amber-400'
     }
   ];
 
@@ -4191,6 +4290,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
               )}
             </div>
           </div>
+
+          {/* WEEKLY DIGEST WIDGET */}
+          <WeeklyDigestWidget
+            entries={entries}
+            outreachEvents={outreachEvents}
+            timeEntries={timeEntries}
+            onNavigate={(view) => setCurrentView(view)}
+          />
 
           {/* DYNAMIC ROBOTICS CHAMPIONSHIP CONSOLE */}
           {false && currentUser && (
@@ -5507,6 +5614,46 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
             </div>
 
+            {/* CARD grants: GRANT & SPONSORSHIP TRACKER */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-amber-500/30 group dark:bg-slate-900 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-3.5 mb-4">
+                  <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
+                    <Award className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
+                      Grant &amp; Sponsorship Tracker
+                    </h3>
+                    <p className="text-[10px] font-mono text-amber-650 dark:text-amber-400 uppercase tracking-widest mt-0.5">
+                      Proposals, Awards &amp; Deliverables
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
+                  Track corporate sponsorships, FIRST STEM team grants, foundation proposals, and post-award requirements. Monitor proposal deadlines, win rates, and synchronize approved grant funding directly into the team ledger.
+                </p>
+                
+                {/* Grant Quick Stats */}
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Awarded Funding:</span>
+                  <strong className="text-amber-600 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded font-bold">
+                    ${grants.reduce((sum, g) => sum + (g.amountAwarded || 0), 0).toLocaleString()} ({grants.length} Proposals)
+                  </strong>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setCurrentView('grants')}
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
+                >
+                  <span>Open Grant Tracker</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
             {/* CARD 3: TEAM DIRECTORY - Available for ALL verified members */}
             <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-indigo-500/30 group dark:bg-slate-900 dark:border-slate-800">
               <div>
@@ -5711,6 +5858,24 @@ ${entry.planNextTime || '_No carry-over specified._'}
             transactions={ledgerTransactions}
             onAddTransaction={handleAddLedgerTransaction}
             onDeleteTransaction={handleDeleteLedgerTransaction}
+            onBack={() => setCurrentView('landing')}
+            showToast={showToast}
+          />
+        )
+      )}
+
+      {/* GRANT TRACKER VIEW */}
+      {currentView === 'grants' && (
+        disabledModules.includes('grants') && !isAuthorizedToAccessDisabled ? (
+          renderDisabledModuleScreen('Grant Tracker')
+        ) : (
+          <GrantTracker
+            currentUser={currentUser}
+            accounts={accounts}
+            grants={grants}
+            onSaveGrant={handleSaveGrant}
+            onDeleteGrant={handleDeleteGrant}
+            onSyncToLedger={handleSyncGrantToLedger}
             onBack={() => setCurrentView('landing')}
             showToast={showToast}
           />

@@ -230,9 +230,50 @@
         "active": { "type": "boolean" }
       },
       "required": ["id", "title", "message", "type", "createdAt", "createdBy", "active"]
+    },
+    "GrantApplication": {
+      "title": "Grant Application",
+      "description": "A team grant, corporate sponsorship, or foundation funding proposal with deliverables checklist and milestones.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "organization": { "type": "string" },
+        "season": { "type": "string" },
+        "status": { "type": "string" },
+        "category": { "type": "string" },
+        "amountRequested": { "type": "number" },
+        "amountAwarded": { "type": "number" },
+        "deadlineDate": { "type": "string" },
+        "submissionDate": { "type": "string" },
+        "decisionDate": { "type": "string" },
+        "leadMemberName": { "type": "string" },
+        "leadMemberEmail": { "type": "string" },
+        "subteamFocus": { "type": "string" },
+        "applicationUrl": { "type": "string" },
+        "portalLoginNotes": { "type": "string" },
+        "description": { "type": "string" },
+        "requirements": { "type": "array" },
+        "notes": { "type": "string" },
+        "postAwardReportRequired": { "type": "boolean" },
+        "postAwardReportDeadline": { "type": "string" },
+        "postAwardReportCompleted": { "type": "boolean" },
+        "syncedToLedger": { "type": "boolean" },
+        "ledgerTransactionId": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "createdBy": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "name", "organization", "season", "status", "category", "amountRequested", "requirements", "createdAt", "createdBy", "createdByEmail", "updatedAt", "updatedBy"]
     }
   },
   "firestore": {
+    "grantApplications/{grantId}": {
+      "schema": "GrantApplication",
+      "description": "Funding applications, corporate sponsorships, and grant proposals for FTC Team #6567."
+    },
     "systemNotifications/{notificationId}": {
       "schema": "SystemNotification",
       "description": "System Announcements published by the Programming subteam."

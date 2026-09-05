@@ -1,14 +1,17 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+
+// Suppress internal SDK offline warning logs to console.error in sandboxed environments
+setLogLevel('silent');
 
 const app = initializeApp(firebaseConfig);
 
 let firestoreInstance;
 try {
   firestoreInstance = initializeFirestore(app, {
-    experimentalAutoDetectLongPolling: true,
+    experimentalForceLongPolling: true,
   }, firebaseConfig.firestoreDatabaseId);
 } catch {
   firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -21,13 +24,25 @@ export const auth = getAuth(app);
 async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
+  } catch (error: any) {
+    if (error?.code === 'permission-denied') {
+      // Reaching Firestore backend confirmed by security rules response
+      return;
+    }
+    if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('unavailable'))) {
       console.warn("Firestore running in offline/cached mode. Please check your network or Firebase connection.");
     }
   }
 }
-testConnection();
+
+// Allow browser environment and network stack to settle before issuing server test probe
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    testConnection().catch(() => {});
+  }, 1000);
+} else {
+  testConnection().catch(() => {});
+}
 
 export enum OperationType {
   CREATE = 'create',

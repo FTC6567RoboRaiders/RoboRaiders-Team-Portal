@@ -20,7 +20,8 @@ import {
   ChevronRight,
   Clock,
   Layers,
-  Grid
+  Grid,
+  Award
 } from 'lucide-react';
 import { UserAccount } from '../types';
 import { DeviceInfo } from '../utils/useDevice';
@@ -114,6 +115,13 @@ export function MobileMenuDrawer({
       sublabel: 'Team financial records',
       icon: DollarSign,
       color: 'text-teal-400'
+    },
+    {
+      id: 'grants',
+      label: 'Grant Tracker',
+      sublabel: 'Funding & sponsorships',
+      icon: Award,
+      color: 'text-amber-400'
     }
   ];
 
