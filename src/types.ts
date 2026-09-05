@@ -204,6 +204,7 @@ export interface InventoryItem {
   minQuantity: number;
   unit: string;
   location: string;
+  subArea?: string;
   status: InventoryItemStatus;
   condition: InventoryCondition;
   costPerUnit?: number;

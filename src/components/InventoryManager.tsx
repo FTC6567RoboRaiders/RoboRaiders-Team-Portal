@@ -49,7 +49,15 @@ import {
 } from '../types';
 import { compressAndResizeImage } from '../utils/image';
 import { DEFAULT_INVENTORY_ITEMS } from '../data/inventoryDemo';
-import { StorageLocation, getStoredStorageLocations, saveStoredStorageLocations } from '../data/storageLocations';
+import { 
+  StorageLocation, 
+  getStoredStorageLocations, 
+  saveStoredStorageLocations,
+  addSubAreaToLocation,
+  removeSubAreaFromLocation,
+  updateStorageLocation,
+  updateSubAreaInLocation
+} from '../data/storageLocations';
 import { INVENTORY_UNITS, getDefaultUnitForCategory } from '../data/inventoryUnits';
 import { pullProductPhoto, isGobildaSku, isRevSku, normalizeSku } from '../utils/productImages';
 import { LabelCustomizerModal } from './LabelCustomizerModal';
@@ -120,6 +128,7 @@ export default function InventoryManager({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [selectedLocation, setSelectedLocation] = useState<string>('All');
+  const [selectedSubArea, setSelectedSubArea] = useState<string>('All');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'category' | 'status' | 'updatedAt' | 'cost'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -135,6 +144,7 @@ export default function InventoryManager({
   const [isBulkLocationModalOpen, setIsBulkLocationModalOpen] = useState(false);
   const [isBulkCategoryModalOpen, setIsBulkCategoryModalOpen] = useState(false);
   const [bulkLocationValue, setBulkLocationValue] = useState<string>('');
+  const [bulkSubAreaValue, setBulkSubAreaValue] = useState<string>('');
   const [bulkCategoryValue, setBulkCategoryValue] = useState<InventoryCategory>('REV Robotics Parts');
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -215,6 +225,7 @@ export default function InventoryManager({
   const [formUnit, setFormUnit] = useState('pcs');
   const [isCustomUnit, setIsCustomUnit] = useState(false);
   const [formLocation, setFormLocation] = useState('');
+  const [formSubArea, setFormSubArea] = useState('');
   const [isCustomLocation, setIsCustomLocation] = useState(false);
   const [formStatus, setFormStatus] = useState<InventoryItemStatus>('In Stock');
   const [formCondition, setFormCondition] = useState<InventoryCondition>('Good');
@@ -226,18 +237,22 @@ export default function InventoryManager({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Storage Location Handlers
-  const handleAddStorageLocation = (name: string, zone?: string, description?: string): string => {
+  const handleAddStorageLocation = (name: string, zone?: string, description?: string, subAreas?: string[]): string => {
     const newLoc: StorageLocation = {
       id: `loc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name,
       zone,
       description,
+      subAreas: subAreas || [],
       createdAt: Date.now()
     };
     const updated = [...customLocations, newLoc];
     setCustomLocations(updated);
     saveStoredStorageLocations(updated);
     setFormLocation(name);
+    if (subAreas && subAreas.length > 0) {
+      setFormSubArea(subAreas[0]);
+    }
     setIsCustomLocation(false);
     showToast(`Storage location "${name}" added!`, 'success');
     return name;
@@ -248,6 +263,106 @@ export default function InventoryManager({
     setCustomLocations(updated);
     saveStoredStorageLocations(updated);
     showToast('Storage location removed.', 'info');
+  };
+
+  const handleEditStorageLocation = async (
+    id: string,
+    updates: { name: string; zone?: string; description?: string; subAreas?: string[] }
+  ) => {
+    const existingLoc = customLocations.find(l => l.id === id);
+    if (!existingLoc) return;
+
+    const oldName = existingLoc.name;
+    const newName = updates.name.trim();
+    const nameChanged = oldName.toLowerCase() !== newName.toLowerCase();
+
+    // Check if new name conflicts with another location
+    if (nameChanged && customLocations.some(l => l.id !== id && l.name.toLowerCase() === newName.toLowerCase())) {
+      showToast(`A storage location named "${newName}" already exists.`, 'danger');
+      return;
+    }
+
+    const updated = updateStorageLocation(customLocations, id, updates);
+    setCustomLocations(updated);
+    saveStoredStorageLocations(updated);
+
+    // If active form location was this location, update it
+    if (formLocation === oldName) {
+      setFormLocation(newName);
+      if (updates.subAreas && updates.subAreas.length > 0) {
+        if (!updates.subAreas.includes(formSubArea)) {
+          setFormSubArea(updates.subAreas[0]);
+        }
+      }
+    }
+
+    // Cascade rename to inventory items currently stored at oldName
+    if (nameChanged) {
+      const itemsAtLocation = items.filter(item => item.location === oldName);
+      if (itemsAtLocation.length > 0) {
+        const now = Date.now();
+        let updatedCount = 0;
+        for (const itm of itemsAtLocation) {
+          const success = await onSaveItem({
+            ...itm,
+            location: newName,
+            updatedAt: now,
+            updatedBy: currentUser?.name || 'Team Member'
+          });
+          if (success) updatedCount++;
+        }
+        showToast(`Storage location updated to "${newName}" (${updatedCount} items updated).`, 'success');
+        return;
+      }
+    }
+
+    showToast(`Storage location "${newName}" updated successfully!`, 'success');
+  };
+
+  const handleRenameSubArea = async (locationId: string, oldSubAreaName: string, newSubAreaName: string) => {
+    const targetLoc = customLocations.find(l => l.id === locationId);
+    if (!targetLoc) return;
+
+    const trimmedNew = newSubAreaName.trim();
+    if (!trimmedNew) return;
+
+    const updated = updateSubAreaInLocation(customLocations, locationId, oldSubAreaName, trimmedNew);
+    setCustomLocations(updated);
+    saveStoredStorageLocations(updated);
+
+    // If current item form has this sub area, update it
+    if (formLocation === targetLoc.name && formSubArea === oldSubAreaName) {
+      setFormSubArea(trimmedNew);
+    }
+
+    // Cascade rename to inventory items currently stored at targetLoc.name & oldSubAreaName
+    const itemsAtSubArea = items.filter(i => i.location === targetLoc.name && i.subArea === oldSubAreaName);
+    if (itemsAtSubArea.length > 0) {
+      const now = Date.now();
+      for (const itm of itemsAtSubArea) {
+        await onSaveItem({
+          ...itm,
+          subArea: trimmedNew,
+          updatedAt: now,
+          updatedBy: currentUser?.name || 'Team Member'
+        });
+      }
+    }
+    showToast(`Sub area renamed to "${trimmedNew}".`, 'success');
+  };
+
+  const handleAddSubArea = (locationId: string, subAreaName: string) => {
+    const updated = addSubAreaToLocation(customLocations, locationId, subAreaName);
+    setCustomLocations(updated);
+    saveStoredStorageLocations(updated);
+    showToast(`Sub area "${subAreaName}" added!`, 'success');
+  };
+
+  const handleDeleteSubArea = (locationId: string, subAreaName: string) => {
+    const updated = removeSubAreaFromLocation(customLocations, locationId, subAreaName);
+    setCustomLocations(updated);
+    saveStoredStorageLocations(updated);
+    showToast(`Sub area "${subAreaName}" removed.`, 'info');
   };
 
   // Category change handler with auto-vendor and auto-unit selection
@@ -312,6 +427,24 @@ export default function InventoryManager({
     return Array.from(locs).sort();
   }, [items]);
 
+  const availableFilterSubAreas = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => {
+      if (selectedLocation === 'All' || i.location === selectedLocation) {
+        if (i.subArea && i.subArea.trim()) {
+          set.add(i.subArea.trim());
+        }
+      }
+    });
+    if (selectedLocation !== 'All') {
+      const locObj = customLocations.find(l => l.name === selectedLocation);
+      if (locObj?.subAreas) {
+        locObj.subAreas.forEach(s => set.add(s));
+      }
+    }
+    return Array.from(set).sort();
+  }, [items, selectedLocation, customLocations]);
+
   // Summary Metrics
   const metrics = useMemo(() => {
     const totalItems = items.length;
@@ -343,9 +476,10 @@ export default function InventoryManager({
         const matchesSku = item.sku?.toLowerCase().includes(q);
         const matchesVendor = item.vendor?.toLowerCase().includes(q);
         const matchesLoc = item.location.toLowerCase().includes(q);
+        const matchesSubArea = item.subArea?.toLowerCase().includes(q);
         const matchesNotes = item.notes?.toLowerCase().includes(q);
         const matchesBorrower = item.checkedOutBy?.toLowerCase().includes(q);
-        if (!matchesName && !matchesSku && !matchesVendor && !matchesLoc && !matchesNotes && !matchesBorrower) {
+        if (!matchesName && !matchesSku && !matchesVendor && !matchesLoc && !matchesSubArea && !matchesNotes && !matchesBorrower) {
           return false;
         }
       }
@@ -366,6 +500,15 @@ export default function InventoryManager({
       // Location filter
       if (selectedLocation !== 'All' && item.location !== selectedLocation) return false;
 
+      // Sub-area filter
+      if (selectedSubArea !== 'All') {
+        if (selectedSubArea === '__none__') {
+          if (item.subArea && item.subArea.trim() !== '') return false;
+        } else {
+          if (item.subArea !== selectedSubArea) return false;
+        }
+      }
+
       return true;
     }).sort((a, b) => {
       let comparison = 0;
@@ -384,7 +527,7 @@ export default function InventoryManager({
       }
       return sortOrder === 'asc' ? comparison : -comparison;
     });
-  }, [items, searchQuery, activeTab, selectedCategory, selectedStatus, selectedLocation, sortBy, sortOrder]);
+  }, [items, searchQuery, activeTab, selectedCategory, selectedStatus, selectedLocation, selectedSubArea, sortBy, sortOrder]);
 
   // Open modal for Create
   const handleOpenCreateModal = () => {
@@ -399,7 +542,9 @@ export default function InventoryManager({
     const autoUnit = getDefaultUnitForCategory('REV Robotics Parts');
     setFormUnit(autoUnit);
     setIsCustomUnit(false);
-    setFormLocation(customLocations.length > 0 ? customLocations[0].name : '');
+    const defaultLoc = customLocations.length > 0 ? customLocations[0] : null;
+    setFormLocation(defaultLoc ? defaultLoc.name : '');
+    setFormSubArea(defaultLoc && defaultLoc.subAreas && defaultLoc.subAreas.length > 0 ? defaultLoc.subAreas[0] : '');
     setIsCustomLocation(false);
     setFormStatus('In Stock');
     setFormCondition('New');
@@ -428,6 +573,7 @@ export default function InventoryManager({
 
     const itemLoc = item.location || (customLocations.length > 0 ? customLocations[0].name : '');
     setFormLocation(itemLoc);
+    setFormSubArea(item.subArea || '');
     setIsCustomLocation(false);
 
     setFormStatus(item.status);
@@ -490,12 +636,15 @@ export default function InventoryManager({
         const updated: InventoryItem = {
           ...item,
           location: newLocationName.trim(),
+          subArea: bulkSubAreaValue.trim() || undefined,
           updatedAt: now,
           updatedBy: currentUser?.name || 'Team Member'
         };
         const ok = await onSaveItem(updated);
         if (ok) {
           count++;
+          const oldDisplay = `${item.location || 'Unassigned'}${item.subArea ? ` › ${item.subArea}` : ''}`;
+          const newDisplay = `${newLocationName.trim()}${bulkSubAreaValue.trim() ? ` › ${bulkSubAreaValue.trim()}` : ''}`;
           await onAddTransaction({
             itemId: item.id,
             itemName: item.name,
@@ -504,14 +653,15 @@ export default function InventoryManager({
             resultingQuantity: item.quantity,
             performedBy: currentUser?.name || 'Team Member',
             performedByEmail: currentUser?.schoolEmail || 'member@school.edu',
-            notes: `Bulk updated storage location from "${item.location || 'Unassigned'}" to "${newLocationName.trim()}"`
+            notes: `Bulk updated storage location from "${oldDisplay}" to "${newDisplay}"`
           });
         }
       }
     }
     setIsBulkProcessing(false);
     setIsBulkLocationModalOpen(false);
-    showToast(`Successfully moved ${count} items to "${newLocationName}"!`, 'success');
+    const destDisplay = `${newLocationName}${bulkSubAreaValue.trim() ? ` › ${bulkSubAreaValue.trim()}` : ''}`;
+    showToast(`Successfully moved ${count} items to "${destDisplay}"!`, 'success');
   };
 
   // Bulk Category Reassignment
@@ -617,6 +767,7 @@ export default function InventoryManager({
       minQuantity: Number(formMinQuantity),
       unit: formUnit.trim() || 'pcs',
       location: formLocation.trim(),
+      subArea: formSubArea.trim() || undefined,
       status: autoStatus,
       condition: formCondition,
       costPerUnit: !isNaN(cost as number) ? cost : undefined,
@@ -934,6 +1085,7 @@ export default function InventoryManager({
           'Current Quantity': qty,
           'Unit': item.unit || 'pcs',
           'Storage Location': item.location || 'Unassigned',
+          'Sub Area / Bin': item.subArea || '',
           'Stock Status': item.status || 'In Stock',
           'Condition': item.condition || 'Good',
           'Unit Cost ($)': cost > 0 ? Number(cost.toFixed(2)) : 0,
@@ -991,7 +1143,7 @@ export default function InventoryManager({
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['ID', 'Name', 'Category', 'SKU', 'Vendor', 'Quantity', 'Min Quantity', 'Unit', 'Location', 'Status', 'Condition', 'Cost Per Unit', 'Checked Out By', 'Notes'];
+    const headers = ['ID', 'Name', 'Category', 'SKU', 'Vendor', 'Quantity', 'Min Quantity', 'Unit', 'Location', 'Sub Area', 'Status', 'Condition', 'Cost Per Unit', 'Checked Out By', 'Notes'];
     const rows = filteredItems.map(item => [
       item.id,
       `"${(item.name || '').replace(/"/g, '""')}"`,
@@ -1002,6 +1154,7 @@ export default function InventoryManager({
       item.minQuantity,
       item.unit,
       `"${(item.location || '').replace(/"/g, '""')}"`,
+      `"${(item.subArea || '').replace(/"/g, '""')}"`,
       item.status,
       item.condition,
       item.costPerUnit || 0,
@@ -1467,7 +1620,10 @@ export default function InventoryManager({
                   {/* Location filter */}
                   <select
                     value={selectedLocation}
-                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedLocation(e.target.value);
+                      setSelectedSubArea('All');
+                    }}
                     className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-rose-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 max-w-[140px] truncate"
                   >
                     <option value="All">All Locations</option>
@@ -1475,6 +1631,22 @@ export default function InventoryManager({
                       <option key={loc} value={loc}>{loc}</option>
                     ))}
                   </select>
+
+                  {/* Sub-Area filter */}
+                  {availableFilterSubAreas.length > 0 && (
+                    <select
+                      value={selectedSubArea}
+                      onChange={(e) => setSelectedSubArea(e.target.value)}
+                      className="text-xs bg-rose-50/50 border border-rose-200 rounded-lg px-2.5 py-2 text-rose-800 font-medium focus:outline-hidden focus:ring-1 focus:ring-rose-500 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300 max-w-[140px] truncate"
+                      title="Filter by Sub Area (Shelf / Bin / Drawer)"
+                    >
+                      <option value="All">All Sub Areas ({availableFilterSubAreas.length})</option>
+                      {availableFilterSubAreas.map(sub => (
+                        <option key={sub} value={sub}>› {sub}</option>
+                      ))}
+                      <option value="__none__">Unassigned Sub Area</option>
+                    </select>
+                  )}
 
                   {/* Sort By */}
                   <select
@@ -1760,10 +1932,15 @@ export default function InventoryManager({
                           </div>
                         )}
 
-                        {/* Storage Location */}
-                        <div className="flex items-center gap-1.5 mt-2.5 text-xs text-slate-600 dark:text-slate-300">
+                        {/* Storage Location & Sub Area */}
+                        <div className="flex items-center gap-1.5 mt-2.5 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
                           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span className="font-medium truncate">{item.location}</span>
+                          {item.subArea && (
+                            <span className="font-mono text-[11px] font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.5 rounded border border-rose-200/80 dark:border-rose-800/50">
+                              › {item.subArea}
+                            </span>
+                          )}
                         </div>
 
                         {/* Checked out info if loan */}
@@ -2018,9 +2195,14 @@ export default function InventoryManager({
                               </span>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                              <div className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3 text-slate-400" />
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                                 <span>{item.location}</span>
+                                {item.subArea && (
+                                  <span className="text-[10px] font-mono font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.2 rounded border border-rose-200/80 dark:border-rose-800/50">
+                                    › {item.subArea}
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3 text-center whitespace-nowrap">
@@ -2581,7 +2763,14 @@ export default function InventoryManager({
                         if (e.target.value === '__add_new__') {
                           setIsLocationModalOpen(true);
                         } else {
-                          setFormLocation(e.target.value);
+                          const newLoc = e.target.value;
+                          setFormLocation(newLoc);
+                          const locObj = customLocations.find(l => l.name === newLoc);
+                          if (locObj?.subAreas && locObj.subAreas.length > 0) {
+                            if (!locObj.subAreas.includes(formSubArea)) {
+                              setFormSubArea(locObj.subAreas[0]);
+                            }
+                          }
                         }
                       }}
                       className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs focus:ring-2 focus:ring-rose-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
@@ -2637,6 +2826,118 @@ export default function InventoryManager({
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Sub Area / Shelf / Bin Section */}
+              <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 text-xs">
+                    Sub Area / Shelf / Bin / Compartment (Optional)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {formSubArea && (
+                      <button
+                        type="button"
+                        onClick={() => setFormSubArea('')}
+                        className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-medium cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsLocationModalOpen(true)}
+                      className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Manage Sub Areas</span>
+                    </button>
+                  </div>
+                </div>
+
+                {(() => {
+                  const currentLocObj = customLocations.find(l => l.name === formLocation);
+                  const availableSubAreas = currentLocObj?.subAreas || [];
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        {availableSubAreas.length > 0 ? (
+                          <div className="flex-1 flex gap-2">
+                            <select
+                              value={availableSubAreas.includes(formSubArea) ? formSubArea : (formSubArea ? '__custom__' : '')}
+                              onChange={(e) => {
+                                if (e.target.value === '__custom__') {
+                                  // keep existing formSubArea
+                                } else {
+                                  setFormSubArea(e.target.value);
+                                }
+                              }}
+                              className="w-1/2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs focus:ring-2 focus:ring-rose-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                            >
+                              <option value="">Select predefined sub-area...</option>
+                              {availableSubAreas.map(sub => (
+                                <option key={sub} value={sub}>› {sub}</option>
+                              ))}
+                              <option value="__custom__">Custom / Type directly...</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={formSubArea}
+                              onChange={(e) => setFormSubArea(e.target.value)}
+                              placeholder="Or type custom sub area / bin..."
+                              className="w-1/2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-mono focus:ring-2 focus:ring-rose-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex gap-2">
+                            <input
+                              type="text"
+                              value={formSubArea}
+                              onChange={(e) => setFormSubArea(e.target.value)}
+                              placeholder="e.g. Shelf 2, Bin 4, Top Drawer, Compartment A..."
+                              className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs focus:ring-2 focus:ring-rose-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                            />
+                            {formSubArea.trim() && currentLocObj && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleAddSubArea(currentLocObj.id, formSubArea.trim());
+                                }}
+                                className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-bold text-xs shrink-0 flex items-center gap-1 cursor-pointer dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300"
+                                title={`Save "${formSubArea}" as a reusable sub-area for ${formLocation}`}
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Save for {currentLocObj.name}</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Quick selection chips if location has sub-areas */}
+                      {availableSubAreas.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Quick pick:</span>
+                          {availableSubAreas.map(sub => (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => setFormSubArea(sub)}
+                              className={`text-[10px] px-2.5 py-0.5 rounded-full font-mono transition-colors cursor-pointer border ${
+                                formSubArea === sub
+                                  ? 'bg-rose-600 text-white border-rose-600 font-bold shadow-2xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:border-rose-400 hover:text-rose-600 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                              }`}
+                            >
+                              › {sub}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Quantity, Min Quantity, Unit Dropdown, Cost */}
@@ -2979,12 +3280,75 @@ export default function InventoryManager({
                 )}
               </div>
 
+              {/* Target Sub Area */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300">
+                    Target Sub Area / Compartment (Optional)
+                  </label>
+                  {bulkSubAreaValue && (
+                    <button
+                      type="button"
+                      onClick={() => setBulkSubAreaValue('')}
+                      className="text-[11px] text-slate-400 hover:text-slate-600"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {(() => {
+                  const targetLocObj = customLocations.find(l => l.name === bulkLocationValue);
+                  const subAreas = targetLocObj?.subAreas || [];
+                  if (subAreas.length > 0) {
+                    return (
+                      <div className="space-y-1.5">
+                        <select
+                          value={bulkSubAreaValue}
+                          onChange={(e) => setBulkSubAreaValue(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs focus:ring-2 focus:ring-cyan-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                        >
+                          <option value="">General (No specific sub-area)</option>
+                          {subAreas.map(sub => (
+                            <option key={sub} value={sub}>› {sub}</option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {subAreas.map(sub => (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => setBulkSubAreaValue(sub)}
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-medium cursor-pointer border transition-colors ${
+                                bulkSubAreaValue === sub
+                                  ? 'bg-cyan-600 text-white border-cyan-600'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:border-cyan-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                              }`}
+                            >
+                              {sub}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <input
+                      type="text"
+                      value={bulkSubAreaValue}
+                      onChange={(e) => setBulkSubAreaValue(e.target.value)}
+                      placeholder="e.g. Shelf 2, Bin A (optional)"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs focus:ring-2 focus:ring-cyan-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                    />
+                  );
+                })()}
+              </div>
+
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                 <div className="text-[11px] text-slate-500 font-semibold mb-1">Selected Items ({selectedItemIds.length}):</div>
                 <div className="max-h-24 overflow-y-auto space-y-1">
                   {items.filter(i => selectedItemIds.includes(i.id)).map(i => (
                     <div key={i.id} className="truncate text-slate-700 dark:text-slate-300 font-medium">
-                      • {i.name} <span className="text-slate-400">({i.location})</span>
+                      • {i.name} <span className="text-slate-400">({i.location}{i.subArea ? ` › ${i.subArea}` : ''})</span>
                     </div>
                   ))}
                 </div>
@@ -3763,9 +4127,16 @@ export default function InventoryManager({
         onClose={() => setIsLocationModalOpen(false)}
         locations={customLocations}
         onAddLocation={handleAddStorageLocation}
+        onEditLocation={handleEditStorageLocation}
         onDeleteLocation={handleDeleteStorageLocation}
-        onSelectLocation={(locName) => {
+        onAddSubArea={handleAddSubArea}
+        onDeleteSubArea={handleDeleteSubArea}
+        onRenameSubArea={handleRenameSubArea}
+        onSelectLocation={(locName, subArea) => {
           setFormLocation(locName);
+          if (subArea) {
+            setFormSubArea(subArea);
+          }
           setIsCustomLocation(false);
         }}
       />

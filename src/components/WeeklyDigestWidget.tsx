@@ -37,11 +37,15 @@ export default function WeeklyDigestWidget({
     const sevenDaysAgoMs = now - 7 * 24 * 60 * 60 * 1000;
 
     const isWithin7Days = (createdAt?: number, dateStr?: string): boolean => {
-      if (createdAt && typeof createdAt === 'number' && !isNaN(createdAt)) {
+      if (createdAt && typeof createdAt === 'number' && !isNaN(createdAt) && createdAt > 0) {
         if (createdAt >= sevenDaysAgoMs) return true;
       }
       if (dateStr && typeof dateStr === 'string' && dateStr.trim()) {
-        const parsed = new Date(dateStr.length === 10 ? `${dateStr}T23:59:59` : dateStr).getTime();
+        const trimmed = dateStr.trim();
+        const dateToParse = trimmed.length === 10 && trimmed.includes('-')
+          ? `${trimmed}T23:59:59` 
+          : trimmed;
+        const parsed = new Date(dateToParse).getTime();
         if (!isNaN(parsed) && parsed >= sevenDaysAgoMs) return true;
       }
       return false;
@@ -115,12 +119,16 @@ export default function WeeklyDigestWidget({
           </div>
         </div>
 
-        {hasRecentActivity && (
-          <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400 self-start sm:self-auto">
-            <Flame className="w-4 h-4 text-amber-500" />
-            <span><strong>{uniqueActiveMembersCount}</strong> active team {uniqueActiveMembersCount === 1 ? 'member' : 'members'}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400 self-start sm:self-auto">
+          {hasRecentActivity ? (
+            <>
+              <Flame className="w-4 h-4 text-amber-500" />
+              <span><strong>{uniqueActiveMembersCount}</strong> active team {uniqueActiveMembersCount === 1 ? 'member' : 'members'}</span>
+            </>
+          ) : (
+            <span className="text-[11px] text-slate-400 dark:text-slate-500">Awaiting this week's first entry</span>
+          )}
+        </div>
       </div>
 
       {/* 3 Metrics Cards Grid */}

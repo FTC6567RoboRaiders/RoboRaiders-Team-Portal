@@ -170,7 +170,8 @@ export function LabelCustomizerModal({
           id: item.id,
           name: item.name,
           sku: item.sku || undefined,
-          loc: item.location
+          loc: item.location,
+          subArea: item.subArea || undefined
         });
 
         try {
@@ -210,7 +211,7 @@ export function LabelCustomizerModal({
         const q = searchFilter.toLowerCase();
         const mName = item.name.toLowerCase().includes(q);
         const mSku = item.sku?.toLowerCase().includes(q);
-        const mLoc = item.location?.toLowerCase().includes(q);
+        const mLoc = item.location?.toLowerCase().includes(q) || (item.subArea && item.subArea.toLowerCase().includes(q));
         return mName || mSku || mLoc;
       }
       return true;
@@ -438,7 +439,7 @@ export function LabelCustomizerModal({
                 {item.name}
               </div>
               <div className="text-[7.5px] font-mono text-slate-500 truncate mt-0.5">
-                {item.location || 'Bin'}
+                {item.location || 'Bin'}{item.subArea ? ` › ${item.subArea}` : ''}
               </div>
             </div>
           </div>
@@ -506,7 +507,9 @@ export function LabelCustomizerModal({
               {item.name}
             </div>
             <div className="text-[7.5px] font-mono text-slate-600 flex items-center gap-1.5 truncate mt-0.5">
-              <span className="font-bold text-slate-900 bg-slate-100 px-1 rounded-xs">{item.location || 'Bin'}</span>
+              <span className="font-bold text-slate-900 bg-slate-100 px-1 rounded-xs">
+                {item.location || 'Bin'}{item.subArea ? ` › ${item.subArea}` : ''}
+              </span>
               {item.sku && <span className="truncate">• {item.sku}</span>}
               <span>• Qty: {item.quantity}</span>
             </div>
@@ -580,7 +583,7 @@ export function LabelCustomizerModal({
                   ? 'bg-slate-900 text-white px-2 py-0.5 rounded text-[11px] inline-block mt-0.5'
                   : 'text-slate-900'
               }`}>
-                {item.location || 'Bench / General'}
+                {item.location || 'Bench / General'}{item.subArea ? ` › ${item.subArea}` : ''}
               </div>
             </div>
           )}
@@ -1195,7 +1198,7 @@ export function LabelCustomizerModal({
                             <div className="truncate">
                               <div className="font-bold truncate">{item.name}</div>
                               <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
-                                {item.sku || item.vendor} • {item.location}
+                                {item.sku || item.vendor} • {item.location}{item.subArea ? ` › ${item.subArea}` : ''}
                               </div>
                             </div>
                           </div>

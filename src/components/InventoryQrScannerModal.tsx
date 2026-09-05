@@ -30,7 +30,7 @@ interface InventoryQrScannerModalProps {
   onOpenQuickAdjust?: (item: InventoryItem) => void;
   onOpenCheckout?: (item: InventoryItem) => void;
   onFilterListByItem?: (query: string) => void;
-  onAddNewItemWithPrefill?: (prefill: { name: string; sku?: string; location?: string }) => void;
+  onAddNewItemWithPrefill?: (prefill: { name: string; sku?: string; location?: string; subArea?: string }) => void;
 }
 
 interface ScannedPayload {
@@ -39,6 +39,7 @@ interface ScannedPayload {
   parsedName?: string;
   parsedSku?: string;
   parsedLoc?: string;
+  parsedSubArea?: string;
 }
 
 export function InventoryQrScannerModal({
@@ -110,7 +111,8 @@ export function InventoryQrScannerModal({
           parsedId: parsed.id,
           parsedName: parsed.name,
           parsedSku: parsed.sku,
-          parsedLoc: parsed.loc
+          parsedLoc: parsed.loc,
+          parsedSubArea: parsed.subArea
         };
       }
     } catch {
@@ -471,11 +473,16 @@ export function InventoryQrScannerModal({
                         <span>• {scannedResult.matchedItem.category}</span>
                       </div>
 
-                      <div className="mt-2 flex items-center gap-1.5">
+                      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                         <MapPin className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                           {scannedResult.matchedItem.location || 'General Lab'}
                         </span>
+                        {scannedResult.matchedItem.subArea && (
+                          <span className="text-xs font-mono font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800">
+                            › {scannedResult.matchedItem.subArea}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -586,7 +593,8 @@ export function InventoryQrScannerModal({
                         onAddNewItemWithPrefill({
                           name: scannedResult.payload.parsedName || scannedResult.payload.rawText,
                           sku: scannedResult.payload.parsedSku,
-                          location: scannedResult.payload.parsedLoc
+                          location: scannedResult.payload.parsedLoc,
+                          subArea: scannedResult.payload.parsedSubArea
                         });
                         onClose();
                       }}
