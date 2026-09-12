@@ -130,6 +130,7 @@ import WeeklyDigestWidget from './components/WeeklyDigestWidget';
 import { useDevice } from './utils/useDevice';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MobileMenuDrawer } from './components/MobileMenuDrawer';
+import { AppHeaderNav } from './components/AppHeaderNav';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -1243,19 +1244,7 @@ export default function App() {
     return localStorage.getItem('ftc_active_reset_code') || '';
   });
 
-  // Password Setup Prompt from first-time registration / default ID
-  const [showPasswordSetupPrompt, setShowPasswordSetupPrompt] = useState(false);
-  const [setupCustomPassword, setSetupCustomPassword] = useState('');
-  const [setupConfirmPassword, setSetupConfirmPassword] = useState('');
-  const [isSettingUpPassword, setIsSettingUpPassword] = useState(false);
-
-  useEffect(() => {
-    if (currentUser?.status === 'Approved' && !currentUser.hasSetSecurePassword && !postponedPasswordChange) {
-      setShowPasswordSetupPrompt(true);
-    } else {
-      setShowPasswordSetupPrompt(false);
-    }
-  }, [currentUser, postponedPasswordChange]);
+  // User Registration State
 
   const [registerName, setRegisterName] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
@@ -2886,42 +2875,6 @@ FTC #6567 Captains & Mentors`
     }
   };
 
-  const handleSetupCustomPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (setupCustomPassword !== setupConfirmPassword) {
-      showToast('Passwords do not match.', 'danger');
-      return;
-    }
-    if (setupCustomPassword.length < 6) {
-      showToast('Password must be at least 6 characters.', 'danger');
-      return;
-    }
-    try {
-       setIsSettingUpPassword(true);
-       if (!auth.currentUser) throw new Error("Not logged into Auth. Please log out and log back in, then try again.");
-       await updatePassword(auth.currentUser, setupCustomPassword);
-
-       // Mark in Firestore
-       if (currentUser) {
-         await updateDoc(doc(db, 'users', currentUser.id), { hasSetSecurePassword: true });
-         const updatedUser = { ...currentUser, hasSetSecurePassword: true };
-         setCurrentUser(updatedUser as any);
-         localStorage.setItem('ftc_current_user', JSON.stringify(updatedUser));
-       }
-
-       showToast('Password updated! Use this new password next time you log in.', 'success');
-       setShowPasswordSetupPrompt(false);
-    } catch (e: any) {
-       if (e.code === 'auth/requires-recent-login') {
-          showToast('For security, please log out and log back in to change your password.', 'danger');
-       } else {
-          showToast('Failed to update password: ' + e.message, 'danger');
-       }
-    } finally {
-       setIsSettingUpPassword(false);
-    }
-  };
-
   const handleRunTransition = () => {
     setIsBackupTransitionOpen(false);
   };
@@ -3827,146 +3780,33 @@ ${entry.planNextTime || '_No carry-over specified._'}
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans border-t-8 transition-colors duration-200 border-brand ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} ${device.isMobile ? 'has-mobile-nav' : ''}`} id="main-root">
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'} ${device.isMobile ? 'has-mobile-nav' : ''}`} id="main-root">
       
-      {/* HIGH DENSITY HEADER SECTION */}
-      <header className="bg-slate-900 text-white p-3 sm:p-4 flex flex-col md:flex-row justify-between items-center gap-3 sm:gap-4 shrink-0 shadow-lg no-print dark:bg-slate-950">
-        <div className="flex items-center justify-between w-full md:w-auto">
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <RoboraidersLogo className="w-9 h-9 sm:w-12 sm:h-12 shrink-0" />
-            <div>
-              <h1 className="text-base sm:text-lg font-bold leading-none tracking-tight uppercase font-display text-slate-50 flex items-center gap-1.5">
-                <span>RoboRaiders Team Portal</span>
-                <span className="text-[9px] sm:text-[10px] tracking-normal font-mono bg-brand/35 text-red-200 border border-brand/50 px-1.5 rounded uppercase">LIVE</span>
-              </h1>
-              <p className="text-[10px] sm:text-xs text-slate-400 font-mono mt-0.5 dark:text-slate-500">FTC Team #6567 — ENGINEERING NOTEBOOK WRITER</p>
-            </div>
-          </div>
-
-          {/* Quick Mobile Drawer trigger */}
-          <button
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="md:hidden p-2 rounded bg-slate-800 hover:bg-slate-700 text-white transition-all border border-slate-700 flex items-center justify-center cursor-pointer dark:bg-slate-950 hover:border-slate-600 active:scale-95 shrink-0"
-            title="Open Mobile Navigation Menu"
-            aria-label="Open Navigation Menu"
-          >
-            <Menu className="w-5 h-5 text-brand" />
-          </button>
-        </div>
-
-        {/* User Quick Stats - Utilizes Topbar for all users */}
-        {currentUser && userGamification && (
-          <div className="hidden sm:flex flex-wrap items-center gap-3 bg-slate-800/50 border border-slate-800 px-3.5 py-1.5 rounded-lg text-slate-300">
-            <div className="flex items-center gap-1.5" title="Your Core Level in RoboRaiders Arena">
-              <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-              <span className="font-mono text-xs font-black text-amber-400">LVL {userGamification.stats.level}</span>
-              <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">({userGamification.stats.xp} XP)</span>
-            </div>
-            
-            <div className="hidden sm:block h-3.5 w-px bg-slate-700" />
-            
-            <div className="flex items-center gap-1.5 text-xs" title="Total hours contributed in the lab">
-              <Clock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span className="font-mono text-[11px] font-bold text-slate-200">{userGamification.stats.totalHours.toFixed(1)} hrs</span>
-            </div>
-            
-            <div className="hidden sm:block h-3.5 w-px bg-slate-700" />
-
-            <div className="flex items-center gap-1.5 text-xs" title="Total journal log entries submitted by you">
-              <BookOpen className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="font-mono text-[11px] font-bold text-slate-200">
-                {entries.filter(e => e.userEmail === currentUser.schoolEmail).length} logs
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Global Toolbar */}
-        <div className="hidden md:flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
-          {/* HELP GUIDE QUESTION MARK BUTTON */}
-          <button 
-            onClick={() => setCurrentView('help_guide')}
-            className={`p-2 rounded text-xs font-bold transition-all border flex items-center justify-center cursor-pointer ${
-              currentView === 'help_guide'
-                ? 'bg-rose-600 text-white border-rose-500 shadow-sm ring-2 ring-rose-400/40'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700 dark:bg-slate-950 hover:border-slate-600'
-            }`}
-            title="Help Guide & Full Portal User Manual (PDF Exportable)"
-            aria-label="Help Guide & User Manual"
-            id="portal-help-guide-header-btn"
-          >
-            <HelpCircle className="w-4 h-4 text-cyan-400" />
-          </button>
-
-          {/* THEME TOGGLE ICON BUTTON */}
-          <button 
-            onClick={() => setIsDark(!isDark)}
-            className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-white transition-all border border-slate-700 flex items-center justify-center cursor-pointer dark:bg-slate-950 hover:border-slate-600"
-            title={isDark ? "Switch to Light Theme" : "Switch to Dark Theme"}
-            aria-label={isDark ? "Switch to Light Theme" : "Switch to Dark Theme"}
-            id="theme-toggle-btn"
-          >
-            {isDark ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-blue-400" />}
-          </button>
-
-          {isUserAdminOrMentor && (
-            <>
-              <label className="bg-slate-800 hover:bg-slate-700 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider cursor-pointer border border-slate-700 text-slate-300 dark:bg-slate-950">
-                <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
-                <span className="flex items-center gap-1"><Upload className="w-3.5 h-3.5" /> Import</span>
-              </label>
-              <button 
-                onClick={handleExportJSON}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wider border border-slate-700 flex items-center gap-1 dark:bg-slate-950"
-              >
-                <Download className="w-3.5 h-3.5" /> Export DB
-              </button>
-
-              <button 
-                onClick={clearAllData}
-                className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 font-bold px-3 py-1.5 rounded text-xs uppercase tracking-wider transition-all border border-rose-900/40 flex items-center gap-1"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-rose-300" /> Hard Wipe
-              </button>
-            </>
-          )}
-        </div>
-      </header>
-
-      {/* ACTIVE REAL-ID USER SESSION BANNER */}
-      <div className="bg-slate-100 border-b border-slate-200 px-4 py-2 flex justify-end items-center gap-3 text-xs no-print shrink-0 transition-colors dark:bg-slate-800 dark:border-slate-800" id="active-session-banner">
-        <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0 justify-end shrink-0 text-xs">
-          {currentView !== 'landing' && (
-            <button
-              onClick={() => setCurrentView('landing')}
-              className="bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title="Return to Landing Page Hub"
-            >
-              <Grid className="w-3.5 h-3.5" />
-              <span>Dashboard Hub</span>
-            </button>
-          )}
-
-          <button
-            onClick={openSettingsModal}
-            className="bg-slate-200 hover:bg-slate-300 border border-slate-350 text-slate-800 px-3 py-1 rounded text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
-            title="Update User Settings and Password"
-            id="user-settings-trigger"
-          >
-            <Settings className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-            <span>Settings</span>
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="bg-white hover:bg-slate-50 text-slate-700 hover:text-red-600 dark:hover:text-red-400 border border-slate-300 px-3 py-1 rounded text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs animate-fade-in dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-800"
-            title="Sign out of engineering notebook session"
-          >
-            <LogOut className="w-3 w-3" />
-            <span>Sign Out</span>
-          </button>
-        </div>
-      </div>
+      {/* UNIFIED MODERN HEADER & APP NAVIGATION MENU */}
+      <AppHeaderNav
+        currentUser={currentUser}
+        userGamification={userGamification}
+        currentView={currentView}
+        onSelectView={(v: any) => setCurrentView(v)}
+        isDark={isDark}
+        onToggleTheme={() => setIsDark(!isDark)}
+        onOpenSettings={openSettingsModal}
+        onLogout={handleLogout}
+        isUserAdminOrMentor={isUserAdminOrMentor}
+        activeSession={!!activeSession}
+        sessionElapsed={sessionElapsed}
+        pendingReviewsCount={entries.filter(e => e.status === 'Pending Review' && canUserApproveEntry(currentUser, e)).length}
+        needsRevisionCount={userRole === 'author' ? entries.filter(e => e.status === 'Needs Revision').length : 0}
+        lowStockCount={inventoryItems.filter(i => i.quantity <= i.minQuantity).length}
+        pendingApprovalsCount={accounts.filter(a => a.status === 'Pending').length}
+        onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+        onExportJSON={handleExportJSON}
+        onImportJSON={handleImportJSON}
+        onClearAllData={clearAllData}
+        disabledModules={disabledModules}
+        isSidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+      />
 
       {/* DYNAMIC SYSTEM WORKFLOW INTELLIGENCE NOTIFICATIONS */}
       <AnimatePresence>
@@ -4042,58 +3882,26 @@ ${entry.planNextTime || '_No carry-over specified._'}
       {/* WORKSPACE SIDEBAR + VIEW CONTENT WRAPPER */}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative overflow-hidden" id="workspace-layout-wrapper">
         
-        {/* RESPONSIVE MOBILE HORIZONTAL TAB STRIP */}
-        <div className="md:hidden flex overflow-x-auto gap-2 p-2 bg-slate-900 border-b border-slate-800 shrink-0 no-print dark:bg-slate-950" id="workspace-mobile-nav">
-          {renderedSidebarLinks.map((link) => {
-            const LinkIcon = link.icon;
-            const isActive = currentView === link.id;
-            return (
-              <button
-                key={link.id}
-                type="button"
-                onClick={() => {
-                  setCurrentView(link.id);
-                  showToast(`Switched view to ${link.label}`, 'info');
-                }}
-                className={`py-2 px-3 text-xs font-bold font-sans tracking-wide rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap outline-none border-none cursor-pointer ${
-                  isActive 
-                    ? 'bg-brand text-white shadow-md shadow-brand/20' 
-                    : 'bg-slate-850 hover:bg-slate-850 text-slate-350 hover:text-white'
-                }`}
-              >
-                <LinkIcon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : link.color}`} />
-                <span>{link.label}</span>
-                {link.badge !== null && (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full text-white font-black font-mono leading-none ${link.badgeColor || 'bg-brand'}`}>
-                    {link.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
         {/* SIDEBAR NAVIGATION PANEL (DESKTOP) */}
         <aside 
-          className={`hidden md:flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-300 border-r border-slate-250 dark:border-slate-800 transition-all duration-300 no-print select-none ${
-            isSidebarCollapsed ? 'w-20' : 'w-72'
+          className={`hidden md:flex flex-col shrink-0 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 no-print select-none ${
+            isSidebarCollapsed ? 'w-16' : 'w-60'
           }`}
           id="workspace-sidebar"
         >
           {/* TOP HEADER CONTROLS (COLLAPSER AT THE TOP) */}
-          <div className={`p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/20 flex items-center justify-between gap-2 ${
-            isSidebarCollapsed ? 'justify-center p-3' : ''
+          <div className={`p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 ${
+            isSidebarCollapsed ? 'justify-center' : ''
           }`}>
             {!isSidebarCollapsed && (
-              <div className="flex items-center gap-2 font-mono text-[10px] text-slate-500 font-extrabold tracking-widest leading-none dark:text-slate-400">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                <span>ROBORAIDERS OS</span>
-              </div>
+              <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Workspaces
+              </span>
             )}
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               type="button"
-              className="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-slate-900 rounded-lg cursor-pointer transition-all border-none bg-transparent outline-none flex items-center justify-center shadow-xs dark:text-slate-400 dark:hover:bg-slate-600 dark:hover:text-white"
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md cursor-pointer transition-colors border-none bg-transparent outline-none flex items-center justify-center"
               title={isSidebarCollapsed ? "Expand Sidebar Panel" : "Collapse Sidebar Panel"}
               id="workspace-sidebar-toggle-top"
             >
@@ -4101,43 +3909,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </button>
           </div>
 
-          {/* USER CARD PROFILE PREVIEW */}
-          <div className={`p-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/45 flex flex-col gap-3.5 transition-all ${
-            isSidebarCollapsed ? 'items-center p-3' : ''
-          }`}>
-            <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 bg-gradient-to-br from-cyan-500 to-indigo-600 rounded-xl flex items-center justify-center font-extrabold text-white text-base shadow-md shrink-0">
-                {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : '👤'}
-              </div>
-              {!isSidebarCollapsed && (
-                <div className="min-w-0 flex-1">
-                  <h4 className="text-[13.5px] font-extrabold text-slate-900 truncate leading-none tracking-tight dark:text-slate-400">{currentUser?.name}</h4>
-                  <span className="text-[9.5px] font-mono text-indigo-600 dark:text-indigo-400 font-black block mt-1.5 uppercase tracking-wider truncate">
-                    {currentUser?.role === 'mentor' ? 'Coach / Mentor' : currentUser?.role === 'captain' ? 'Captain' :  'Team Member'}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* GAMIFIED PROGRESS TRACKER */}
-            {!isSidebarCollapsed && userGamification && (
-              <div className="mt-1 bg-slate-100 p-3.5 rounded-xl border border-slate-200/80 shadow-xs dark:bg-slate-800">
-                <div className="flex justify-between items-center text-[10px] font-mono text-slate-600 leading-none dark:text-slate-300">
-                  <span className="font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-wider">LEVEL {userGamification.stats.level}</span>
-                  <span className="font-extrabold text-slate-800 dark:text-slate-400">{userGamification.stats.xp} / {userGamification.stats.xp + userGamification.stats.xpForNextLevel} XP</span>
-                </div>
-                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-2.5 border border-slate-205 dark:bg-slate-800">
-                  <div className="bg-gradient-to-r from-cyan-400 to-indigo-500 h-full transition-all duration-500" style={{ width: `${userGamification.stats.percentToNextLevel}%` }} />
-                </div>
-                <div className="text-[8.5px] text-slate-500 text-center uppercase tracking-widest font-mono font-bold mt-2 dark:text-slate-400">
-                  {userGamification.stats.percentToNextLevel}% to Level {userGamification.stats.level + 1}
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* LIST OF SHORTCUT LINKS */}
-          <nav className="flex-1 py-4 px-3 space-y-1.5 overflow-y-auto" id="workspace-sidebar-nav">
+          <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto" id="workspace-sidebar-nav">
             {renderedSidebarLinks.map((link) => {
               const LinkIcon = link.icon;
               const isActive = currentView === link.id;
@@ -4148,33 +3921,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   type="button"
                   onClick={() => {
                     setCurrentView(link.id);
-                    showToast(`Switched view to ${link.label}`, 'info');
                   }}
                   title={isSidebarCollapsed ? `${link.label} — ${link.sublabel}` : undefined}
-                  className={`w-full py-3 px-3.5 rounded-xl flex items-center transition-all ${
-                    isSidebarCollapsed ? 'justify-center py-3.5 px-0' : 'gap-3.5'
+                  className={`w-full py-2 px-2.5 rounded-lg flex items-center transition-all ${
+                    isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5'
                   } outline-none border-none text-left cursor-pointer ${
                     isActive 
-                      ? 'bg-brand text-white shadow-md shadow-brand/15 font-bold border-l-4 border-brand-hover scale-[1.02]' 
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
+                      ? 'bg-brand text-white font-bold shadow-xs' 
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  <LinkIcon className={`w-[18px] h-[18px] shrink-0 transition-colors ${isActive ? 'text-white' : link.color}`} />
+                  <LinkIcon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : link.color}`} />
                   
                   {!isSidebarCollapsed && (
                     <div className="min-w-0 flex-1 flex flex-col">
-                      <span className="text-[12.5px] leading-tight font-extrabold uppercase tracking-wide">{link.label}</span>
-                      <span className={`text-[9.5px] font-mono leading-none mt-1 truncate uppercase tracking-normal ${
-                        isActive ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-300'
-                      }`}>
-                        {link.sublabel}
-                      </span>
+                      <span className="text-xs font-semibold leading-tight truncate">{link.label}</span>
                     </div>
                   )}
 
                   {link.badge !== null && (
-                    <span className={`text-[9px] px-2 py-0.5 rounded-full text-white font-mono font-black shrink-0 leading-none ${
-                      isSidebarCollapsed ? 'absolute translate-x-4 -translate-y-2.5 scale-90' : ''
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full text-white font-mono font-black shrink-0 leading-none ${
+                      isSidebarCollapsed ? 'absolute translate-x-3.5 -translate-y-2 scale-90' : ''
                     } ${link.badgeColor || 'bg-brand'}`}>
                       {link.badge}
                     </span>
@@ -4183,13 +3950,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
               );
             })}
           </nav>
-
-          {/* LOWER STATUS FOOTER */}
-          {!isSidebarCollapsed && (
-            <div className="p-3 border-t border-slate-200 bg-slate-100/30 flex items-center justify-center font-mono text-[8.5px] text-slate-400 font-bold tracking-widest leading-none dark:text-slate-500 dark:border-slate-800">
-              <span>ACTIVE SYNCHRONOUS CLOUD</span>
-            </div>
-          )}
         </aside>
 
         {/* WORKSPACE SCREEN CONTENT PANEL */}
@@ -8547,120 +8307,7 @@ FTC #6567 Captains & Mentors`
         )}
       </AnimatePresence>
 
-      {/* First-Time Password Setup Dialog Modal */}
-      <AnimatePresence>
-        {showPasswordSetupPrompt && currentUser && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[120] flex flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md no-print"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 15, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 15, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-md bg-white border-2 border-brand/50 dark:border-brand/50/40 rounded-lg shadow-2xl overflow-hidden flex flex-col dark:bg-slate-900"
-            >
-              {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-brand/20 flex justify-between items-center shrink-0 dark:bg-slate-950">
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-brand animate-pulse" />
-                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-100">
-                    🔑 Security Preset Update
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPasswordSetupPrompt(false);
-                    setPostponedPasswordChange(true);
-                    showToast("Password configuration postponed. You can change it anytime in Settings.", "info");
-                  }}
-                  className="p-1 hover:bg-slate-850 text-slate-450 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-400"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
-              {/* Form Body */}
-              <form onSubmit={handleSetupCustomPassword} className="flex flex-col flex-1">
-                <div className="p-5 flex flex-col gap-4 text-slate-800 dark:text-slate-400">
-                  <div className="bg-brand/10 text-brand dark:bg-brand/60/25 dark:text-brand/80-hover p-4 rounded border border-brand/20">
-                    <p className="text-xs font-bold font-sans flex items-center gap-1.5 uppercase tracking-wide mb-1">
-                      👑 Configure Secure Login Password
-                    </p>
-                    <p className="text-[11px] leading-relaxed font-sans">
-                      Your profile has been registered! You are currently using your **School ID (lunch #)** as your password. 
-                      Please establish a secure custom password below to authorize future system logins instead of your ID.
-                    </p>
-                  </div>
-
-                  {/* Password field */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
-                      <span>New Secure Password</span>
-                      <span className="text-brand">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="At least 6 characters"
-                      value={setupCustomPassword}
-                      onChange={(e) => setSetupCustomPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-950 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-mono animate-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                    />
-                  </div>
-
-                  {/* Confirm Password field */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
-                      <span>Confirm New Password</span>
-                      <span className="text-brand">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="Repeat secure password"
-                      value={setupConfirmPassword}
-                      onChange={(e) => setSetupConfirmPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-950 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-mono animate-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                    />
-                  </div>
-                </div>
-
-                {/* Footer buttons */}
-                <div className="bg-slate-50 px-5 py-3.5 border-t border-slate-150 flex justify-end gap-2 shrink-0 dark:bg-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowPasswordSetupPrompt(false);
-                      showToast("Password configuration postponed. You can change it anytime in Settings.", "info");
-                    }}
-                    className="px-3.5 py-2 hover:bg-slate-200 text-slate-500 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer font-sans dark:text-slate-400 dark:hover:bg-slate-600"
-                  >
-                    Postpone
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSettingUpPassword}
-                    className="bg-brand hover:bg-brand-hover text-white font-extrabold text-[11px] py-2 px-4 rounded-md uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 font-sans"
-                  >
-                    {isSettingUpPassword ? (
-                      <span>Saving...</span>
-                    ) : (
-                      <>
-                        <ShieldCheck className="w-3.5 h-3.5" /> Save Secure Password
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Mentor-Only XP Audit Log Ledger Modal */}
       <AnimatePresence>
