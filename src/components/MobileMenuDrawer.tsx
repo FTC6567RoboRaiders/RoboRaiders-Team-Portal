@@ -40,6 +40,8 @@ interface MobileMenuDrawerProps {
   isUserAdminOrMentor: boolean;
   device: DeviceInfo;
   pendingApprovalsCount?: number;
+  hiddenWorkspaces?: string[];
+  disabledModules?: string[];
 }
 
 export function MobileMenuDrawer({
@@ -55,7 +57,9 @@ export function MobileMenuDrawer({
   onLogout,
   isUserAdminOrMentor,
   device,
-  pendingApprovalsCount = 0
+  pendingApprovalsCount = 0,
+  hiddenWorkspaces = [],
+  disabledModules = []
 }: MobileMenuDrawerProps) {
   if (!isOpen) return null;
 
@@ -87,6 +91,13 @@ export function MobileMenuDrawer({
       sublabel: 'Robotics kanban matrix',
       icon: Layers,
       color: 'text-purple-400'
+    },
+    {
+      id: 'qotd',
+      label: 'Question of the Day',
+      sublabel: 'Daily challenge & trivia',
+      icon: Sparkles,
+      color: 'text-amber-400'
     },
     {
       id: 'inventory',
@@ -122,6 +133,20 @@ export function MobileMenuDrawer({
       sublabel: 'Funding & sponsorships',
       icon: Award,
       color: 'text-amber-400'
+    },
+    {
+      id: 'help_guide',
+      label: 'User Manual & Help Guide',
+      sublabel: '12 chapters & instructions',
+      icon: HelpCircle,
+      color: 'text-cyan-400'
+    },
+    {
+      id: 'settings',
+      label: 'Settings & Profile',
+      sublabel: 'Preferences & layout',
+      icon: Settings,
+      color: 'text-slate-400'
     }
   ];
 
@@ -141,6 +166,12 @@ export function MobileMenuDrawer({
       color: 'text-cyan-400'
     });
   }
+
+  const visibleLinks = allNavigationLinks.filter(link => {
+    if (disabledModules.includes(link.id)) return currentUser?.primarySubteam === "Programming" || isUserAdminOrMentor;
+    if (hiddenWorkspaces.includes(link.id) && link.id !== "landing" && link.id !== "settings") return false;
+    return true;
+  });
 
   const handleNavigate = (viewId: string) => {
     onSelectView(viewId);
@@ -242,7 +273,7 @@ export function MobileMenuDrawer({
               Workspace Views
             </span>
 
-            {allNavigationLinks.map((link) => {
+            {visibleLinks.map((link) => {
               const Icon = link.icon;
               const isActive = currentView === link.id;
 

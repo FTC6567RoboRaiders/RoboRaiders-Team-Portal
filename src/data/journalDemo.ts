@@ -34,6 +34,79 @@ export const DEMO_ENTRIES: JournalEntry[] = [
     createdAt: Date.now() - 2 * 24 * 3600 * 1000,
     updatedAt: Date.now() - 2 * 24 * 3600 * 1000,
     status: "Pending Review"
+  },
+  {
+    id: "entry-meeting-1",
+    entryType: "general_meeting",
+    title: "Weekly All-Hands & Season Strategy Kickoff",
+    subteam: "Strategy",
+    author: "Sam Chen",
+    date: "2026-05-14",
+    planned: "1. Welcome & Season Milestone Check-in\n2. Subteam Progress & ABC Standup\n3. Financial Ledger & Grant Update\n4. Regional Scrimmage Planning\n5. Final To-Do List & Action Items",
+    accomplished: "Conducted all-hands check-in with 14 team members. Reviewed hardware prototyping benchmarks, roadrunner trajectory tuning, and approved $557.18 in parts orders. Assigned final action items for the upcoming scrimmage.",
+    problemsAndSolutions: [
+      "Blocker: Intake mechanism awaiting 40mm standoffs. Solution: Borrowed temporary spacers from workshop bin until REV package arrives."
+    ],
+    planNextTime: "Execute scrimmage dry runs and review autonomous sample scoring reliability.",
+    agenda: "1. Welcome & Season Milestone Check-in\n2. Subteam Progress & ABC Standup (Accomplishments, Blockers, Commitments)\n3. Financial Ledger & Grant Allocations Update\n4. Regional Scrimmage Planning & Driver Practice\n5. Action Items Assignment & Deadlines",
+    attendees: ["Sam Chen", "Maya Lin", "Alex Rivera", "Steve Miller (Mentor)"],
+    absentAttendees: ["Jordan Lee (Excused)"],
+    abcs: [
+      {
+        id: "demo-abc-1",
+        name: "Sam Chen",
+        subteam: "Design/Build/Fabrication",
+        accomplishments: "Completed carbon-fiber intake bracket 3D prints on Ultimaker and assembled main drivetrain rails.",
+        blockers: "Awaiting 40mm M3 standoffs from REV order.",
+        commitments: "Mount intake mechanism onto chassis and run static load tests before Thursday."
+      },
+      {
+        id: "demo-abc-2",
+        name: "Maya Lin",
+        subteam: "Programming",
+        accomplishments: "Tuned PID constants for RoadRunner odometry localization; drift reduced to <0.5 inches.",
+        blockers: "Need physical chassis access to test vision AprilTag alignment on the field perimeter.",
+        commitments: "Write autonomous trajectory routine for 4-sample high basket scoring cycle."
+      },
+      {
+        id: "demo-abc-3",
+        name: "Alex Rivera",
+        subteam: "Business & Media",
+        accomplishments: "Submitted Gene Haas Foundation grant application for $2,500 and finished sponsor promo video.",
+        blockers: "None.",
+        commitments: "Finalize corporate sponsor pitch packet and place team competition jersey order."
+      }
+    ],
+    financeAnnounced: "• Total Treasury Balance: $4,850.00 ($2,350.00 Self-Raised + $2,500.00 School Budget)\n• Approved Purchases: REV Robotics motion order ($342.18) & AndyMark field elements ($215.00)\n• Pending Inflow: Gene Haas Foundation grant decision expected next Friday ($2,500 potential)\n• Action: All members collect and submit hardware receipts for reimbursement by end of month.",
+    finalTodoList: [
+      {
+        id: "demo-todo-1",
+        task: "Mount modular intake on chassis and verify 18-inch sizing cube compliance",
+        assignee: "Sam Chen",
+        dueDate: "2026-05-18",
+        completed: false
+      },
+      {
+        id: "demo-todo-2",
+        task: "Deploy and test AprilTag detection pipeline on Control Hub with webcams",
+        assignee: "Maya Lin",
+        dueDate: "2026-05-19",
+        completed: false
+      },
+      {
+        id: "demo-todo-3",
+        task: "Deliver team sponsorship thank-you letters to local precision machining partners",
+        assignee: "Alex Rivera",
+        dueDate: "2026-05-20",
+        completed: true
+      }
+    ],
+    images: [],
+    createdAt: Date.now() - 1 * 24 * 3600 * 1000,
+    updatedAt: Date.now() - 1 * 24 * 3600 * 1000,
+    status: "Approved",
+    reviewer: "Steve Miller (Mentor)",
+    reviewedAt: Date.now() - 1 * 24 * 3600 * 1000
   }
 ];
 

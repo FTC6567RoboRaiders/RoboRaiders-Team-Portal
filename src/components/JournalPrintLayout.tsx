@@ -13,7 +13,12 @@ import {
   Calendar, 
   User, 
   FileText,
-  Bookmark
+  Bookmark,
+  Users,
+  CheckSquare,
+  Coins,
+  ListOrdered,
+  UserCheck
 } from 'lucide-react';
 
 export interface JournalPrintLayoutProps {
@@ -390,68 +395,198 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                   {/* Main Entry Title */}
                   <h2 className="text-xl sm:text-2xl font-black text-slate-950 mb-4 font-display uppercase tracking-tight leading-snug">
-                    {entry.title || 'Engineering Session Log'}
+                    {entry.title || (entry.entryType === 'general_meeting' ? 'General Team Meeting' : 'Engineering Session Log')}
                   </h2>
 
-                  {/* Structured Body Sections */}
-                  <div className="space-y-4 text-xs font-sans leading-relaxed text-slate-800">
-                    
-                    {/* 1. Objectives & Goals Planned */}
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <FileText className="w-3.5 h-3.5 text-slate-600" />
-                        <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
-                          1. Objectives & Goals Planned
-                        </h3>
-                      </div>
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
-                        {entry.planned || 'No planned goals specified.'}
-                      </div>
-                    </div>
-
-                    {/* 2. Work Accomplished & Implementation */}
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
-                          2. Work Accomplished & Implementation
-                        </h3>
-                      </div>
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
-                        {entry.accomplished || 'No work accomplished recorded.'}
-                      </div>
-                    </div>
-
-                    {/* 3. Engineering Challenges & Troubleshooting */}
-                    {entry.challenges && (
+                  {/* General Meeting Specific vs Subteam Body */}
+                  {entry.entryType === 'general_meeting' ? (
+                    <div className="space-y-4 text-xs font-sans leading-relaxed text-slate-800">
+                      {/* 1. Agenda */}
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
-                          <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                          <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
-                            3. Engineering Challenges & Troubleshooting
+                          <ListOrdered className="w-3.5 h-3.5 text-indigo-600" />
+                          <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                            1. Meeting Agenda &amp; Discussion Topics
                           </h3>
                         </div>
                         <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
-                          {entry.challenges}
+                          {entry.agenda || entry.planned || 'No agenda recorded.'}
                         </div>
                       </div>
-                    )}
 
-                    {/* 4. Next Steps & Future Action Items */}
-                    {entry.nextSteps && (
+                      {/* 2. Attendance Area */}
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
-                          <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                          <Users className="w-3.5 h-3.5 text-emerald-600" />
+                          <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                            2. Attendance Roster ({(entry.attendees || []).length} Present)
+                          </h3>
+                        </div>
+                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded flex flex-wrap gap-1">
+                          {(entry.attendees || []).length > 0 ? (
+                            entry.attendees?.map((name, i) => (
+                              <span key={i} className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded text-[9px] font-bold">
+                                ✓ {name}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 italic text-[10px]">No attendees recorded</span>
+                          )}
+                          {entry.absentAttendees && entry.absentAttendees.length > 0 && (
+                            entry.absentAttendees.map((name, i) => (
+                              <span key={i} className="bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded text-[9px] line-through">
+                                ✗ {name} (Excused)
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 3. ABCs (Accomplishments, Blockers, Commitments) */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                          <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                            3. Member ABCs (Accomplishments • Blockers • Commitments)
+                          </h3>
+                        </div>
+                        {entry.abcs && entry.abcs.length > 0 ? (
+                          <div className="space-y-2">
+                            {entry.abcs.map((item, idx) => (
+                              <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
+                                <div className="flex justify-between items-center border-b border-slate-200 pb-1">
+                                  <span className="font-bold text-slate-900 text-[10px]">{item.name}</span>
+                                  {item.subteam && (
+                                    <span className="text-[8px] font-mono font-bold uppercase bg-white border border-slate-300 px-1.5 py-0.2 rounded text-slate-700">
+                                      {item.subteam}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-3 gap-1.5 text-[9px]">
+                                  <div>
+                                    <strong className="text-emerald-700 block uppercase font-mono text-[8px]">A: Accomplishments</strong>
+                                    <span className="text-slate-800">{item.accomplishments || '—'}</span>
+                                  </div>
+                                  <div>
+                                    <strong className="text-rose-700 block uppercase font-mono text-[8px]">B: Blockers</strong>
+                                    <span className="text-slate-800">{item.blockers || 'None'}</span>
+                                  </div>
+                                  <div>
+                                    <strong className="text-indigo-700 block uppercase font-mono text-[8px]">C: Commitments</strong>
+                                    <span className="text-slate-800">{item.commitments || '—'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-slate-50 border border-slate-200 rounded text-slate-400 italic text-[10px]">
+                            {entry.accomplished || 'No individual ABCs recorded.'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 4. Finance Announced */}
+                      {entry.financeAnnounced && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Coins className="w-3.5 h-3.5 text-amber-600" />
+                            <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                              4. Finance Announced
+                            </h3>
+                          </div>
+                          <div className="p-2.5 bg-amber-50/60 border border-amber-200 rounded font-mono text-[9px] whitespace-pre-wrap text-amber-950">
+                            {entry.financeAnnounced}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 5. Final To-Do List */}
+                      {entry.finalTodoList && entry.finalTodoList.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                            <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                              5. Final To-Do List &amp; Action Items
+                            </h3>
+                          </div>
+                          <div className="p-2 bg-slate-50 border border-slate-200 rounded space-y-1">
+                            {entry.finalTodoList.map((todo, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-[9px] py-0.5 border-b border-slate-200/60 last:border-0">
+                                <span className={`flex items-center gap-1.5 ${todo.completed ? 'line-through text-slate-400' : 'text-slate-900 font-medium'}`}>
+                                  <span>{todo.completed ? '☑' : '☐'}</span>
+                                  <span>{todo.task}</span>
+                                </span>
+                                <span className="font-mono text-[8px] text-slate-500">
+                                  {todo.assignee ? `[${todo.assignee}]` : ''} {todo.dueDate ? `Due: ${todo.dueDate}` : ''}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Standard Subteam Structured Body Sections */
+                    <div className="space-y-4 text-xs font-sans leading-relaxed text-slate-800">
+                      
+                      {/* 1. Objectives & Goals Planned */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <FileText className="w-3.5 h-3.5 text-slate-600" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
-                            4. Next Steps & Future Action Items
+                            1. Objectives & Goals Planned
                           </h3>
                         </div>
                         <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
-                          {entry.nextSteps}
+                          {entry.planned || 'No planned goals specified.'}
                         </div>
                       </div>
-                    )}
-                  </div>
+
+                      {/* 2. Work Accomplished & Implementation */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
+                            2. Work Accomplished & Implementation
+                          </h3>
+                        </div>
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
+                          {entry.accomplished || 'No work accomplished recorded.'}
+                        </div>
+                      </div>
+
+                      {/* 3. Engineering Challenges & Troubleshooting */}
+                      {entry.challenges && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                            <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
+                              3. Engineering Challenges & Troubleshooting
+                            </h3>
+                          </div>
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
+                            {entry.challenges}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 4. Next Steps & Future Action Items */}
+                      {entry.nextSteps && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                            <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
+                              4. Next Steps & Future Action Items
+                            </h3>
+                          </div>
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
+                            {entry.nextSteps}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Running Page Footer */}

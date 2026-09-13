@@ -20,10 +20,12 @@
     },
     "JournalEntry": {
       "title": "Journal Entry",
-      "description": "An engineering journal log documenting planned work, accomplishments, issues, and solutions.",
+      "description": "An engineering journal log documenting planned work, accomplishments, issues, and solutions, or a team-wide general meeting log.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "title": { "type": "string" },
+        "entryType": { "type": "string", "enum": ["subteam", "general_meeting"] },
         "subteam": { "type": "string" },
         "author": { "type": "string" },
         "date": { "type": "string" },
@@ -32,6 +34,12 @@
         "problemsAndSolutions": { "type": "array" },
         "planNextTime": { "type": "string" },
         "images": { "type": "array" },
+        "attendees": { "type": "array" },
+        "absentAttendees": { "type": "array" },
+        "agenda": { "type": "string" },
+        "abcs": { "type": "array" },
+        "financeAnnounced": { "type": "string" },
+        "finalTodoList": { "type": "array" },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" },
         "status": { "type": "string", "enum": ["Draft", "Pending Review", "Approved", "Needs Revision"] },
@@ -267,9 +275,66 @@
         "updatedBy": { "type": "string" }
       },
       "required": ["id", "name", "organization", "season", "status", "category", "amountRequested", "requirements", "createdAt", "createdBy", "createdByEmail", "updatedAt", "updatedBy"]
+    },
+    "QuestionOfTheDay": {
+      "title": "Question of the Day",
+      "description": "A daily FTC robotics challenge, game rule question, or programming puzzle posted by mentors with points and timer.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "question": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["Game Rules & Field", "Programming & Autonomous", "Design, CAD & Build", "Electrical & Sensors", "Strategy & Scouting", "Team Culture & Inspire"] },
+        "questionType": { "type": "string", "enum": ["multiple_choice", "open_ended"] },
+        "options": { "type": "array" },
+        "correctOptionIndex": { "type": "number" },
+        "rubricOrExpectedAnswer": { "type": "string" },
+        "ruleCitation": { "type": "string" },
+        "points": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "expired", "closed"] },
+        "createdBy": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "closedAt": { "type": "number" }
+      },
+      "required": ["id", "question", "category", "questionType", "points", "durationMinutes", "expiresAt", "status", "createdBy", "createdByEmail", "createdAt"]
+    },
+    "QuestionAnswerSubmission": {
+      "title": "Question Answer Submission",
+      "description": "A student response to a Question of the Day including points awarded, status, and mentor feedback.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "questionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userSubteam": { "type": "string" },
+        "answer": { "type": "string" },
+        "selectedOptionIndex": { "type": "number" },
+        "isCorrect": { "type": "boolean" },
+        "pointsAwarded": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending_review", "graded_correct", "graded_incorrect"] },
+        "mentorFeedback": { "type": "string" },
+        "gradedBy": { "type": "string" },
+        "gradedAt": { "type": "number" },
+        "submittedAt": { "type": "number" },
+        "timeSpentSeconds": { "type": "number" }
+      },
+      "required": ["id", "questionId", "userId", "userName", "userEmail", "userSubteam", "answer", "pointsAwarded", "status", "submittedAt"]
     }
   },
   "firestore": {
+    "dailyQuestions/{questionId}": {
+      "schema": "QuestionOfTheDay",
+      "description": "Daily team trivia, game manual questions, and technical puzzles with countdown timers."
+    },
+    "dailyQuestionSubmissions/{submissionId}": {
+      "schema": "QuestionAnswerSubmission",
+      "description": "Member submissions, scores, and mentor reviews for Question of the Day."
+    },
     "grantApplications/{grantId}": {
       "schema": "GrantApplication",
       "description": "Funding applications, corporate sponsorships, and grant proposals for FTC Team #6567."

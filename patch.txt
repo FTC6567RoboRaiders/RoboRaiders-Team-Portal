@@ -1,0 +1,44 @@
+            {/* Quick Access Navigation Customization */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+              <div className="px-5 py-4 bg-slate-100/70 dark:bg-slate-850/50 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Workspace Quick Access</h2>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Toggle which modules appear in your navigation layout.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5">
+                <div className="space-y-3">
+                  {[
+                    { id: 'journal', label: 'Notebook Logs', icon: BookOpen },
+                    { id: 'time_entry', label: 'Time Card', icon: Clock },
+                    { id: 'kanban', label: 'Kanban Board', icon: Layers },
+                    { id: 'inventory', label: 'Lab Inventory', icon: Boxes },
+                    { id: 'outreach', label: 'Outreach Logs', icon: Users },
+                    { id: 'finance', label: 'General Ledger', icon: DollarSign },
+                    { id: 'handbook', label: 'Student Handbook', icon: FileText },
+                    { id: 'grants', label: 'Grant Tracker', icon: Award },
+                    { id: 'qotd', label: 'Question of the Day', icon: Sparkles }
+                  ].map(module => (
+                    <label key={module.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                          <module.icon className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{module.label}</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={!hiddenWorkspaces.includes(module.id)}
+                        onChange={() => onToggleWorkspaceVisibility(module.id)}
+                        className="rounded text-brand w-4 h-4 focus:ring-brand"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>

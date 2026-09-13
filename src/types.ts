@@ -7,6 +7,27 @@ export type Subteam =
   | 'Strategy'
   | 'Mentoring';
 
+export type NavLayout = 'sidebar' | 'topbar';
+
+export type JournalEntryType = 'subteam' | 'general_meeting';
+
+export interface PersonABC {
+  id: string;
+  name: string;
+  subteam?: string;
+  accomplishments: string; // A - Accomplishments
+  blockers: string;        // B - Blockers
+  commitments: string;     // C - Commitments
+}
+
+export interface MeetingTodoItem {
+  id: string;
+  task: string;
+  assignee?: string;
+  dueDate?: string;
+  completed: boolean;
+}
+
 export interface JournalImage {
   id: string;
   dataUrl: string; // Base64 representation for LocalStorage saving
@@ -17,6 +38,7 @@ export interface JournalImage {
 export interface JournalEntry {
   id: string;
   title?: string;
+  entryType?: JournalEntryType; // 'subteam' | 'general_meeting' (default: 'subteam')
   subteam: Subteam;
   author: string;
   date: string; // YYYY-MM-DD
@@ -28,6 +50,12 @@ export interface JournalEntry {
   nextSteps?: string;
   images: JournalImage[];
   attendees?: string[];
+  absentAttendees?: string[];
+  // General Meeting specific fields:
+  agenda?: string;
+  abcs?: PersonABC[];
+  financeAnnounced?: string;
+  finalTodoList?: MeetingTodoItem[];
   createdAt: number;
   updatedAt: number;
   status: 'Draft' | 'Pending Review' | 'Approved' | 'Needs Revision';
@@ -38,6 +66,7 @@ export interface JournalEntry {
 
 export interface FilterOptions {
   subteam: Subteam | 'All';
+  entryType?: 'All' | 'subteam' | 'general_meeting';
   author: string;
   searchQuery: string;
   startDate: string;
@@ -294,6 +323,67 @@ export interface GrantApplication {
   updatedAt: number;
   updatedBy: string;
 }
+
+export type QotdCategory =
+  | 'Game Rules & Field'
+  | 'Programming & Autonomous'
+  | 'Design, CAD & Build'
+  | 'Electrical & Sensors'
+  | 'Strategy & Scouting'
+  | 'Team Culture & Inspire';
+
+export interface QuestionOfTheDay {
+  id: string;
+  question: string;
+  description?: string; // Hint, rule snippet, code or additional context
+  category: QotdCategory;
+  questionType: 'multiple_choice' | 'open_ended';
+  options?: string[]; // Multiple choice options (e.g. 4 choices)
+  correctOptionIndex?: number; // Index of correct option (0-based)
+  rubricOrExpectedAnswer?: string; // Explanation or mentor grading guide
+  prize?: string; // e.g. "Free Snack", "Sticker", "Pizza Slice"
+  points: number; // points assigned (e.g. 50, 100, 250)
+  durationMinutes: number; // Countdown duration in minutes
+  expiresAt: number; // Unix timestamp in ms when question timer expires
+  status: 'active' | 'expired' | 'closed';
+  createdBy: string;
+  createdByEmail: string;
+  createdAt: number;
+  closedAt?: number;
+}
+
+export interface QuestionAnswerSubmission {
+  id: string;
+  questionId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userSubteam: Subteam;
+  answer: string;
+  selectedOptionIndex?: number;
+  isCorrect?: boolean;
+  pointsAwarded: number;
+  status: 'pending_review' | 'graded_correct' | 'graded_incorrect';
+  mentorFeedback?: string;
+  gradedBy?: string;
+  gradedAt?: number;
+  submittedAt: number;
+  timeSpentSeconds?: number;
+}
+
+export interface QotdLeaderboardEntry {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userSubteam: Subteam;
+  totalPoints: number;
+  questionsAnswered: number;
+  correctCount: number;
+  streakDays: number;
+  fastestAnswerSeconds?: number;
+  rank?: number;
+}
+
 
 
 

@@ -5,6 +5,21 @@ export const getEntryReferenceCode = (entry: JournalEntry, allEntries: JournalEn
   if (entry.id === 'demo-1') return 'FTC-BUIL-0001';
   if (entry.id === 'demo-2') return 'FTC-PROG-0002';
   
+  if (entry.entryType === 'general_meeting') {
+    const filterList = allEntries && allEntries.length > 0 ? allEntries : [entry];
+    const meetingEntries = filterList
+      .filter((e) => e.entryType === 'general_meeting')
+      .sort((a, b) => {
+        const dateA = a.date || '';
+        const dateB = b.date || '';
+        if (dateA !== dateB) return dateA.localeCompare(dateB);
+        return (a.createdAt || 0) - (b.createdAt || 0);
+      });
+    const idx = meetingEntries.findIndex((e) => e.id === entry.id);
+    const numVal = idx !== -1 ? idx + 1 : 1;
+    return `FTC-MEET-${String(numVal).padStart(4, '0')}`;
+  }
+
   const subteamStr = (entry.subteam || '').toUpperCase();
   let prefix = 'MISC';
   if (subteamStr.startsWith('DESIGN') || subteamStr.includes('FABRICATION') || subteamStr.includes('BUILD')) {

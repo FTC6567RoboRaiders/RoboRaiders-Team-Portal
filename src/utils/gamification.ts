@@ -40,6 +40,40 @@ export interface UserStats {
 export const calculateJournalQualityScore = (entry: JournalEntry): number => {
   let score = 0;
 
+  if (entry.entryType === 'general_meeting') {
+    // 1. Agenda depth (up to 25 pts)
+    const agendaWords = ((entry.agenda || entry.planned || '')).split(/\s+/).filter(Boolean).length;
+    if (agendaWords >= 30) score += 25;
+    else if (agendaWords >= 15) score += 15;
+    else if (agendaWords > 0) score += 8;
+
+    // 2. Member ABCs completeness (up to 30 pts)
+    const abcCount = entry.abcs?.length || 0;
+    if (abcCount >= 4) score += 30;
+    else if (abcCount >= 2) score += 20;
+    else if (abcCount >= 1) score += 10;
+
+    // 3. Finance announced (up to 15 pts)
+    if (entry.financeAnnounced && entry.financeAnnounced.trim().length > 10) {
+      score += 15;
+    } else if (entry.financeAnnounced) {
+      score += 8;
+    }
+
+    // 4. Final To-Do list action items (up to 20 pts)
+    const todoCount = entry.finalTodoList?.length || 0;
+    if (todoCount >= 3) score += 20;
+    else if (todoCount >= 1) score += 12;
+
+    // 5. Attendance (up to 10 pts)
+    const attendeesCount = entry.attendees?.length || 0;
+    if (attendeesCount >= 3) score += 10;
+    else if (attendeesCount >= 1) score += 5;
+
+    return Math.min(100, score);
+  }
+
+  // Standard Subteam Journal Entry Scoring
   // 1. Density and word count of descriptive technical texts (planned + accomplished + foresight) (up to 40 pts)
   const fullText = (entry.planned || '') + ' ' + (entry.accomplished || '') + ' ' + (entry.planNextTime || '');
   const wordCount = fullText.split(/\s+/).filter(Boolean).length;
@@ -77,7 +111,7 @@ export const calculateJournalQualityScore = (entry: JournalEntry): number => {
     score += 6;
   }
 
-  return score;
+  return Math.min(100, score);
 };
 
 // Calculate levels based on standard RPG curves

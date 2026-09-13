@@ -23,11 +23,14 @@ import {
   Trash2, 
   PanelLeftClose, 
   PanelLeft,
+  PanelTop,
   Trophy,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Check,
+  Sparkles
 } from 'lucide-react';
-import { UserAccount } from '../types';
+import { UserAccount, NavLayout } from '../types';
 import RoboraidersLogo from './RoboraidersLogo';
 
 interface AppHeaderNavProps {
@@ -51,8 +54,12 @@ interface AppHeaderNavProps {
   onImportJSON: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onClearAllData: () => void;
   disabledModules: string[];
+  hiddenWorkspaces?: string[];
   isSidebarCollapsed: boolean;
   onToggleSidebar: () => void;
+  navLayout: NavLayout;
+  onToggleNavLayout: () => void;
+  onSetNavLayout?: (layout: NavLayout) => void;
 }
 
 export function AppHeaderNav({
@@ -76,8 +83,12 @@ export function AppHeaderNav({
   onImportJSON,
   onClearAllData,
   disabledModules,
+  hiddenWorkspaces = [],
   isSidebarCollapsed,
-  onToggleSidebar
+  onToggleSidebar,
+  navLayout,
+  onToggleNavLayout,
+  onSetNavLayout
 }: AppHeaderNavProps) {
   const [isModulesMenuOpen, setIsModulesMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -104,55 +115,109 @@ export function AppHeaderNav({
     if (disabledModules.includes(moduleId)) {
       return currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor;
     }
+    if (hiddenWorkspaces.includes(moduleId) && moduleId !== "landing" && moduleId !== "settings") return false;
     return true;
   };
 
-  const primaryNavItems = [
-    { id: 'landing', label: 'Hub', icon: Grid },
-    { 
-      id: 'journal', 
-      label: 'Notebook', 
-      icon: BookOpen,
-      badge: pendingReviewsCount > 0 ? pendingReviewsCount : null,
-      badgeColor: 'bg-amber-500'
-    },
-    { 
-      id: 'time_entry', 
-      label: 'Time Card', 
-      icon: Clock,
-      pulse: activeSession
-    },
-    { id: 'kanban', label: 'Tasks', icon: Layers },
-    { 
-      id: 'inventory', 
-      label: 'Inventory', 
-      icon: Boxes,
-      badge: lowStockCount > 0 ? lowStockCount : null,
-      badgeColor: 'bg-amber-500'
-    }
-  ].filter(item => isModuleAccessible(item.id));
+  const primaryNavItems = (
+    navLayout === 'topbar'
+      ? [
+          { id: 'landing', label: 'Hub', icon: Grid },
+          { 
+            id: 'journal', 
+            label: 'Notebook', 
+            icon: BookOpen,
+            badge: pendingReviewsCount > 0 ? pendingReviewsCount : null,
+            badgeColor: 'bg-amber-500'
+          },
+          { 
+            id: 'time_entry', 
+            label: 'Time Card', 
+            icon: Clock,
+            pulse: activeSession
+          },
+          { id: 'kanban', label: 'Tasks', icon: Layers },
+          { 
+            id: 'inventory', 
+            label: 'Inventory', 
+            icon: Boxes,
+            badge: lowStockCount > 0 ? lowStockCount : null,
+            badgeColor: 'bg-amber-500'
+          },
+          { id: 'outreach', label: 'Outreach', icon: Users },
+          { id: 'finance', label: 'Ledger', icon: DollarSign }
+        ]
+      : [
+          { id: 'landing', label: 'Hub', icon: Grid },
+          { 
+            id: 'journal', 
+            label: 'Notebook', 
+            icon: BookOpen,
+            badge: pendingReviewsCount > 0 ? pendingReviewsCount : null,
+            badgeColor: 'bg-amber-500'
+          },
+          { 
+            id: 'time_entry', 
+            label: 'Time Card', 
+            icon: Clock,
+            pulse: activeSession
+          },
+          { id: 'kanban', label: 'Tasks', icon: Layers },
+          { 
+            id: 'inventory', 
+            label: 'Inventory', 
+            icon: Boxes,
+            badge: lowStockCount > 0 ? lowStockCount : null,
+            badgeColor: 'bg-amber-500'
+          }
+        ]
+  ).filter(item => isModuleAccessible(item.id));
 
-  const secondaryModules = [
-    { id: 'outreach', label: 'Community Outreach', sub: 'Impact events & logs', icon: Users },
-    { id: 'finance', label: 'General Ledger', sub: 'Budgets & transactions', icon: DollarSign },
-    { id: 'grants', label: 'Grant Tracker', sub: 'Funding proposals', icon: Award },
-    { id: 'handbook', label: 'Student Handbook', sub: 'Guides & safety code', icon: FileText },
-    ...(isUserAdminOrMentor ? [
-      { 
-        id: 'approvals', 
-        label: 'Roster & Approvals', 
-        sub: 'Member access & reviews', 
-        icon: ShieldCheck,
-        badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null 
-      },
-      { 
-        id: 'system_dashboard', 
-        label: 'System Operations', 
-        sub: 'Analytics & database', 
-        icon: Terminal 
-      }
-    ] : [])
-  ].filter(item => isModuleAccessible(item.id));
+  const secondaryModules = (
+    navLayout === 'topbar'
+      ? [
+          { id: 'qotd', label: 'Question of the Day', sub: 'Daily challenge & trivia', icon: Sparkles },
+          { id: 'grants', label: 'Grant Tracker', sub: 'Funding proposals', icon: Award },
+          { id: 'handbook', label: 'Student Handbook', sub: 'Guides & safety code', icon: FileText },
+          ...(isUserAdminOrMentor ? [
+            { 
+              id: 'approvals', 
+              label: 'Roster & Approvals', 
+              sub: 'Member access & reviews', 
+              icon: ShieldCheck,
+              badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null 
+            },
+            { 
+              id: 'system_dashboard', 
+              label: 'System Operations', 
+              sub: 'Analytics & database', 
+              icon: Terminal 
+            }
+          ] : [])
+        ]
+      : [
+          { id: 'qotd', label: 'Question of the Day', sub: 'Daily challenge & trivia', icon: Sparkles },
+          { id: 'outreach', label: 'Community Outreach', sub: 'Impact events & logs', icon: Users },
+          { id: 'finance', label: 'General Ledger', sub: 'Budgets & transactions', icon: DollarSign },
+          { id: 'grants', label: 'Grant Tracker', sub: 'Funding proposals', icon: Award },
+          { id: 'handbook', label: 'Student Handbook', sub: 'Guides & safety code', icon: FileText },
+          ...(isUserAdminOrMentor ? [
+            { 
+              id: 'approvals', 
+              label: 'Roster & Approvals', 
+              sub: 'Member access & reviews', 
+              icon: ShieldCheck,
+              badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null 
+            },
+            { 
+              id: 'system_dashboard', 
+              label: 'System Operations', 
+              sub: 'Analytics & database', 
+              icon: Terminal 
+            }
+          ] : [])
+        ]
+  ).filter(item => isModuleAccessible(item.id));
 
   const isCurrentViewSecondary = secondaryModules.some(m => m.id === currentView);
 
@@ -179,15 +244,17 @@ export function AppHeaderNav({
             <Menu className="w-5 h-5" />
           </button>
 
-          {/* Desktop Sidebar Toggle */}
-          <button
-            onClick={onToggleSidebar}
-            className="hidden md:flex p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title={isSidebarCollapsed ? "Expand sidebar panel" : "Collapse sidebar panel"}
-            aria-label="Toggle Sidebar"
-          >
-            {isSidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-          </button>
+          {/* Desktop Sidebar Toggle (shown when in Sidebar layout mode) */}
+          {navLayout === 'sidebar' && (
+            <button
+              onClick={onToggleSidebar}
+              className="hidden md:flex p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title={isSidebarCollapsed ? "Expand sidebar panel" : "Collapse sidebar panel"}
+              aria-label="Toggle Sidebar"
+            >
+              {isSidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
+          )}
 
           {/* Team Brand */}
           <button 
@@ -212,119 +279,123 @@ export function AppHeaderNav({
           </button>
         </div>
 
-        {/* CENTER: Clean, Sleek App Navigation Menu (Desktop) */}
-        <nav className="hidden md:flex items-center gap-1" id="desktop-primary-nav">
-          {primaryNavItems.map(item => {
-            const ItemIcon = item.icon;
-            const isActive = currentView === item.id;
+        {/* CENTER: Clean, Sleek App Navigation Menu (Desktop) - Only rendered in Top Bar layout */}
+        {navLayout === 'topbar' && (
+          <nav className="hidden md:flex items-center gap-1" id="desktop-primary-nav">
+            {primaryNavItems.map(item => {
+              const ItemIcon = item.icon;
+              const isActive = currentView === item.id;
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => onSelectView(item.id)}
-                className={`relative px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  isActive
-                    ? 'bg-slate-900 text-white dark:bg-brand dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                <ItemIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>{item.label}</span>
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onSelectView(item.id)}
+                  className={`relative px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isActive
+                      ? 'bg-slate-900 text-white dark:bg-brand dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <ItemIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{item.label}</span>
 
-                {item.pulse && (
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                )}
+                  {item.pulse && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                  )}
 
-                {item.badge && (
-                  <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full text-white font-black leading-none ${item.badgeColor || 'bg-brand'}`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                  {item.badge && (
+                    <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full text-white font-black leading-none ${item.badgeColor || 'bg-brand'}`}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
 
-          {/* More Modules Dropdown */}
-          <div className="relative" ref={modulesMenuRef}>
-            <button
-              onClick={() => setIsModulesMenuOpen(!isModulesMenuOpen)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                isCurrentViewSecondary
-                  ? 'bg-slate-900 text-white dark:bg-brand dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-              aria-expanded={isModulesMenuOpen}
-              aria-haspopup="true"
-            >
-              <span>More</span>
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isModulesMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
+            {/* More Modules Dropdown */}
+            {secondaryModules.length > 0 && (
+              <div className="relative" ref={modulesMenuRef}>
+                <button
+                  onClick={() => setIsModulesMenuOpen(!isModulesMenuOpen)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isCurrentViewSecondary
+                      ? 'bg-slate-900 text-white dark:bg-brand dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                  aria-expanded={isModulesMenuOpen}
+                  aria-haspopup="true"
+                >
+                  <span>More</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isModulesMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
 
-            {isModulesMenuOpen && (
-              <div className="absolute left-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-2 z-50 animate-fade-in">
-                <div className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 px-2.5 py-1 uppercase tracking-wider">
-                  Additional Modules
-                </div>
-                <div className="space-y-0.5 mt-1">
-                  {secondaryModules.map(module => {
-                    const ModuleIcon = module.icon;
-                    const isActive = currentView === module.id;
+                {isModulesMenuOpen && (
+                  <div className="absolute left-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-2 z-50 animate-fade-in">
+                    <div className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 px-2.5 py-1 uppercase tracking-wider">
+                      Additional Modules
+                    </div>
+                    <div className="space-y-0.5 mt-1">
+                      {secondaryModules.map(module => {
+                        const ModuleIcon = module.icon;
+                        const isActive = currentView === module.id;
 
-                    return (
+                        return (
+                          <button
+                            key={module.id}
+                            onClick={() => {
+                              onSelectView(module.id);
+                              setIsModulesMenuOpen(false);
+                            }}
+                            className={`w-full p-2 rounded-lg flex items-center gap-2.5 text-left transition-colors cursor-pointer ${
+                              isActive
+                                ? 'bg-brand/10 text-brand dark:bg-brand/20 dark:text-red-400 font-bold'
+                                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className={`p-1.5 rounded-md ${isActive ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                              <ModuleIcon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-semibold leading-tight flex items-center justify-between">
+                                <span className="truncate">{module.label}</span>
+                                {module.badge && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-red-500 text-white font-black leading-none ml-1 shrink-0">
+                                    {module.badge}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate leading-tight mt-0.5 font-normal">
+                                {module.sub}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                       <button
-                        key={module.id}
                         onClick={() => {
-                          onSelectView(module.id);
+                          onSelectView('help_guide');
                           setIsModulesMenuOpen(false);
                         }}
-                        className={`w-full p-2 rounded-lg flex items-center gap-2.5 text-left transition-colors cursor-pointer ${
-                          isActive
-                            ? 'bg-brand/10 text-brand dark:bg-brand/20 dark:text-red-400 font-bold'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
+                        className="w-full p-2 rounded-lg flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                       >
-                        <div className={`p-1.5 rounded-md ${isActive ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
-                          <ModuleIcon className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-semibold leading-tight flex items-center justify-between">
-                            <span className="truncate">{module.label}</span>
-                            {module.badge && (
-                              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-red-500 text-white font-black leading-none ml-1 shrink-0">
-                                {module.badge}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate leading-tight mt-0.5 font-normal">
-                            {module.sub}
-                          </p>
-                        </div>
+                        <HelpCircle className="w-4 h-4 text-cyan-500" />
+                        <span>User Manual &amp; Help Guide</span>
                       </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    onClick={() => {
-                      onSelectView('help_guide');
-                      setIsModulesMenuOpen(false);
-                    }}
-                    className="w-full p-2 rounded-lg flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                  >
-                    <HelpCircle className="w-4 h-4 text-cyan-500" />
-                    <span>User Manual &amp; Help Guide</span>
-                  </button>
-                </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        </nav>
+          </nav>
+        )}
 
-        {/* RIGHT: Actions, Session Pill, Theme, and User Profile Menu */}
+        {/* RIGHT: Actions, Layout Selector, Session Pill, Theme, and User Profile Menu */}
         <div className="flex items-center gap-2 shrink-0">
           
           {/* Active Lab Session Pill */}
@@ -342,7 +413,6 @@ export function AppHeaderNav({
             </button>
           )}
 
-          {/* Theme Toggle Button */}
           <button
             onClick={onToggleTheme}
             className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -435,14 +505,14 @@ export function AppHeaderNav({
 
                     <button
                       onClick={() => {
-                        onOpenSettings();
+                        onSelectView('settings');
                         setIsUserMenuOpen(false);
                       }}
                       className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                       id="menu-settings-btn"
                     >
                       <Settings className="w-4 h-4 text-slate-400" />
-                      <span>Account Settings</span>
+                      <span>Workspace &amp; Account Settings</span>
                     </button>
 
                     <button
@@ -455,6 +525,49 @@ export function AppHeaderNav({
                       <HelpCircle className="w-4 h-4 text-cyan-500" />
                       <span>Portal Help Guide</span>
                     </button>
+                  </div>
+
+                  {/* Navigation Layout Preference Selector */}
+                  <div className="py-2 border-b border-slate-100 dark:border-slate-800 text-xs">
+                    <div className="text-[9.5px] font-mono font-bold text-slate-400 px-2.5 py-0.5 uppercase tracking-wider flex items-center justify-between">
+                      <span>Navigation Layout</span>
+                      <span className="text-[9px] text-brand font-mono font-bold">{navLayout === 'topbar' ? 'Top Bar' : 'Sidebar'}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5 mt-1.5 px-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onSetNavLayout) onSetNavLayout('sidebar');
+                          else if (navLayout !== 'sidebar') onToggleNavLayout();
+                        }}
+                        className={`p-1.5 rounded-lg border text-left flex items-center gap-1.5 transition-all cursor-pointer ${
+                          navLayout === 'sidebar'
+                            ? 'bg-brand/10 border-brand/40 text-brand dark:text-red-400 font-bold shadow-2xs'
+                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        <PanelLeft className="w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[11px] truncate flex-1">Sidebar</span>
+                        {navLayout === 'sidebar' && <Check className="w-3 h-3 text-brand shrink-0" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onSetNavLayout) onSetNavLayout('topbar');
+                          else if (navLayout !== 'topbar') onToggleNavLayout();
+                        }}
+                        className={`p-1.5 rounded-lg border text-left flex items-center gap-1.5 transition-all cursor-pointer ${
+                          navLayout === 'topbar'
+                            ? 'bg-brand/10 border-brand/40 text-brand dark:text-red-400 font-bold shadow-2xs'
+                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        <PanelTop className="w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[11px] truncate flex-1">Top Bar</span>
+                        {navLayout === 'topbar' && <Check className="w-3 h-3 text-brand shrink-0" />}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Admin Tools Section (Mentors & Captains) */}

@@ -54,7 +54,14 @@ service cloud.firestore {
         && data.planNextTime is string && data.planNextTime.size() <= 50000
         && data.status in ['Draft', 'Pending Review', 'Approved', 'Needs Revision']
         && data.createdAt is number
-        && data.updatedAt is number;
+        && data.updatedAt is number
+        && (!('entryType' in data) || data.entryType in ['subteam', 'general_meeting'])
+        && (!('agenda' in data) || (data.agenda is string && data.agenda.size() <= 50000))
+        && (!('financeAnnounced' in data) || (data.financeAnnounced is string && data.financeAnnounced.size() <= 50000))
+        && (!('abcs' in data) || data.abcs is list)
+        && (!('finalTodoList' in data) || data.finalTodoList is list)
+        && (!('attendees' in data) || data.attendees is list)
+        && (!('absentAttendees' in data) || data.absentAttendees is list);
     }
 
     function isValidTime(data) {
@@ -202,6 +209,34 @@ service cloud.firestore {
         && data.updatedAt is number;
     }
 
+    function isValidDailyQuestion(data) {
+      return data.keys().hasAll(['id', 'question', 'category', 'questionType', 'points', 'durationMinutes', 'expiresAt', 'status', 'createdBy', 'createdByEmail', 'createdAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.question is string && data.question.size() <= 2000
+        && data.category in ['Game Rules & Field', 'Programming & Autonomous', 'Design, CAD & Build', 'Electrical & Sensors', 'Strategy & Scouting', 'Team Culture & Inspire']
+        && data.questionType in ['multiple_choice', 'open_ended']
+        && data.points is number
+        && data.durationMinutes is number
+        && data.expiresAt is number
+        && data.status in ['active', 'expired', 'closed']
+        && data.createdBy is string
+        && data.createdByEmail is string
+        && data.createdAt is number;
+    }
+
+    function isValidDailyQuestionSubmission(data) {
+      return data.keys().hasAll(['id', 'questionId', 'userId', 'userName', 'userEmail', 'userSubteam', 'answer', 'pointsAwarded', 'status', 'submittedAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.questionId is string && data.questionId.size() <= 128
+        && data.userId is string
+        && data.userName is string
+        && data.userEmail is string
+        && data.answer is string && data.answer.size() <= 5000
+        && data.pointsAwarded is number
+        && data.status in ['pending_review', 'graded_correct', 'graded_incorrect']
+        && data.submittedAt is number;
+    }
+
     // Collection Rules
     
     // 1. Users
@@ -314,6 +349,28 @@ service cloud.firestore {
       allow create: if isSignedIn() && isValidGrant(request.resource.data);
       allow update: if isSignedIn() && isValidGrant(request.resource.data);
       allow delete: if isMentorOrCaptain() || isSignedIn();
+    }
+
+    // 14. Daily Questions (Question of the Day)
+    match /dailyQuestions/{questionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isMentorOrCaptain() && isValidDailyQuestion(request.resource.data);
+      allow update: if isSignedIn() && (
+        isMentorOrCaptain() ||
+        isValidDailyQuestion(request.resource.data)
+      );
+      allow delete: if isMentorOrCaptain();
+    }
+
+    // 15. Daily Question Submissions
+    match /dailyQuestionSubmissions/{submissionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidDailyQuestionSubmission(request.resource.data);
+      allow update: if isSignedIn() && (
+        isMentorOrCaptain() ||
+        (request.resource.data.userId == request.auth.uid && isValidDailyQuestionSubmission(request.resource.data))
+      );
+      allow delete: if isMentorOrCaptain();
     }
   }
 }

@@ -37,7 +37,8 @@ import {
   TrendingUp,
   TrendingDown,
   FolderSync,
-  QrCode
+  QrCode,
+  Pencil
 } from 'lucide-react';
 import { 
   InventoryItem, 
@@ -216,6 +217,35 @@ export default function InventoryManager({
   // Form states for Add/Edit
   const [customLocations, setCustomLocations] = useState<StorageLocation[]>(() => getStoredStorageLocations());
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [editingLocationTargetId, setEditingLocationTargetId] = useState<string | null>(null);
+
+  // Auto-sync any existing item location strings into customLocations so they are always editable
+  useEffect(() => {
+    if (items.length === 0) return;
+    setCustomLocations(prev => {
+      const existingNames = new Set(prev.map(l => l.name.toLowerCase()));
+      const missing: StorageLocation[] = [];
+      items.forEach(itm => {
+        const loc = itm.location?.trim();
+        if (loc && !existingNames.has(loc.toLowerCase())) {
+          existingNames.add(loc.toLowerCase());
+          missing.push({
+            id: `loc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            name: loc,
+            subAreas: itm.subArea ? [itm.subArea] : [],
+            zone: 'Lab Area',
+            createdAt: Date.now()
+          });
+        }
+      });
+      if (missing.length > 0) {
+        const merged = [...prev, ...missing];
+        saveStoredStorageLocations(merged);
+        return merged;
+      }
+      return prev;
+    });
+  }, [items]);
   const [formName, setFormName] = useState('');
   const [formCategory, setFormCategory] = useState<InventoryCategory>('REV Robotics Parts');
   const [formSku, setFormSku] = useState('');
@@ -1632,6 +1662,28 @@ export default function InventoryManager({
                     ))}
                   </select>
 
+                  {/* Quick Edit Location Shortcut when filtered */}
+                  {selectedLocation !== 'All' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetLoc = customLocations.find(l => l.name.toLowerCase() === selectedLocation.toLowerCase());
+                        if (targetLoc) {
+                          setEditingLocationTargetId(targetLoc.id);
+                        } else {
+                          const newId = handleAddStorageLocation(selectedLocation);
+                          setEditingLocationTargetId(newId);
+                        }
+                        setIsLocationModalOpen(true);
+                      }}
+                      className="text-xs px-2 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300 font-bold flex items-center gap-1 cursor-pointer transition-colors shrink-0"
+                      title={`Edit storage location "${selectedLocation}" and its sub-areas`}
+                    >
+                      <Pencil className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                      <span className="hidden sm:inline">Edit Location</span>
+                    </button>
+                  )}
+
                   {/* Sub-Area filter */}
                   {availableFilterSubAreas.length > 0 && (
                     <select
@@ -1941,6 +1993,26 @@ export default function InventoryManager({
                               › {item.subArea}
                             </span>
                           )}
+                          {item.location && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const targetLoc = customLocations.find(l => l.name.toLowerCase() === item.location.toLowerCase());
+                                if (targetLoc) {
+                                  setEditingLocationTargetId(targetLoc.id);
+                                } else {
+                                  const newId = handleAddStorageLocation(item.location);
+                                  setEditingLocationTargetId(newId);
+                                }
+                                setIsLocationModalOpen(true);
+                              }}
+                              className="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 dark:hover:text-amber-400 transition-colors"
+                              title={`Edit storage location "${item.location}"`}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
 
                         {/* Checked out info if loan */}
@@ -2202,6 +2274,26 @@ export default function InventoryManager({
                                   <span className="text-[10px] font-mono font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.2 rounded border border-rose-200/80 dark:border-rose-800/50">
                                     › {item.subArea}
                                   </span>
+                                )}
+                                {item.location && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const targetLoc = customLocations.find(l => l.name.toLowerCase() === item.location.toLowerCase());
+                                      if (targetLoc) {
+                                        setEditingLocationTargetId(targetLoc.id);
+                                      } else {
+                                        const newId = handleAddStorageLocation(item.location);
+                                        setEditingLocationTargetId(newId);
+                                      }
+                                      setIsLocationModalOpen(true);
+                                    }}
+                                    className="p-0.5 rounded text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 dark:hover:text-amber-400 transition-colors cursor-pointer"
+                                    title={`Edit storage location "${item.location}"`}
+                                  >
+                                    <Pencil className="w-2.5 h-2.5" />
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -2718,11 +2810,14 @@ export default function InventoryManager({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setIsLocationModalOpen(true)}
+                      onClick={() => {
+                        setEditingLocationTargetId(null);
+                        setIsLocationModalOpen(true);
+                      }}
                       className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-bold flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>{customLocations.length === 0 ? 'Create Storage Location' : 'Manage / Add Locations'}</span>
+                      <span>{customLocations.length === 0 ? 'Create Storage Location' : 'Locations & Edit'}</span>
                     </button>
                     {customLocations.length > 0 && (
                       <button
@@ -2796,9 +2891,33 @@ export default function InventoryManager({
                       <option value="__add_new__">+ Create New Storage Location...</option>
                     </select>
 
+                    {formLocation && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetLoc = customLocations.find(l => l.name.toLowerCase() === formLocation.toLowerCase());
+                          if (targetLoc) {
+                            setEditingLocationTargetId(targetLoc.id);
+                          } else {
+                            const newId = handleAddStorageLocation(formLocation);
+                            setEditingLocationTargetId(newId);
+                          }
+                          setIsLocationModalOpen(true);
+                        }}
+                        className="px-2.5 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold text-xs shrink-0 flex items-center gap-1 cursor-pointer dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300"
+                        title={`Edit storage location "${formLocation}"`}
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        <span>Edit</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={() => setIsLocationModalOpen(true)}
+                      onClick={() => {
+                        setEditingLocationTargetId(null);
+                        setIsLocationModalOpen(true);
+                      }}
                       className="px-3 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs shrink-0 flex items-center gap-1 cursor-pointer dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300"
                       title="Open Storage Locations creation popup"
                     >
@@ -4124,7 +4243,11 @@ export default function InventoryManager({
       {/* STORAGE LOCATIONS CREATION & MANAGEMENT MODAL */}
       <StorageLocationModal
         isOpen={isLocationModalOpen}
-        onClose={() => setIsLocationModalOpen(false)}
+        onClose={() => {
+          setIsLocationModalOpen(false);
+          setEditingLocationTargetId(null);
+        }}
+        initialEditingLocId={editingLocationTargetId}
         locations={customLocations}
         onAddLocation={handleAddStorageLocation}
         onEditLocation={handleEditStorageLocation}
@@ -4138,6 +4261,7 @@ export default function InventoryManager({
             setFormSubArea(subArea);
           }
           setIsCustomLocation(false);
+          setEditingLocationTargetId(null);
         }}
       />
 

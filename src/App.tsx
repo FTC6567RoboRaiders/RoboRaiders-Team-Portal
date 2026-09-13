@@ -58,9 +58,12 @@ import {
   Boxes,
   HelpCircle,
   Menu,
-  Smartphone
+  Smartphone,
+  PanelLeft,
+  PanelTop,
+  PanelLeftClose
 } from 'lucide-react';
-import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction, GrantApplication } from './types';
+import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction, GrantApplication, JournalEntryType, PersonABC, MeetingTodoItem, NavLayout, QuestionOfTheDay, QuestionAnswerSubmission } from './types';
 import { compressAndResizeImage } from './utils/image';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { 
@@ -131,6 +134,10 @@ import { useDevice } from './utils/useDevice';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MobileMenuDrawer } from './components/MobileMenuDrawer';
 import { AppHeaderNav } from './components/AppHeaderNav';
+import { GeneralMeetingForm } from './components/GeneralMeetingForm';
+import { GeneralMeetingView } from './components/GeneralMeetingView';
+import { SettingsView } from './components/SettingsView';
+import QuestionOfTheDayHub from './components/QuestionOfTheDayHub';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -288,6 +295,29 @@ export default function App() {
     grantsRef.current = grants;
   }, [grants]);
   
+  // Question of the Day & Submissions states
+  const [dailyQuestions, setDailyQuestions] = useState<QuestionOfTheDay[]>(() => {
+    const stored = localStorage.getItem('ftc_daily_questions');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const [dailySubmissions, setDailySubmissions] = useState<QuestionAnswerSubmission[]>(() => {
+    const stored = localStorage.getItem('ftc_daily_submissions');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return [];
+  });
+
   // Real User Accounts state
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
     const stored = localStorage.getItem('ftc_user_accounts');
@@ -349,7 +379,7 @@ export default function App() {
   );
 
   // New States for views and time tracking
-  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'help_guide' | 'grants'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'help_guide' | 'grants' | 'settings' | 'qotd'>('landing');
 
   // Interactive System Notifications and disabled modules flags
   const [disabledModules, setDisabledModules] = useState<string[]>([]);
@@ -1087,6 +1117,29 @@ export default function App() {
         console.warn("grantApplications snapshot listener error:", error);
       });
       unsubscribeAll.push(unsubGrants);
+
+      // Daily Questions listener
+      const unsubQuestions = onSnapshot(collection(db, 'dailyQuestions'), (snapshot) => {
+        const list: QuestionOfTheDay[] = [];
+        snapshot.forEach(d => list.push(d.data() as QuestionOfTheDay));
+        const sorted = list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setDailyQuestions(sorted);
+        localStorage.setItem('ftc_daily_questions', JSON.stringify(sorted));
+      }, (error) => {
+        console.warn("dailyQuestions snapshot listener error:", error);
+      });
+      unsubscribeAll.push(unsubQuestions);
+
+      // Daily Question Submissions listener
+      const unsubSubmissions = onSnapshot(collection(db, 'dailyQuestionSubmissions'), (snapshot) => {
+        const list: QuestionAnswerSubmission[] = [];
+        snapshot.forEach(d => list.push(d.data() as QuestionAnswerSubmission));
+        setDailySubmissions(list);
+        localStorage.setItem('ftc_daily_submissions', JSON.stringify(list));
+      }, (error) => {
+        console.warn("dailyQuestionSubmissions snapshot listener error:", error);
+      });
+      unsubscribeAll.push(unsubSubmissions);
     };
 
     const handleAuthEvent = onAuthStateChanged(auth, async (authUser) => {
@@ -1257,6 +1310,47 @@ export default function App() {
   // Approvals Modal state for Mentor/Captain
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Navigation layout mode: 'sidebar' | 'topbar'
+  const [navLayout, setNavLayout] = useState<NavLayout>(() => {
+    const saved = localStorage.getItem('ftc_nav_layout');
+    return (saved === 'topbar' || saved === 'sidebar') ? saved : 'sidebar';
+  });
+
+  const [hiddenWorkspaces, setHiddenWorkspaces] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (currentUser) {
+      const saved = localStorage.getItem(`ftc_hidden_workspaces_${currentUser.id}`);
+      if (saved) {
+        try {
+          setHiddenWorkspaces(JSON.parse(saved));
+        } catch (e) {
+          console.error('Failed to parse hidden workspaces');
+        }
+      }
+    }
+  }, [currentUser?.id]);
+
+  const toggleWorkspaceVisibility = (workspaceId: string) => {
+    setHiddenWorkspaces(prev => {
+      const next = prev.includes(workspaceId) ? prev.filter(id => id !== workspaceId) : [...prev, workspaceId];
+      if (currentUser) {
+        localStorage.setItem(`ftc_hidden_workspaces_${currentUser.id}`, JSON.stringify(next));
+      }
+      return next;
+    });
+  };
+
+  const handleSetNavLayout = (layout: NavLayout) => {
+    setNavLayout(layout);
+    localStorage.setItem('ftc_nav_layout', layout);
+  };
+
+  const handleToggleNavLayout = () => {
+    const next = navLayout === 'sidebar' ? 'topbar' : 'sidebar';
+    handleSetNavLayout(next);
+  };
 
   // Season Transition and Backups state (Mentor-Only option)
   const [isBackupTransitionOpen, setIsBackupTransitionOpen] = useState(false);
@@ -1589,6 +1683,13 @@ export default function App() {
   const [newProfileLeadership, setNewProfileLeadership] = useState<'None' | 'Captain' | 'Subteam leader'>('None');
   const [newProfileRole, setNewProfileRole] = useState<'member' | 'mentor' | 'captain'>('member');
   const [formDate, setFormDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [formEntryType, setFormEntryType] = useState<JournalEntryType>('subteam');
+  const [formTitle, setFormTitle] = useState('');
+  const [formAgenda, setFormAgenda] = useState('');
+  const [formAbcs, setFormAbcs] = useState<PersonABC[]>([]);
+  const [formFinanceAnnounced, setFormFinanceAnnounced] = useState('');
+  const [formFinalTodoList, setFormFinalTodoList] = useState<MeetingTodoItem[]>([]);
+  const [formAbsentAttendees, setFormAbsentAttendees] = useState<string[]>([]);
   const [formPlanned, setFormPlanned] = useState('');
   const [formAccomplished, setFormAccomplished] = useState('');
   const [formProblemsAndSolutions, setFormProblemsAndSolutions] = useState<string[]>(['']);
@@ -2395,13 +2496,21 @@ const handleStartEditProfile = (authorName: string) => {
       showToast('Reporter/Author field is required.', 'danger');
       return;
     }
-    if (!formPlanned.trim()) {
-      showToast('Planning overview cannot be left blank.', 'danger');
-      return;
-    }
-    if (!formAccomplished.trim()) {
-      showToast('Accomplishments record list is required.', 'danger');
-      return;
+
+    if (formEntryType === 'general_meeting') {
+      if (!formAgenda.trim()) {
+        showToast('Meeting Agenda cannot be left blank for General Meetings.', 'danger');
+        return;
+      }
+    } else {
+      if (!formPlanned.trim()) {
+        showToast('Planning overview cannot be left blank.', 'danger');
+        return;
+      }
+      if (!formAccomplished.trim()) {
+        showToast('Accomplishments record list is required.', 'danger');
+        return;
+      }
     }
 
     const cleanedProblems = formProblemsAndSolutions
@@ -2410,18 +2519,62 @@ const handleStartEditProfile = (authorName: string) => {
 
     const stamp = Date.now();
 
+    // Prepare fields for General Meeting vs Subteam
+    const finalPlanned = formEntryType === 'general_meeting' ? formAgenda.trim() : formPlanned.trim();
+
+    let finalAccomplished = formAccomplished.trim();
+    if (formEntryType === 'general_meeting') {
+      if (formAbcs.length > 0) {
+        finalAccomplished = formAbcs.map(a => `${a.name}${a.subteam ? ` [${a.subteam}]` : ''}:\n  • A (Accomplished): ${a.accomplishments || 'Attended'}\n  • B (Blockers): ${a.blockers || 'None'}\n  • C (Commitments): ${a.commitments || 'Active'}`).join('\n\n');
+      } else if (!finalAccomplished) {
+        finalAccomplished = 'Conducted general all-hands team meeting and ABC standup session.';
+      }
+    }
+
+    let finalProblems = cleanedProblems;
+    if (formEntryType === 'general_meeting') {
+      const blockers = formAbcs
+        .filter(a => a.blockers && a.blockers.trim() && a.blockers.toLowerCase() !== 'none')
+        .map(a => `${a.name} [Blocker]: ${a.blockers}`);
+      if (blockers.length > 0) {
+        finalProblems = blockers;
+      } else if (finalProblems.length === 0) {
+        finalProblems = ['No immediate blockers reported during member ABC standup.'];
+      }
+    }
+
+    let finalPlanNextTime = formPlanNextTime.trim();
+    if (formEntryType === 'general_meeting') {
+      if (formFinalTodoList.length > 0) {
+        finalPlanNextTime = formFinalTodoList
+          .map(t => `• ${t.task}${t.assignee ? ` [Assignee: ${t.assignee}]` : ''}${t.dueDate ? ` (Due: ${t.dueDate})` : ''}`)
+          .join('\n');
+      } else if (!finalPlanNextTime) {
+        finalPlanNextTime = 'Execute scheduled general meeting action items and prepare for upcoming session.';
+      }
+    }
+
+    const finalTitle = formEntryType === 'general_meeting' ? (formTitle.trim() || 'General Team Meeting') : undefined;
+
     if (isEditing && editingId) {
       const updated = entries.map((entry) => {
         if (entry.id === editingId) {
           const u: JournalEntry = {
             ...entry,
+            entryType: formEntryType,
+            title: finalTitle,
+            agenda: formEntryType === 'general_meeting' ? formAgenda.trim() : undefined,
+            abcs: formEntryType === 'general_meeting' ? formAbcs : undefined,
+            financeAnnounced: formEntryType === 'general_meeting' ? formFinanceAnnounced.trim() : undefined,
+            finalTodoList: formEntryType === 'general_meeting' ? formFinalTodoList : undefined,
+            absentAttendees: formEntryType === 'general_meeting' ? formAbsentAttendees : undefined,
             subteam: formSubteam,
             author: formAuthor.trim(),
             date: formDate,
-            planned: formPlanned.trim(),
-            accomplished: formAccomplished.trim(),
-            problemsAndSolutions: cleanedProblems,
-            planNextTime: formPlanNextTime.trim(),
+            planned: finalPlanned,
+            accomplished: finalAccomplished,
+            problemsAndSolutions: finalProblems,
+            planNextTime: finalPlanNextTime,
             images: formImages,
             attendees: formAttendees,
             updatedAt: stamp,
@@ -2443,13 +2596,20 @@ const handleStartEditProfile = (authorName: string) => {
     } else {
       const u: JournalEntry = {
         id: `entry-${stamp}-${Math.random().toString(36).substr(2, 5)}`,
+        entryType: formEntryType,
+        title: finalTitle,
+        agenda: formEntryType === 'general_meeting' ? formAgenda.trim() : undefined,
+        abcs: formEntryType === 'general_meeting' ? formAbcs : undefined,
+        financeAnnounced: formEntryType === 'general_meeting' ? formFinanceAnnounced.trim() : undefined,
+        finalTodoList: formEntryType === 'general_meeting' ? formFinalTodoList : undefined,
+        absentAttendees: formEntryType === 'general_meeting' ? formAbsentAttendees : undefined,
         subteam: formSubteam,
         author: formAuthor.trim(),
         date: formDate,
-        planned: formPlanned.trim(),
-        accomplished: formAccomplished.trim(),
-        problemsAndSolutions: cleanedProblems,
-        planNextTime: formPlanNextTime.trim(),
+        planned: finalPlanned,
+        accomplished: finalAccomplished,
+        problemsAndSolutions: finalProblems,
+        planNextTime: finalPlanNextTime,
         images: formImages,
         attendees: formAttendees,
         createdAt: stamp,
@@ -2526,6 +2686,14 @@ FTC #6567 Robotics Log System`
     setFormProblemsAndSolutions(entry.problemsAndSolutions.length > 0 ? entry.problemsAndSolutions : ['']);
     setFormPlanNextTime(entry.planNextTime);
     setFormImages(entry.images);
+    setFormEntryType(entry.entryType || 'subteam');
+    setFormTitle(entry.title || '');
+    setFormAgenda(entry.agenda || entry.planned || '');
+    setFormAbcs(entry.abcs || []);
+    setFormFinanceAnnounced(entry.financeAnnounced || '');
+    setFormFinalTodoList(entry.finalTodoList || []);
+    setFormAttendees(entry.attendees || []);
+    setFormAbsentAttendees(entry.absentAttendees || []);
     setIsEditing(true);
     setEditingId(entry.id);
     setActiveTab('form');
@@ -2745,14 +2913,7 @@ FTC #6567 Captains & Mentors`
   };
 
   const openSettingsModal = () => {
-    if (currentUser) {
-      setSettingsName(currentUser.name);
-      setSettingsEmail(currentUser.schoolEmail);
-      setSettingsSchoolId(currentUser.schoolId);
-      setSettingsPrimary(currentUser.primarySubteam);
-      setSettingsSecondary(currentUser.secondarySubteam);
-    }
-    setIsSettingsOpen(true);
+    setCurrentView('settings');
   };
 
 
@@ -2773,6 +2934,13 @@ FTC #6567 Captains & Mentors`
 
   const resetForm = () => {
     setFormDate(new Date().toISOString().split('T')[0]);
+    setFormEntryType('subteam');
+    setFormTitle('');
+    setFormAgenda('');
+    setFormAbcs([]);
+    setFormFinanceAnnounced('');
+    setFormFinalTodoList([]);
+    setFormAbsentAttendees([]);
     setFormPlanned('');
     setFormAccomplished('');
     setFormProblemsAndSolutions(['']);
@@ -2780,7 +2948,43 @@ FTC #6567 Captains & Mentors`
     setFormImages([]);
     setFormAttendees([]);
     setCustomAttendee('');
+    setIsEditing(false);
+    setEditingId(null);
     setSubmissionType('Pending Review');
+  };
+
+  const handlePushMeetingTodoToKanban = (taskDesc: string, assignee: string) => {
+    const newTask: KanbanTask = {
+      id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      title: taskDesc,
+      description: `Action item generated from General Meeting (${formDate})`,
+      column: 'todo',
+      subteam: 'Design/Build/Fabrication',
+      assignedTo: assignee || 'Unassigned',
+      priority: 'High',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      updatedBy: currentUser?.displayName || 'General Meeting'
+    };
+    const updated = [newTask, ...kanbanTasks];
+    saveKanbanTasksToLocalStorage(updated);
+    showToast(`Action item pushed to Kanban: "${taskDesc.slice(0, 30)}..."`, 'success');
+  };
+
+  const handleToggleGeneralMeetingTodo = (entryId: string, todoId: string) => {
+    const updated = entries.map(e => {
+      if (e.id === entryId && e.finalTodoList) {
+        const updatedTodos = e.finalTodoList.map(t => t.id === todoId ? { ...t, completed: !t.completed } : t);
+        const updatedEntry = { ...e, finalTodoList: updatedTodos };
+        if (selectedEntry?.id === entryId) {
+          setSelectedEntry(updatedEntry);
+        }
+        setDoc(doc(db, 'journalEntries', entryId), cleanForFirestore(updatedEntry)).catch(console.warn);
+        return updatedEntry;
+      }
+      return e;
+    });
+    saveEntriesToLocalStorage(updated);
   };
 
   const loadDemoData = () => {};
@@ -2856,6 +3060,23 @@ FTC #6567 Captains & Mentors`
         showToast(`Operation failed: ${e.message}`, 'danger');
     }
     closeCreateProfileModal();
+  };
+
+  const handleUpdateUserProfile = async (name: string, primarySubteam: Subteam, secondarySubteam: Subteam): Promise<boolean> => {
+    if (!currentUser) return false;
+    try {
+      const updatedDiff = { name, primarySubteam, secondarySubteam };
+      await updateDoc(doc(db, 'users', currentUser.id), updatedDiff);
+      
+      const updatedUser = { ...currentUser, ...updatedDiff };
+      setCurrentUser(updatedUser as any);
+      localStorage.setItem('ftc_current_user', JSON.stringify(updatedUser));
+      showToast('Account profile & preferences updated.', 'success');
+      return true;
+    } catch (e: any) {
+      showToast('Failed to save profile: ' + e.message, 'danger');
+      return false;
+    }
   };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
@@ -3115,16 +3336,27 @@ ${entry.planNextTime || '_No carry-over specified._'}
   };
 
   const filteredEntries = entries.filter((entry) => {
+    if (filters.entryType && filters.entryType !== 'All') {
+      const currentType = entry.entryType || 'subteam';
+      if (currentType !== filters.entryType) return false;
+    }
     if (filters.subteam !== 'All' && entry.subteam !== filters.subteam) return false;
     if (filters.author.trim() && !entry.author.toLowerCase().includes(filters.author.toLowerCase())) return false;
     if (filters.searchQuery.trim()) {
       const q = filters.searchQuery.toLowerCase();
       const probs = Array.isArray(entry.problemsAndSolutions) ? entry.problemsAndSolutions : [];
+      const abcsText = (entry.abcs || []).map(a => `${a.name} ${a.accomplishments} ${a.blockers} ${a.commitments}`).join(' ');
+      const todosText = (entry.finalTodoList || []).map(t => `${t.task} ${t.assignee || ''}`).join(' ');
       const fields = [
+        entry.title || '',
         entry.author || '',
         entry.planned || '',
         entry.accomplished || '',
         entry.planNextTime || '',
+        entry.agenda || '',
+        entry.financeAnnounced || '',
+        abcsText,
+        todosText,
         entry.subteam || '',
         entry.date || '',
         ...probs
@@ -3654,8 +3886,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
   const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
 
-  const sidebarLinks: {
-    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'grants';
+  let sidebarLinks: {
+    id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'grants' | 'settings' | 'qotd' | 'help_guide';
     label: string;
     sublabel: string;
     icon: any;
@@ -3739,6 +3971,31 @@ ${entry.planNextTime || '_No carry-over specified._'}
       badge: grants.filter(g => g.status === 'Drafting' || g.status === 'Submitted' || g.status === 'Under Review').length || null,
       badgeColor: 'bg-amber-500',
       color: 'text-amber-400'
+    },
+    {
+      id: 'qotd',
+      label: 'Question of the Day',
+      sublabel: 'Daily challenge & XP',
+      icon: Sparkles,
+      badge: dailyQuestions.filter(q => q.active && !dailySubmissions.some(s => s.questionId === q.id && s.userId === currentUser?.id)).length || null,
+      badgeColor: 'bg-yellow-500 animate-pulse',
+      color: 'text-yellow-400'
+    },
+    {
+      id: 'help_guide',
+      label: 'User Manual & Help',
+      sublabel: 'Interactive documentation',
+      icon: HelpCircle,
+      badge: null,
+      color: 'text-indigo-400'
+    },
+    {
+      id: 'settings',
+      label: 'Settings & Profile',
+      sublabel: 'Preferences & layout',
+      icon: Settings,
+      badge: null,
+      color: 'text-slate-400'
     }
   ];
 
@@ -3760,6 +4017,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
       // If module is disabled globally, only let Programming subteam or Captains/Mentors view it
       return currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor;
     }
+    if (hiddenWorkspaces.includes(link.id) && link.id !== "landing" && link.id !== "settings") return false;
     return true;
   });
 
@@ -3804,8 +4062,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
         onImportJSON={handleImportJSON}
         onClearAllData={clearAllData}
         disabledModules={disabledModules}
+        hiddenWorkspaces={hiddenWorkspaces}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        navLayout={navLayout}
+        onToggleNavLayout={handleToggleNavLayout}
+        onSetNavLayout={handleSetNavLayout}
       />
 
       {/* DYNAMIC SYSTEM WORKFLOW INTELLIGENCE NOTIFICATIONS */}
@@ -3882,75 +4144,77 @@ ${entry.planNextTime || '_No carry-over specified._'}
       {/* WORKSPACE SIDEBAR + VIEW CONTENT WRAPPER */}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative overflow-hidden" id="workspace-layout-wrapper">
         
-        {/* SIDEBAR NAVIGATION PANEL (DESKTOP) */}
-        <aside 
-          className={`hidden md:flex flex-col shrink-0 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 no-print select-none ${
-            isSidebarCollapsed ? 'w-16' : 'w-60'
-          }`}
-          id="workspace-sidebar"
-        >
-          {/* TOP HEADER CONTROLS (COLLAPSER AT THE TOP) */}
-          <div className={`p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 ${
-            isSidebarCollapsed ? 'justify-center' : ''
-          }`}>
-            {!isSidebarCollapsed && (
-              <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Workspaces
-              </span>
-            )}
-            <button
-              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              type="button"
-              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md cursor-pointer transition-colors border-none bg-transparent outline-none flex items-center justify-center"
-              title={isSidebarCollapsed ? "Expand Sidebar Panel" : "Collapse Sidebar Panel"}
-              id="workspace-sidebar-toggle-top"
-            >
-              <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${isSidebarCollapsed ? '' : 'rotate-180'}`} />
-            </button>
-          </div>
+        {/* SIDEBAR NAVIGATION PANEL (DESKTOP) - Only shown when in Sidebar layout mode */}
+        {navLayout === 'sidebar' && (
+          <aside 
+            className={`hidden md:flex flex-col shrink-0 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 no-print select-none ${
+              isSidebarCollapsed ? 'w-16' : 'w-60'
+            }`}
+            id="workspace-sidebar"
+          >
+            {/* TOP HEADER CONTROLS (COLLAPSER AT THE TOP) */}
+            <div className={`p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 ${
+              isSidebarCollapsed ? 'justify-center' : ''
+            }`}>
+              {!isSidebarCollapsed && (
+                <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  Workspaces
+                </span>
+              )}
+              <button
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                type="button"
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md cursor-pointer transition-colors border-none bg-transparent outline-none flex items-center justify-center"
+                title={isSidebarCollapsed ? "Expand Sidebar Panel" : "Collapse Sidebar Panel"}
+                id="workspace-sidebar-toggle-top"
+              >
+                <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${isSidebarCollapsed ? '' : 'rotate-180'}`} />
+              </button>
+            </div>
 
-          {/* LIST OF SHORTCUT LINKS */}
-          <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto" id="workspace-sidebar-nav">
-            {renderedSidebarLinks.map((link) => {
-              const LinkIcon = link.icon;
-              const isActive = currentView === link.id;
+            {/* LIST OF SHORTCUT LINKS */}
+            <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto" id="workspace-sidebar-nav">
+              {renderedSidebarLinks.map((link) => {
+                const LinkIcon = link.icon;
+                const isActive = currentView === link.id;
 
-              return (
-                <button
-                  key={link.id}
-                  type="button"
-                  onClick={() => {
-                    setCurrentView(link.id);
-                  }}
-                  title={isSidebarCollapsed ? `${link.label} — ${link.sublabel}` : undefined}
-                  className={`w-full py-2 px-2.5 rounded-lg flex items-center transition-all ${
-                    isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5'
-                  } outline-none border-none text-left cursor-pointer ${
-                    isActive 
-                      ? 'bg-brand text-white font-bold shadow-xs' 
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <LinkIcon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : link.color}`} />
-                  
-                  {!isSidebarCollapsed && (
-                    <div className="min-w-0 flex-1 flex flex-col">
-                      <span className="text-xs font-semibold leading-tight truncate">{link.label}</span>
-                    </div>
-                  )}
+                return (
+                  <button
+                    key={link.id}
+                    type="button"
+                    onClick={() => {
+                      setCurrentView(link.id);
+                    }}
+                    title={isSidebarCollapsed ? `${link.label} — ${link.sublabel}` : undefined}
+                    className={`w-full py-2 px-2.5 rounded-lg flex items-center transition-all ${
+                      isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5'
+                    } outline-none border-none text-left cursor-pointer ${
+                      isActive 
+                        ? 'bg-brand text-white font-bold shadow-xs' 
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <LinkIcon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : link.color}`} />
+                    
+                    {!isSidebarCollapsed && (
+                      <div className="min-w-0 flex-1 flex flex-col">
+                        <span className="text-xs font-semibold leading-tight truncate">{link.label}</span>
+                      </div>
+                    )}
 
-                  {link.badge !== null && (
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full text-white font-mono font-black shrink-0 leading-none ${
-                      isSidebarCollapsed ? 'absolute translate-x-3.5 -translate-y-2 scale-90' : ''
-                    } ${link.badgeColor || 'bg-brand'}`}>
-                      {link.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </aside>
+                    {link.badge !== null && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full text-white font-mono font-black shrink-0 leading-none ${
+                        isSidebarCollapsed ? 'absolute translate-x-3.5 -translate-y-2 scale-90' : ''
+                      } ${link.badgeColor || 'bg-brand'}`}>
+                        {link.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
+        )}
 
         {/* WORKSPACE SCREEN CONTENT PANEL */}
         <div className="flex-1 overflow-y-auto relative flex flex-col min-h-0" id="workspace-content-pane">
@@ -5655,6 +5919,34 @@ ${entry.planNextTime || '_No carry-over specified._'}
         )
       )}
 
+      {/* WORKSPACE & ACCOUNT SETTINGS VIEW (FULL PAGE) */}
+      {currentView === 'settings' && currentUser && (
+        <SettingsView
+          currentUser={currentUser}
+          onUpdateProfile={handleUpdateUserProfile}
+          onRequestPasswordReset={(email) => handleRequestReset(email)}
+          onLogout={handleLogout}
+          navLayout={navLayout}
+          onSetNavLayout={handleSetNavLayout}
+          isDark={isDark}
+          onToggleTheme={() => setIsDark(!isDark)}
+          onBackToDashboard={() => setCurrentView('landing')}
+          onClearAllData={clearAllData}
+          onDownloadBackup={handleExportJSON}
+          onOpenSeasonTransition={isUserAdminOrMentor ? () => setIsBackupTransitionOpen(true) : undefined}
+          activeSession={activeSession}
+          hiddenWorkspaces={hiddenWorkspaces}
+          onToggleWorkspaceVisibility={toggleWorkspaceVisibility}
+          counts={{
+            journalEntries: entries.length,
+            kanbanTasks: kanbanTasks.length,
+            inventoryItems: inventoryItems.length,
+            outreachEvents: outreachEvents.length,
+            ledgerTransactions: ledgerTransactions.length,
+          }}
+        />
+      )}
+
       {/* PORTAL HELP GUIDE & USER MANUAL VIEW */}
       {currentView === 'help_guide' && (
         <PortalHelpGuide
@@ -5662,6 +5954,118 @@ ${entry.planNextTime || '_No carry-over specified._'}
           showToast={showToast}
           onBack={() => setCurrentView('landing')}
           onNavigate={(view: string) => setCurrentView(view as any)}
+        />
+      )}
+
+      {/* QUESTION OF THE DAY VIEW */}
+      {currentView === 'qotd' && (
+        <QuestionOfTheDayHub
+          currentUser={currentUser}
+          users={accounts}
+          questions={dailyQuestions}
+          submissions={dailySubmissions}
+          onCreateQuestion={async (q) => {
+            const newQ: QuestionOfTheDay = {
+              ...q,
+              id: 'qotd_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+              createdAt: Date.now(),
+              status: 'active'
+            };
+            const updated = [newQ, ...dailyQuestions];
+            setDailyQuestions(updated);
+            localStorage.setItem('ftc_daily_questions', JSON.stringify(updated));
+            try {
+              await setDoc(doc(db, 'dailyQuestions', newQ.id), cleanForFirestore(newQ));
+              showToast(`Question of the Day created! (${newQ.points} pts assigned)`, 'success');
+            } catch (e: any) {
+              console.error('Failed to create daily question:', e);
+              showToast('Failed to save question: ' + e.message, 'danger');
+            }
+          }}
+          onUpdateQuestion={async (q) => {
+            const updated = dailyQuestions.map(item => item.id === q.id ? q : item);
+            setDailyQuestions(updated);
+            localStorage.setItem('ftc_daily_questions', JSON.stringify(updated));
+            try {
+              await setDoc(doc(db, 'dailyQuestions', q.id), cleanForFirestore(q));
+              showToast('Question updated successfully.', 'success');
+            } catch (e: any) {
+              console.error('Failed to update question:', e);
+              showToast('Failed to update question: ' + e.message, 'danger');
+            }
+          }}
+          onDeleteQuestion={async (id) => {
+            const updated = dailyQuestions.filter(item => item.id !== id);
+            setDailyQuestions(updated);
+            localStorage.setItem('ftc_daily_questions', JSON.stringify(updated));
+            try {
+              await deleteDoc(doc(db, 'dailyQuestions', id));
+              showToast('Question removed.', 'info');
+            } catch (e: any) {
+              console.error('Failed to delete question:', e);
+              showToast('Failed to delete question: ' + e.message, 'danger');
+            }
+          }}
+          onSubmitAnswer={async (sub) => {
+            const newSub: QuestionAnswerSubmission = {
+              ...sub,
+              id: 'qsub_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+              submittedAt: Date.now(),
+              status: sub.status || 'pending_review',
+              pointsAwarded: sub.pointsAwarded || 0
+            };
+            const updated = [newSub, ...dailySubmissions.filter(s => !(s.questionId === sub.questionId && s.userId === sub.userId))];
+            setDailySubmissions(updated);
+            localStorage.setItem('ftc_daily_submissions', JSON.stringify(updated));
+            try {
+              await setDoc(doc(db, 'dailyQuestionSubmissions', newSub.id), cleanForFirestore(newSub));
+              if (newSub.status === 'graded_correct' && newSub.pointsAwarded && newSub.pointsAwarded > 0) {
+                handleAddXpAdjustment({
+                  userId: newSub.userId,
+                  userName: newSub.userName,
+                  userEmail: newSub.userEmail,
+                  amount: newSub.pointsAwarded,
+                  reason: `Question of the Day Auto-Grade`
+                });
+              }
+            } catch (e: any) {
+              console.error('Failed to save answer:', e);
+              showToast('Failed to submit answer: ' + e.message, 'danger');
+            }
+          }}
+          onGradeSubmission={async (submissionId, isCorrect, pointsAwarded, feedback) => {
+            const sub = dailySubmissions.find(s => s.id === submissionId);
+            if (!sub) return;
+            const updatedSub: QuestionAnswerSubmission = {
+              ...sub,
+              status: isCorrect ? 'graded_correct' : 'graded_incorrect',
+              pointsAwarded,
+              feedback,
+              gradedBy: currentUser?.name || 'Mentor',
+              gradedAt: Date.now()
+            };
+            const updated = dailySubmissions.map(s => s.id === submissionId ? updatedSub : s);
+            setDailySubmissions(updated);
+            localStorage.setItem('ftc_daily_submissions', JSON.stringify(updated));
+            try {
+              await setDoc(doc(db, 'dailyQuestionSubmissions', submissionId), cleanForFirestore(updatedSub));
+              if (isCorrect && pointsAwarded > 0) {
+                handleAddXpAdjustment({
+                  userId: sub.userId,
+                  userName: sub.userName,
+                  userEmail: sub.userEmail,
+                  amount: pointsAwarded,
+                  reason: `Question of the Day Grade: +${pointsAwarded} pts`
+                });
+              }
+              showToast(`Graded submission (${pointsAwarded} pts awarded)!`, 'success');
+            } catch (e: any) {
+              console.error('Failed to grade submission:', e);
+              showToast('Failed to grade submission: ' + e.message, 'danger');
+            }
+          }}
+          showToast={showToast}
+          onNavigate={(view) => setCurrentView(view as any)}
         />
       )}
 
@@ -6258,171 +6662,345 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               
-              {/* Row 1: Short fields metadata info */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Field 1: Subteam */}
-                <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
-                    Subteam Group <span className="text-brand">*</span>
-                  </label>
-                  <select
-                    value={formSubteam}
-                    onChange={(e) => setFormSubteam(e.target.value as Subteam)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                    id="input-subteam"
-                  >
-                    {SUBTEAM_LIST.map((sub) => (
-                      <option key={sub} value={sub} className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">{sub}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* Journal Entry Type Selector */}
+              <div className="bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-xl flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 select-none">
+                <button
+                  type="button"
+                  onClick={() => setFormEntryType('subteam')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                    formEntryType === 'subteam'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs border border-slate-200/80 dark:border-slate-700'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                  id="tab-select-subteam-entry"
+                >
+                  <Layers className="w-3.5 h-3.5 text-brand" />
+                  <span>Subteam Engineering Entry</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormEntryType('general_meeting')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                    formEntryType === 'general_meeting'
+                      ? 'bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 shadow-xs border border-slate-200/80 dark:border-slate-700'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300'
+                  }`}
+                  id="tab-select-general-meeting-entry"
+                >
+                  <Users className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                  <span>General Meeting (Agenda • ABCs • Finance • To-Do)</span>
+                </button>
+              </div>
 
-                {/* Field 2: Date */}
-                <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
-                    Session Date <span className="text-brand">*</span>
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
-                    <input
-                      type="date"
-                      value={formDate}
-                      onChange={(e) => setFormDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded pl-10 pr-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                      required
-                      id="input-date"
-                    />
-                  </div>
-                </div>
+              {formEntryType === 'general_meeting' ? (
+                <GeneralMeetingForm
+                  meetingTitle={formTitle}
+                  setMeetingTitle={setFormTitle}
+                  formDate={formDate}
+                  setFormDate={setFormDate}
+                  formAuthor={formAuthor}
+                  currentUser={currentUser}
+                  accounts={accounts}
+                  agenda={formAgenda}
+                  setAgenda={setFormAgenda}
+                  abcs={formAbcs}
+                  setAbcs={setFormAbcs}
+                  financeAnnounced={formFinanceAnnounced}
+                  setFinanceAnnounced={setFormFinanceAnnounced}
+                  finalTodoList={formFinalTodoList}
+                  setFinalTodoList={setFormFinalTodoList}
+                  attendees={formAttendees}
+                  setAttendees={setFormAttendees}
+                  absentAttendees={formAbsentAttendees}
+                  setAbsentAttendees={setFormAbsentAttendees}
+                  customAttendee={customAttendee}
+                  setCustomAttendee={setCustomAttendee}
+                  ledgerTransactions={ledgerTransactions}
+                  onPushToKanban={handlePushMeetingTodoToKanban}
+                />
+              ) : (
+                <>
+                  {/* Row 1: Short fields metadata info */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Field 1: Subteam */}
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
+                        Subteam Group <span className="text-brand">*</span>
+                      </label>
+                      <select
+                        value={formSubteam}
+                        onChange={(e) => setFormSubteam(e.target.value as Subteam)}
+                        className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-bold focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
+                        id="input-subteam"
+                      >
+                        {SUBTEAM_LIST.map((sub) => (
+                          <option key={sub} value={sub} className="bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-400">{sub}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                {/* Field 3: Author Card */}
-                <div>
-                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1 dark:text-slate-400">
-                    Authorized Reporter
-                  </label>
-                  <div className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 flex items-center justify-between gap-3 text-xs shadow-3xs dark:bg-slate-800 dark:border-slate-800" id="display-auth-id-card">
-                    <div className="flex items-center gap-2 py-0.5">
-                      <div className="bg-emerald-500/10 dark:bg-emerald-400/10 p-1 rounded-full text-emerald-600 dark:text-emerald-400 shrink-0">
-                        <User className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <div className="font-extrabold text-slate-800 leading-tight text-[11px] truncate max-w-[120px] dark:text-slate-400">
-                          {currentUser?.name || formAuthor}
-                        </div>
-                        <div className="text-[8px] font-mono font-bold text-slate-500 uppercase tracking-wider leading-none dark:text-slate-400">
-                          {currentUser?.role === 'mentor' ? 'Coach' : currentUser?.role === 'captain' ? 'Captain' :  'Student Member'}
-                        </div>
+                    {/* Field 2: Date */}
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1 dark:text-slate-400">
+                        Session Date <span className="text-brand">*</span>
+                      </label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
+                        <input
+                          type="date"
+                          value={formDate}
+                          onChange={(e) => setFormDate(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded pl-10 pr-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none text-slate-800 font-medium transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
+                          required
+                          id="input-date"
+                        />
                       </div>
                     </div>
-                    {currentUser && (
-                      <span className="bg-emerald-100/80 dark:bg-emerald-950/40 text-emerald-850 dark:text-emerald-350 font-mono text-[8px] font-black px-1.5 py-0.5 rounded border border-emerald-250 dark:border-emerald-900 select-none uppercase shadow-3xs shrink-0">
-                        Auth
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
 
-              {/* Row 2: Textareas for Planning and Accomplishing */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* What we planned */}
-                <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
-                  <label className="block text-[10px] font-extrabold text-red-700 dark:text-red-400 uppercase tracking-wider mb-1">
-                    What we planned <span className="text-brand">*</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Define objectives (e.g., Mount slide brackets, map sensors...)"
-                    value={formPlanned}
-                    onChange={(e) => setFormPlanned(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize min-h-[80px] font-mono dark:bg-slate-900 dark:border-slate-800"
-                    required
-                    id="input-planned"
-                  />
-                </div>
-
-                {/* What we accomplished */}
-                <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
-                  <label className="block text-[10px] font-extrabold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">
-                    What we accomplished <span className="text-brand">*</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Summarize results, mechanisms built/integrated, or autonomous tests passed..."
-                    value={formAccomplished}
-                    onChange={(e) => setFormAccomplished(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize min-h-[80px] font-mono dark:bg-slate-900 dark:border-slate-800"
-                    required
-                    id="input-accomplished"
-                  />
-                </div>
-              </div>
-
-              {/* Row 3: Problems, Next Plans and Images */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                {/* Problems and Solutions Found (spanning lg:col-span-5) */}
-                <div className="lg:col-span-5 bg-slate-50/50 p-2.5 border border-slate-200 rounded flex flex-col dark:border-slate-800">
-                  <div className="flex justify-between items-center mb-1.5">
-                    <label className="block text-[10px] font-extrabold text-rose-800 dark:text-rose-400 uppercase tracking-wider">
-                      Problems and Solutions Found
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleAddProblemField}
-                      className="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded hover:bg-slate-300 transition flex items-center gap-1.5 cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
-                      id="btn-add-blocker"
-                    >
-                      <PlusCircle className="w-3 h-3" />
-                      <span>Add Item</span>
-                    </button>
+                    {/* Field 3: Author Card */}
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1 dark:text-slate-400">
+                        Authorized Reporter
+                      </label>
+                      <div className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 flex items-center justify-between gap-3 text-xs shadow-3xs dark:bg-slate-800 dark:border-slate-800" id="display-auth-id-card">
+                        <div className="flex items-center gap-2 py-0.5">
+                          <div className="bg-emerald-500/10 dark:bg-emerald-400/10 p-1 rounded-full text-emerald-600 dark:text-emerald-400 shrink-0">
+                            <User className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <div className="font-extrabold text-slate-800 leading-tight text-[11px] truncate max-w-[120px] dark:text-slate-400">
+                              {currentUser?.name || formAuthor}
+                            </div>
+                            <div className="text-[8px] font-mono font-bold text-slate-500 uppercase tracking-wider leading-none dark:text-slate-400">
+                              {currentUser?.role === 'mentor' ? 'Coach' : currentUser?.role === 'captain' ? 'Captain' :  'Student Member'}
+                            </div>
+                          </div>
+                        </div>
+                        {currentUser && (
+                          <span className="bg-emerald-100/80 dark:bg-emerald-950/40 text-emerald-850 dark:text-emerald-350 font-mono text-[8px] font-black px-1.5 py-0.5 rounded border border-emerald-250 dark:border-emerald-900 select-none uppercase shadow-3xs shrink-0">
+                            Auth
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                    {formProblemsAndSolutions.map((paragraph, idx) => (
-                      <div key={idx} className="flex gap-2 items-start bg-white p-1.5 rounded border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
-                        <span className="bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 shrink-0 dark:bg-slate-950">
-                          {idx + 1}
-                        </span>
-                        <textarea
-                          rows={2}
-                          placeholder="Failure observed | Countermeasure/engineering correction applied"
-                          value={paragraph}
-                          onChange={(e) => handleUpdateProblemField(idx, e.target.value)}
-                          className="flex-1 bg-slate-50 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 focus:ring-1 focus:ring-brand leading-normal resize min-h-[48px] dark:bg-slate-800 dark:text-slate-400"
-                          id={`input-problem-${idx}`}
-                        />
+                  {/* Row 2: Textareas for Planning and Accomplishing */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* What we planned */}
+                    <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
+                      <label className="block text-[10px] font-extrabold text-red-700 dark:text-red-400 uppercase tracking-wider mb-1">
+                        What we planned <span className="text-brand">*</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Define objectives (e.g., Mount slide brackets, map sensors...)"
+                        value={formPlanned}
+                        onChange={(e) => setFormPlanned(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize min-h-[80px] font-mono dark:bg-slate-900 dark:border-slate-800"
+                        required={formEntryType === 'subteam'}
+                        id="input-planned"
+                      />
+                    </div>
+
+                    {/* What we accomplished */}
+                    <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
+                      <label className="block text-[10px] font-extrabold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">
+                        What we accomplished <span className="text-brand">*</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Summarize results, mechanisms built/integrated, or autonomous tests passed..."
+                        value={formAccomplished}
+                        onChange={(e) => setFormAccomplished(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize min-h-[80px] font-mono dark:bg-slate-900 dark:border-slate-800"
+                        required={formEntryType === 'subteam'}
+                        id="input-accomplished"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Problems, Next Plans and Images */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                    {/* Problems and Solutions Found (spanning lg:col-span-5) */}
+                    <div className="lg:col-span-5 bg-slate-50/50 p-2.5 border border-slate-200 rounded flex flex-col dark:border-slate-800">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <label className="block text-[10px] font-extrabold text-rose-800 dark:text-rose-400 uppercase tracking-wider">
+                          Problems and Solutions Found
+                        </label>
                         <button
                           type="button"
-                          onClick={() => handleRemoveProblemField(idx)}
-                          className="text-slate-400 hover:text-rose-600 p-1 rounded mt-1 cursor-pointer dark:text-slate-500"
-                          id={`btn-remove-problem-${idx}`}
+                          onClick={handleAddProblemField}
+                          className="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded hover:bg-slate-300 transition flex items-center gap-1.5 cursor-pointer dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-500"
+                          id="btn-add-blocker"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <PlusCircle className="w-3 h-3" />
+                          <span>Add Item</span>
                         </button>
                       </div>
-                    ))}
+
+                      <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                        {formProblemsAndSolutions.map((paragraph, idx) => (
+                          <div key={idx} className="flex gap-2 items-start bg-white p-1.5 rounded border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+                            <span className="bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 shrink-0 dark:bg-slate-950">
+                              {idx + 1}
+                            </span>
+                            <textarea
+                              rows={2}
+                              placeholder="Failure observed | Countermeasure/engineering correction applied"
+                              value={paragraph}
+                              onChange={(e) => handleUpdateProblemField(idx, e.target.value)}
+                              className="flex-1 bg-slate-50 text-xs rounded p-1.5 outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-800 focus:ring-1 focus:ring-brand leading-normal resize min-h-[48px] dark:bg-slate-800 dark:text-slate-400"
+                              id={`input-problem-${idx}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProblemField(idx)}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded mt-1 cursor-pointer dark:text-slate-500"
+                              id={`btn-remove-problem-${idx}`}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Plan next time (spanning lg:col-span-3) */}
+                    <div className="lg:col-span-3 bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
+                      <label className="block text-[10px] font-extrabold text-indigo-800 dark:text-indigo-400 uppercase tracking-wider mb-1">
+                        Plan for next time
+                      </label>
+                      <textarea
+                        rows={4}
+                        placeholder="Items to carry over and new objectives..."
+                        value={formPlanNextTime}
+                        onChange={(e) => setFormPlanNextTime(e.target.value)}
+                        className="w-full min-h-[100px] bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize font-mono font-medium dark:bg-slate-900 dark:border-slate-800"
+                        id="input-next-time"
+                      />
+                    </div>
+
+                    {/* Image upload (spanning lg:col-span-4) */}
+                    <div className="lg:col-span-4 border border-slate-200 rounded p-2.5 bg-slate-50 dark:bg-slate-800 dark:border-slate-800">
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
+                        Image Attachments
+                      </label>
+
+                      <div
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`border border-dashed rounded p-4 text-center cursor-pointer transition-colors ${
+                          isDraggingOver 
+                            ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200' 
+                            : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-600'
+                        }`}
+                        id="image-dropzone"
+                      >
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          multiple
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                        />
+                        
+                        {isImageProcessing ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded"></div>
+                            <span className="text-[10px] text-brand font-bold">OPTIMIZING PICTURE DATA...</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-1">
+                            <FileUp className="w-6 h-6 text-slate-400 group-hover:text-brand dark:text-slate-500" />
+                            <span className="text-xs font-bold text-slate-500 uppercase dark:text-slate-400">Drag image or browse</span>
+                            <span className="text-[9px] text-slate-400 uppercase tracking-tighter dark:text-slate-500">JPEG, PNG optimized automatically</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Micro Preview of Uploaded images */}
+                      {formImages.length > 0 && (
+                        <div className="grid grid-cols-4 gap-1.5 mt-2" id="grid-draft-images">
+                          {formImages.map((img) => (
+                            <div 
+                              key={img.id} 
+                              onClick={() => setExpandedImage({ 
+                                images: formImages.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                                currentIndex: formImages.findIndex(i => i.id === img.id)
+                              })}
+                              className="group relative border border-slate-300 rounded aspect-square overflow-hidden bg-slate-200 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-brand dark:bg-slate-800 dark:border-slate-800"
+                              title="Click to zoom preview"
+                            >
+                              <img 
+                                src={img.dataUrl} 
+                                alt={img.name} 
+                                className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 pointer-events-none"
+                                referrerPolicy="no-referrer"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveImage(img.id);
+                                }}
+                                className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-0.5 rounded shadow transition-all hover:scale-110 z-10 cursor-pointer"
+                                title="Delete image"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Plan next time (spanning lg:col-span-3) */}
-                <div className="lg:col-span-3 bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
-                  <label className="block text-[10px] font-extrabold text-indigo-800 dark:text-indigo-400 uppercase tracking-wider mb-1">
-                    Plan for next time
-                  </label>
-                  <textarea
-                    rows={4}
-                    placeholder="Items to carry over and new objectives..."
-                    value={formPlanNextTime}
-                    onChange={(e) => setFormPlanNextTime(e.target.value)}
-                    className="w-full min-h-[100px] bg-white border border-slate-200 rounded p-2 text-xs focus:ring-1 focus:ring-brand outline-none leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 resize font-mono font-medium dark:bg-slate-900 dark:border-slate-800"
-                    id="input-next-time"
-                  />
-                </div>
+                  {/* Attendance for subteams */}
+                  <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
+                      Subteam Attendance
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {accounts.map(acc => (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          onClick={() => handleToggleAttendee(acc.name)}
+                          className={`px-2 py-1 rounded text-[9px] font-bold ${formAttendees.includes(acc.name) ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
+                        >
+                          {acc.name}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Or add custom attendee..."
+                        value={customAttendee}
+                        onChange={(e) => setCustomAttendee(e.target.value)}
+                        className="flex-1 bg-white border border-slate-200 rounded p-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-brand outline-none dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomAttendee}
+                        className="bg-slate-900 text-white px-2.5 rounded text-xs font-bold cursor-pointer dark:bg-slate-950"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
 
-                {/* Image upload (spanning lg:col-span-4) */}
-                <div className="lg:col-span-4 border border-slate-200 rounded p-2.5 bg-slate-50 dark:bg-slate-800 dark:border-slate-800">
+              {/* Photo attachments for General Meeting if in meeting mode */}
+              {formEntryType === 'general_meeting' && (
+                <div className="border border-slate-200 rounded-xl p-3 bg-white dark:bg-slate-900 dark:border-slate-800">
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
-                    Image Attachments
+                    Meeting Photos &amp; Whiteboard Captures (Optional)
                   </label>
 
                   <div
@@ -6430,12 +7008,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`border border-dashed rounded p-4 text-center cursor-pointer transition-colors ${
+                    className={`border border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors ${
                       isDraggingOver 
-                        ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200' 
-                        : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-600'
+                        ? 'border-brand bg-brand-light text-brand' 
+                        : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100'
                     }`}
-                    id="image-dropzone"
                   >
                     <input
                       type="file"
@@ -6452,17 +7029,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         <span className="text-[10px] text-brand font-bold">OPTIMIZING PICTURE DATA...</span>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-1">
-                        <FileUp className="w-6 h-6 text-slate-400 group-hover:text-brand dark:text-slate-500" />
-                        <span className="text-xs font-bold text-slate-500 uppercase dark:text-slate-400">Drag image or browse</span>
-                        <span className="text-[9px] text-slate-400 uppercase tracking-tighter dark:text-slate-500">JPEG, PNG optimized automatically</span>
+                      <div className="flex items-center justify-center gap-2">
+                        <FileUp className="w-4 h-4 text-slate-400" />
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Attach whiteboard photos or meeting slides</span>
                       </div>
                     )}
                   </div>
 
-                  {/* Micro Preview of Uploaded images */}
                   {formImages.length > 0 && (
-                    <div className="grid grid-cols-4 gap-1.5 mt-2" id="grid-draft-images">
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
                       {formImages.map((img) => (
                         <div 
                           key={img.id} 
@@ -6470,8 +7045,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                             images: formImages.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
                             currentIndex: formImages.findIndex(i => i.id === img.id)
                           })}
-                          className="group relative border border-slate-300 rounded aspect-square overflow-hidden bg-slate-200 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-brand dark:bg-slate-800 dark:border-slate-800"
-                          title="Click to zoom preview"
+                          className="group relative border border-slate-300 rounded-lg aspect-square overflow-hidden bg-slate-200 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-purple-600 dark:bg-slate-800 dark:border-slate-700"
                         >
                           <img 
                             src={img.dataUrl} 
@@ -6486,51 +7060,15 @@ ${entry.planNextTime || '_No carry-over specified._'}
                               handleRemoveImage(img.id);
                             }}
                             className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-0.5 rounded shadow transition-all hover:scale-110 z-10 cursor-pointer"
-                            title="Delete image"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-3 h-3" />
                           </button>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Attendance */}
-              <div className="bg-slate-50/50 p-2.5 border border-slate-200 rounded dark:border-slate-800">
-                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
-                  Attendance
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {accounts.map(acc => (
-                    <button
-                      key={acc.id}
-                      type="button"
-                      onClick={() => handleToggleAttendee(acc.name)}
-                      className={`px-2 py-1 rounded text-[9px] font-bold ${formAttendees.includes(acc.name) ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
-                    >
-                      {acc.name}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    placeholder="Or add custom attendee..."
-                    value={customAttendee}
-                    onChange={(e) => setCustomAttendee(e.target.value)}
-                    className="flex-1 bg-white border border-slate-200 rounded p-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-brand outline-none dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddCustomAttendee}
-                    className="bg-slate-900 text-white px-2.5 rounded text-xs font-bold cursor-pointer dark:bg-slate-950"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
+              )}
 
               {/* Form Controls */}
               <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -6712,10 +7250,17 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       >
                         <div className="flex justify-between items-start gap-1">
                           <div className="flex flex-wrap gap-1 items-center">
-                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase font-mono flex items-center gap-0.5 shrink-0 ${activeBadgeClass}`}>
-                              <SIcon className="w-2 h-2" />
-                              {entry.subteam}
-                            </span>
+                            {entry.entryType === 'general_meeting' ? (
+                              <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded uppercase font-mono flex items-center gap-0.5 shrink-0 bg-purple-600 text-white shadow-xs">
+                                <Users className="w-2 h-2" />
+                                Meeting
+                              </span>
+                            ) : (
+                              <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase font-mono flex items-center gap-0.5 shrink-0 ${activeBadgeClass}`}>
+                                <SIcon className="w-2 h-2" />
+                                {entry.subteam}
+                              </span>
+                            )}
                             
                             {/* Workflow status badge with elevated high contrast color theme on selected state */}
                             {entry.status === 'Approved' && (
@@ -6792,7 +7337,11 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         </div>
 
                         <div className={`text-xs font-bold truncate mt-1 ${isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-300'}`}>
-                          {entry.planned}
+                          {entry.entryType === 'general_meeting' ? (
+                            <span>📋 {entry.agenda || entry.planned || 'General Meeting'}</span>
+                          ) : (
+                            entry.planned
+                          )}
                         </div>
 
                         <div className={`flex justify-between items-center text-[9px] border-t mt-1.5 pt-1 ${
@@ -6890,7 +7439,23 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     className="print-page bg-slate-50 border border-slate-200 p-4 rounded text-slate-900 flex-1 flex flex-col gap-4 relative overflow-y-auto print:bg-white print:border-none print:p-0 transition-colors dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                     id="judges-proof-sheet"
                   >
-                    
+                    {selectedEntry.entryType === 'general_meeting' ? (
+                      <GeneralMeetingView
+                        entry={selectedEntry}
+                        refCode={getEntryReferenceCode(selectedEntry, entries)}
+                        onToggleTodo={(todoId) => handleToggleGeneralMeetingTodo(selectedEntry.id, todoId)}
+                        onImageClick={(idx) => {
+                          const imgs = selectedEntry.images || [];
+                          if (imgs.length > 0) {
+                            setExpandedImage({
+                              images: imgs.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                              currentIndex: idx
+                            });
+                          }
+                        }}
+                      />
+                    ) : (
+                      <>
                     {/* FTC Header Plate */}
                     <div className="border-b-4 border-slate-900 pb-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -7088,17 +7653,19 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
                     </div>
 
-                    {/* Physical signature box designed specifically for judges approval */}
-                    <div className="mt-auto pt-3 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2 dark:text-slate-400 dark:border-slate-800">
-                      <span>FTC CENTRALIZED LEDGER IDENTIFIER AND PROOF — VERIFIED LOCAL SYNC</span>
-                      {selectedEntry.status === 'Approved' ? (
-                        <span className="shrink-0 text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center gap-1 uppercase tracking-wider">
-                          ✔️ SIGNED OFF BY MENTOR: {selectedEntry.reviewer || 'TESTMENTOR'}
-                        </span>
-                      ) : (
-                        <span className="shrink-0 border-b border-slate-800 w-[200px] text-right">SIGNATURE: ___________________</span>
-                      )}
-                    </div>
+                      {/* Physical signature box designed specifically for judges approval */}
+                      <div className="mt-auto pt-3 border-t border-dashed border-slate-400 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono text-slate-500 gap-2 dark:text-slate-400 dark:border-slate-800">
+                        <span>FTC CENTRALIZED LEDGER IDENTIFIER AND PROOF — VERIFIED LOCAL SYNC</span>
+                        {selectedEntry.status === 'Approved' ? (
+                          <span className="shrink-0 text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center gap-1 uppercase tracking-wider">
+                            ✔️ SIGNED OFF BY MENTOR: {selectedEntry.reviewer || 'TESTMENTOR'}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 border-b border-slate-800 w-[200px] text-right">SIGNATURE: ___________________</span>
+                        )}
+                      </div>
+                      </>
+                    )}
 
                   </div>
 
@@ -8136,178 +8703,6 @@ FTC #6567 Captains & Mentors`
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Student/User Settings Modal */}
-      <AnimatePresence>
-        {isSettingsOpen && currentUser && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] flex flex-col items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md no-print"
-            onClick={() => setIsSettingsOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 15, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 15, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-md bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden flex flex-col dark:bg-slate-900 dark:border-slate-800"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-850 flex justify-between items-center shrink-0 dark:bg-slate-950">
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-brand" />
-                  <span className="text-xs font-mono font-extrabold uppercase tracking-wider text-slate-200">
-                    Account Profile &amp; Security Settings
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer dark:text-slate-500"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Form Body */}
-              <form onSubmit={handleSaveSettings} className="flex flex-col flex-1 overflow-hidden">
-                <div className="p-5 flex flex-col gap-4 text-slate-800 overflow-y-auto max-h-[70vh] dark:text-slate-400">
-                  <p className="text-[11px] text-slate-500 leading-relaxed font-sans mb-1 border-b border-slate-150 pb-3 dark:text-slate-400">
-                    Update your local system profile information. Changes to credentials will require you to log in with the new details on subsequent sessions.
-                  </p>
-
-                  {/* Name field */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
-                      <span>Full Name</span>
-                      <span className="text-brand">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Your First & Last Name"
-                      value={settingsName}
-                      onChange={(e) => setSettingsName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                    />
-                  </div>
-
-                  {/* School Email field */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
-                      <span>School Email Address</span>
-                      <span className="text-brand">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="e.g. name@school.edu"
-                      value={settingsEmail}
-                      onChange={(e) => setSettingsEmail(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-805 transition-all font-medium dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                    />
-                  </div>
-
-                  {/* Password / School ID field */}
-                  <div className="flex flex-col gap-1">
-                    <div className="flex justify-between items-baseline">
-                      <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
-                        <span>Password / School ID (Lunch #)</span>
-                        <span className="text-brand">*</span>
-                      </label>
-                    </div>
-                    <input
-                      type="password"
-                      disabled
-                      placeholder="e.g. 558291"
-                      value={settingsSchoolId}
-                      className="w-full bg-slate-100 border border-slate-250 rounded px-2.5 py-1.5 text-xs text-slate-500 outline-none transition-all font-medium font-mono cursor-not-allowed animate-none dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleRequestReset(currentUser.schoolEmail);
-                        setIsSettingsOpen(false);
-                        setCurrentUser(null);
-                        localStorage.removeItem('ftc_current_user');
-                      }}
-                      className="mt-1.5 w-full bg-slate-50 hover:bg-slate-100 text-rose-600 dark:text-rose-450 text-[10px] font-black tracking-wider uppercase py-2 px-3 rounded border border-dashed border-rose-300 dark:border-rose-800 flex items-center justify-center gap-1.5 transition-all text-center cursor-pointer dark:bg-slate-800 dark:hover:bg-slate-700"
-                    >
-                      <Mail className="w-3.5 h-3.5 animate-pulse text-rose-500" /> <span>Send Password Reset Email to Change Password</span>
-                    </button>
-                    <span className="text-[9px] text-slate-450 leading-normal mt-0.5 dark:text-slate-400">
-                      To safeguard account profiles, password (school ID) changes must be initiated via password reset authentication tokens dispatched over email.
-                    </span>
-                  </div>
-
-                  {/* Primary Subteam */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
-                      <span>Primary Subteam</span>
-                      <span className="text-brand">*</span>
-                    </label>
-                    <select
-                      value={settingsPrimary}
-                      onChange={(e) => setSettingsPrimary(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                    >
-                      <option value="Design/Build/Fabrication">⚙️ Design/Build/Fabrication Subteam</option>
-                      <option value="Programming">💻 Programming Subteam</option>
-                      <option value="Outreach">🌍 Outreach Subteam</option>
-                      <option value="Business & Media">📈 Business &amp; Media</option>
-                      {currentUser?.role !== 'member' && (
-                        <>
-                          <option value="Mentor">🛡️ Coach / Mentor</option>
-                          <option value="Lead/Captain">👑 Subteam Lead / Captain</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-
-                  {/* Secondary Subteam */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 dark:text-slate-400">
-                      <span>Secondary Subteam</span>
-                      <span className="text-brand">*</span>
-                    </label>
-                    <select
-                      value={settingsSecondary}
-                      onChange={(e) => setSettingsSecondary(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 transition-all font-bold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
-                    >
-                      <option value="None">🚫 None — Primary Focus Only</option>
-                      <option value="Inspire">✨ Inspire</option>
-                      <option value="Strategy">📊 Strategy</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Footer buttons */}
-                <div className="bg-slate-50 px-5 py-3.5 border-t border-slate-150 flex justify-end gap-2 shrink-0 dark:bg-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setIsSettingsOpen(false)}
-                    className="px-3.5 py-2 hover:bg-slate-200 text-slate-500 rounded-md text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer dark:text-slate-400 dark:hover:bg-slate-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-brand hover:bg-brand-hover text-white font-extrabold text-[11px] py-2 px-4 rounded-md uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" /> Save Changes
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-
 
       {/* Mentor-Only XP Audit Log Ledger Modal */}
       <AnimatePresence>
@@ -9458,6 +9853,8 @@ FTC #6567 Captains & Mentors`
 
     <MobileMenuDrawer 
       isOpen={isMobileMenuOpen}
+      hiddenWorkspaces={hiddenWorkspaces}
+      disabledModules={disabledModules}
       onClose={() => setIsMobileMenuOpen(false)}
       currentUser={currentUser}
       userGamification={userGamification}
