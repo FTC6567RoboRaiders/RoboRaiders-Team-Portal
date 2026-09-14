@@ -2017,16 +2017,139 @@ export default function App() {
 
 
   // Directory approvals and credentials actions
+  const handleSendPasswordReset = async (user: UserAccount) => {
+    try {
+      let authResetSent = false;
+      try {
+        await sendPasswordResetEmail(auth, user.schoolEmail);
+        authResetSent = true;
+      } catch (authErr: any) {
+        console.warn('Firebase Auth sendPasswordResetEmail notice:', authErr?.code || authErr?.message);
+      }
+
+      const emailSubject = `[FTC #6567] Welcome to the Team! Set Up Your Account Password`;
+      const emailBody = `Hello ${user.name},
+
+Your official FTC Team #6567 RoboRaiders Workspace account has been activated by the Mentors & Captains!
+
+Account Credentials Summary:
+• Name: ${user.name}
+• Registered Email: ${user.schoolEmail}
+• Primary Discipline: ${formatSubteamLabel(user.primarySubteam)}
+• Assigned Role: ${user.role === 'mentor' ? 'Coach / Mentor' : user.role === 'captain' ? 'Subteam Lead / Captain' : 'Student Team Member'}
+• Initial Access Key / School ID: ${user.schoolId || 'N/A'}
+
+${authResetSent 
+  ? 'A password reset email has been dispatched to your email address from Firebase Auth. Please check your inbox and click the reset link to create your password.' 
+  : 'To configure your permanent password, open the RoboRaiders portal, click "Forgot Password? Request Reset Code", and enter your registered email address (' + user.schoolEmail + ') to complete your security onboarding.'}
+
+Welcome to FTC #6567 RoboRaiders!
+
+Best regards,
+FTC #6567 Captains & Mentors`;
+
+      sendEmailNotification(user.schoolEmail, emailSubject, emailBody);
+
+      const updateData = {
+        resetLinkStatus: 'sent',
+        resetLinkSentAt: Date.now()
+      };
+      await updateDoc(doc(db, 'users', user.id), updateData);
+
+      showToast(`Password reset link dispatched to ${user.schoolEmail}!`, 'success');
+    } catch (err: any) {
+      showToast(`Failed to send password reset: ${err.message}`, 'danger');
+    }
+  };
+
+  const handleAdminCreateAccount = async (accountData: {
+    name: string;
+    schoolEmail: string;
+    schoolId: string;
+    primarySubteam: any;
+    secondarySubteam: any;
+    role: 'member' | 'captain' | 'mentor';
+    leadership: 'None' | 'Captain' | 'Subteam leader';
+    activationMode: 'immediate' | 'scheduled';
+    activationScheduledAt?: number;
+    resetLinkMode: 'automatic' | 'scheduled' | 'manual';
+    resetLinkScheduledAt?: number;
+  }): Promise<boolean> => {
+    try {
+      const emailLower = accountData.schoolEmail.trim().toLowerCase();
+      const existing = accounts.find(a => a.schoolEmail.toLowerCase() === emailLower);
+      if (existing) {
+        showToast(`An account with email ${accountData.schoolEmail} already exists!`, 'danger');
+        return false;
+      }
+
+      const uid = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const isImmediate = accountData.activationMode === 'immediate';
+      const status: 'Approved' | 'Pending' = isImmediate ? 'Approved' : 'Pending';
+
+      let resetLinkStatus: 'pending' | 'scheduled' | 'sent' | 'manual' = 'manual';
+      if (accountData.resetLinkMode === 'scheduled') {
+        resetLinkStatus = 'scheduled';
+      } else if (accountData.resetLinkMode === 'automatic') {
+        resetLinkStatus = isImmediate ? 'sent' : 'pending';
+      }
+
+      const newAcc: UserAccount = {
+        id: uid,
+        name: accountData.name.trim(),
+        schoolEmail: accountData.schoolEmail.trim(),
+        schoolId: accountData.schoolId.trim() || 'N/A',
+        primarySubteam: accountData.primarySubteam,
+        secondarySubteam: accountData.secondarySubteam,
+        role: accountData.role,
+        leadership: accountData.leadership,
+        status,
+        createdAt: Date.now(),
+        activationMode: accountData.activationMode,
+        activationScheduledAt: accountData.activationScheduledAt,
+        resetLinkMode: accountData.resetLinkMode,
+        resetLinkScheduledAt: accountData.resetLinkScheduledAt,
+        resetLinkStatus,
+        createdBy: currentUser?.name || currentUser?.schoolEmail || 'Captain/Mentor'
+      };
+
+      await setDoc(doc(db, 'users', uid), cleanForFirestore(newAcc));
+
+      if (isImmediate) {
+        if (accountData.resetLinkMode === 'automatic') {
+          await handleSendPasswordReset(newAcc);
+        } else if (accountData.resetLinkMode === 'scheduled') {
+          const schedText = accountData.resetLinkScheduledAt ? new Date(accountData.resetLinkScheduledAt).toLocaleString() : 'scheduled time';
+          showToast(`Account created for ${newAcc.name}! Password reset link scheduled for ${schedText}.`, 'success');
+        } else {
+          showToast(`Account created & activated for ${newAcc.name}! Password reset link set to manual.`, 'success');
+        }
+      } else {
+        const schedText = accountData.activationScheduledAt ? new Date(accountData.activationScheduledAt).toLocaleString() : 'scheduled time';
+        showToast(`Account created for ${newAcc.name}! Activation scheduled for ${schedText}.`, 'success');
+      }
+
+      return true;
+    } catch (err: any) {
+      showToast(`Account creation failed: ${err.message}`, 'danger');
+      return false;
+    }
+  };
+
   const handleApproveUser = async (userId: string) => {
     const acc = accounts.find(a => a.id === userId);
     if (!acc) return;
     try {
       const updatedUser = { ...acc, status: 'Approved' } as UserAccount;
-      await setDoc(doc(db, 'users', acc.id), updatedUser);
-      sendEmailNotification(
-        acc.schoolEmail,
-        `[FTC #6567] Access Request APPROVED: Welcome to the Team!`,
-        `Hi ${acc.name},
+      await setDoc(doc(db, 'users', acc.id), cleanForFirestore(updatedUser));
+      
+      if (acc.resetLinkMode === 'automatic' && acc.resetLinkStatus !== 'sent') {
+        await handleSendPasswordReset(updatedUser);
+      } else {
+        sendEmailNotification(
+          acc.schoolEmail,
+          `[FTC #6567] Access Request APPROVED: Welcome to the Team!`,
+          `Hi ${acc.name},
 
 Your access request to the FTC #6567 Workspace has been APPROVED by the Mentors/Captains.
 
@@ -2036,8 +2159,9 @@ Best of luck on the build season! Go RoboRaiders!
 
 Best regards,
 FTC #6567 Captains & Mentors`
-      );
-      showToast(`Access APPROVED for ${acc.name}!`, 'success');
+        );
+        showToast(`Access APPROVED for ${acc.name}!`, 'success');
+      }
     } catch (e: any) {
       showToast(`Approval failed: ${e.message}`, 'danger');
     }
@@ -2048,7 +2172,7 @@ FTC #6567 Captains & Mentors`
     if (!acc) return;
     try {
       const updatedUser = { ...acc, status: 'Rejected' } as UserAccount;
-      await setDoc(doc(db, 'users', acc.id), updatedUser);
+      await setDoc(doc(db, 'users', acc.id), cleanForFirestore(updatedUser));
       showToast(`Access REJECTED for ${acc.name}.`, 'danger');
     } catch (e: any) {
       showToast(`Rejection failed: ${e.message}`, 'danger');
@@ -2060,12 +2184,69 @@ FTC #6567 Captains & Mentors`
     if (!acc) return;
     try {
       const updatedUser = { ...acc, leadership } as UserAccount;
-      await setDoc(doc(db, 'users', acc.id), updatedUser);
+      await setDoc(doc(db, 'users', acc.id), cleanForFirestore(updatedUser));
       showToast(`Updated leadership for ${acc.name} to ${leadership}.`, 'success');
     } catch (err: any) {
       showToast(`Failed to update leadership status: ${err.message}`, 'danger');
     }
   };
+
+  // Background worker for scheduled account activations and scheduled password reset links
+  useEffect(() => {
+    if (!isUserAdminOrMentor || accounts.length === 0) return;
+
+    const checkScheduledEvents = async () => {
+      const now = Date.now();
+
+      for (const acc of accounts) {
+        // 1. Scheduled Activation
+        if (
+          acc.activationMode === 'scheduled' && 
+          acc.status === 'Pending' && 
+          acc.activationScheduledAt && 
+          acc.activationScheduledAt <= now
+        ) {
+          try {
+            console.log(`[Scheduler] Activating scheduled account ${acc.name} (${acc.id})`);
+            const updatedAcc: UserAccount = {
+              ...acc,
+              status: 'Approved'
+            };
+            await updateDoc(doc(db, 'users', acc.id), { status: 'Approved' });
+            
+            if (acc.resetLinkMode === 'automatic' && acc.resetLinkStatus !== 'sent') {
+              await handleSendPasswordReset(updatedAcc);
+            }
+            showToast(`Scheduled activation triggered for ${acc.name}!`, 'info');
+          } catch (e) {
+            console.warn('Scheduled activation trigger error:', e);
+          }
+        }
+
+        // 2. Scheduled Password Reset Link Dispatch
+        if (
+          acc.status === 'Approved' && 
+          acc.resetLinkMode === 'scheduled' && 
+          acc.resetLinkStatus === 'scheduled' && 
+          acc.resetLinkScheduledAt && 
+          acc.resetLinkScheduledAt <= now
+        ) {
+          try {
+            console.log(`[Scheduler] Dispatching scheduled password reset link to ${acc.name} (${acc.id})`);
+            await handleSendPasswordReset(acc);
+            showToast(`Scheduled password reset link dispatched to ${acc.name}!`, 'info');
+          } catch (e) {
+            console.warn('Scheduled reset link trigger error:', e);
+          }
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkScheduledEvents, 15000);
+    checkScheduledEvents();
+
+    return () => clearInterval(intervalId);
+  }, [accounts, isUserAdminOrMentor]);
 
   // Compute discovered ranks per guild based on approved users to gamify the ladder discoveries
   const guildDiscoveries = React.useMemo(() => {
@@ -6275,6 +6456,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
             }
           }}
           formatSubteamLabel={formatSubteamLabel}
+          onCreateAccount={handleAdminCreateAccount}
+          onSendPasswordReset={handleSendPasswordReset}
         />
       )}
 

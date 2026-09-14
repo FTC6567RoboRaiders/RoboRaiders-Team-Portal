@@ -14,7 +14,14 @@
         "role": { "type": "string", "enum": ["member", "mentor_captain", "mentor", "captain"], "description": "Team permission tier." },
         "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"], "description": "Dashboard authorization state." },
         "createdAt": { "type": "number", "format": "utc-millisec", "description": "Creation timestamp in epoch." },
-        "leadership": { "type": "string", "description": "Optional leadership title such as Captain or Subteam Leader." }
+        "leadership": { "type": "string", "description": "Optional leadership title such as Captain or Subteam Leader." },
+        "activationMode": { "type": "string", "enum": ["immediate", "scheduled"], "description": "Whether account activates immediately or at a set scheduled time." },
+        "activationScheduledAt": { "type": "number", "description": "Scheduled activation timestamp in epoch ms." },
+        "resetLinkMode": { "type": "string", "enum": ["automatic", "scheduled", "manual"], "description": "How password reset link should be dispatched." },
+        "resetLinkScheduledAt": { "type": "number", "description": "Scheduled password reset link dispatch timestamp in epoch ms." },
+        "resetLinkSentAt": { "type": "number", "description": "Timestamp when password reset link was sent in epoch ms." },
+        "resetLinkStatus": { "type": "string", "enum": ["pending", "scheduled", "sent", "manual"], "description": "Status of password reset link." },
+        "createdBy": { "type": "string", "description": "Name or email of captain/mentor who created the account." }
       },
       "required": ["id", "name", "schoolEmail", "schoolId", "primarySubteam", "secondarySubteam", "role", "status", "createdAt"]
     },

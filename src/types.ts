@@ -98,6 +98,13 @@ export interface UserAccount {
   createdAt: number;
   leadership?: 'None' | 'Captain' | 'Subteam leader';
   hasCustomPassword?: boolean;
+  activationMode?: 'immediate' | 'scheduled';
+  activationScheduledAt?: number; // epoch ms
+  resetLinkMode?: 'automatic' | 'scheduled' | 'manual';
+  resetLinkScheduledAt?: number; // epoch ms
+  resetLinkSentAt?: number; // epoch ms
+  resetLinkStatus?: 'pending' | 'scheduled' | 'sent' | 'manual';
+  createdBy?: string;
 }
 
 export interface DispatchedEmail {

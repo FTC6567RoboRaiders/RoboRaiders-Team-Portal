@@ -17,7 +17,15 @@ import {
   Printer,
   FileText,
   LayoutTemplate,
-  Trash2
+  Trash2,
+  UserPlus,
+  Key,
+  Mail,
+  Calendar,
+  Send,
+  RefreshCw,
+  AlertCircle,
+  Check
 } from 'lucide-react';
 import { UserAccount, JournalEntry, TimeEntry, KanbanTask, OutreachEvent, XPAdjustment } from '../types';
 import { computeUserGamification, calculateJournalQualityScore } from '../utils/gamification';
@@ -37,6 +45,20 @@ interface MemberDirectoryProps {
   onStartEditProfile: (userName: string) => void;
   onDeleteUser: (userId: string, userName: string) => Promise<void>;
   formatSubteamLabel: (subteam: any) => string;
+  onCreateAccount?: (accountData: {
+    name: string;
+    schoolEmail: string;
+    schoolId: string;
+    primarySubteam: any;
+    secondarySubteam: any;
+    role: 'member' | 'captain' | 'mentor';
+    leadership: 'None' | 'Captain' | 'Subteam leader';
+    activationMode: 'immediate' | 'scheduled';
+    activationScheduledAt?: number;
+    resetLinkMode: 'automatic' | 'scheduled' | 'manual';
+    resetLinkScheduledAt?: number;
+  }) => Promise<boolean>;
+  onSendPasswordReset?: (user: UserAccount) => Promise<void>;
 }
 
 export default function MemberDirectory({
@@ -53,7 +75,9 @@ export default function MemberDirectory({
   onUpdateLeadership,
   onStartEditProfile,
   onDeleteUser,
-  formatSubteamLabel
+  formatSubteamLabel,
+  onCreateAccount,
+  onSendPasswordReset
 }: MemberDirectoryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSubteam, setFilterSubteam] = useState<string>('All');
@@ -67,6 +91,129 @@ export default function MemberDirectory({
     // Default to first user if available
     return accounts.find(a => a.status === 'Approved') || null;
   });
+
+  // Helper for generating datetime-local strings
+  const getFutureDateTimeLocal = (hoursAhead: number): string => {
+    const d = new Date(Date.now() + hoursAhead * 3600 * 1000);
+    const tzOffset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+  };
+
+  // Create Account Modal State
+  const [isCreateAccountModalOpen, setIsCreateAccountModalOpen] = useState(false);
+  const [newAccName, setNewAccName] = useState('');
+  const [newAccEmail, setNewAccEmail] = useState('');
+  const [newAccSchoolId, setNewAccSchoolId] = useState('');
+  const [newAccPrimarySubteam, setNewAccPrimarySubteam] = useState<any>('Design/Build/Fabrication');
+  const [newAccSecondarySubteam, setNewAccSecondarySubteam] = useState<any>('None');
+  const [newAccRole, setNewAccRole] = useState<'member' | 'captain' | 'mentor'>('member');
+  const [newAccLeadership, setNewAccLeadership] = useState<'None' | 'Captain' | 'Subteam leader'>('None');
+  const [newAccActivationMode, setNewAccActivationMode] = useState<'immediate' | 'scheduled'>('immediate');
+  const [newAccActivationDateTime, setNewAccActivationDateTime] = useState<string>(() => getFutureDateTimeLocal(1));
+  const [newAccResetLinkMode, setNewAccResetLinkMode] = useState<'automatic' | 'scheduled' | 'manual'>('automatic');
+  const [newAccResetLinkDateTime, setNewAccResetLinkDateTime] = useState<string>(() => getFutureDateTimeLocal(2));
+  const [isSubmittingAccount, setIsSubmittingAccount] = useState(false);
+  const [createAccountError, setCreateAccountError] = useState<string | null>(null);
+  const [isSendingResetId, setIsSendingResetId] = useState<string | null>(null);
+
+  const generateTempKey = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let key = 'RR-';
+    for (let i = 0; i < 6; i++) {
+      key += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewAccSchoolId(key);
+  };
+
+  const handleResetCreateAccountForm = () => {
+    setNewAccName('');
+    setNewAccEmail('');
+    setNewAccSchoolId('');
+    setNewAccPrimarySubteam('Design/Build/Fabrication');
+    setNewAccSecondarySubteam('None');
+    setNewAccRole('member');
+    setNewAccLeadership('None');
+    setNewAccActivationMode('immediate');
+    setNewAccActivationDateTime(getFutureDateTimeLocal(1));
+    setNewAccResetLinkMode('automatic');
+    setNewAccResetLinkDateTime(getFutureDateTimeLocal(2));
+    setCreateAccountError(null);
+  };
+
+  const handleSubmitCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateAccountError(null);
+
+    const trimmedName = newAccName.trim();
+    const trimmedEmail = newAccEmail.trim();
+
+    if (!trimmedName) {
+      setCreateAccountError("Please provide the member's full name.");
+      return;
+    }
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      setCreateAccountError('Please provide a valid school or team email address.');
+      return;
+    }
+
+    const emailLower = trimmedEmail.toLowerCase();
+    if (accounts.some(a => a.schoolEmail.toLowerCase() === emailLower)) {
+      setCreateAccountError(`An account with email "${trimmedEmail}" already exists in the roster.`);
+      return;
+    }
+
+    let activationScheduledAt: number | undefined = undefined;
+    if (newAccActivationMode === 'scheduled') {
+      const actTime = new Date(newAccActivationDateTime).getTime();
+      if (isNaN(actTime) || actTime <= Date.now()) {
+        setCreateAccountError('Please select a future date and time for account activation.');
+        return;
+      }
+      activationScheduledAt = actTime;
+    }
+
+    let resetLinkScheduledAt: number | undefined = undefined;
+    if (newAccResetLinkMode === 'scheduled') {
+      const resetTime = new Date(newAccResetLinkDateTime).getTime();
+      if (isNaN(resetTime) || resetTime <= Date.now()) {
+        setCreateAccountError('Please select a future date and time for sending the password reset link.');
+        return;
+      }
+      if (activationScheduledAt && resetTime < activationScheduledAt) {
+        setCreateAccountError('The password reset link cannot be scheduled before the account is activated.');
+        return;
+      }
+      resetLinkScheduledAt = resetTime;
+    }
+
+    setIsSubmittingAccount(true);
+    try {
+      if (onCreateAccount) {
+        const success = await onCreateAccount({
+          name: trimmedName,
+          schoolEmail: trimmedEmail,
+          schoolId: newAccSchoolId.trim() || 'N/A',
+          primarySubteam: newAccPrimarySubteam,
+          secondarySubteam: newAccSecondarySubteam,
+          role: newAccRole,
+          leadership: newAccLeadership,
+          activationMode: newAccActivationMode,
+          activationScheduledAt,
+          resetLinkMode: newAccResetLinkMode,
+          resetLinkScheduledAt
+        });
+
+        if (success) {
+          handleResetCreateAccountForm();
+          setIsCreateAccountModalOpen(false);
+        }
+      }
+    } catch (err: any) {
+      setCreateAccountError(err.message || 'Failed to create account.');
+    } finally {
+      setIsSubmittingAccount(false);
+    }
+  };
 
   const isMentorOrCaptain = currentUser?.role === 'mentor' || currentUser?.role === 'captain' || currentUser?.schoolEmail === 'ftc6567@gmail.com' || currentUser?.schoolEmail === 'admin@school.edu';
 
@@ -250,7 +397,20 @@ export default function MemberDirectory({
           </p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {isMentorOrCaptain && (
+            <button
+              onClick={() => {
+                handleResetCreateAccountForm();
+                setIsCreateAccountModalOpen(true);
+              }}
+              className="bg-brand hover:bg-brand-hover text-white font-extrabold px-3.5 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md"
+              title="Create Account for Team Member or Mentor"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Create Account</span>
+            </button>
+          )}
           <button
             onClick={() => setIsRosterExportModalOpen(true)}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md"
@@ -313,8 +473,30 @@ export default function MemberDirectory({
                           <div>Role Declared: <strong>{acc.role === 'member' ? 'Student Specialist' : acc.role}</strong></div>
                           <div>Primary Subteam Area: <strong>{formatSubteamLabel(acc.primarySubteam)}</strong></div>
                           {acc.secondarySubteam !== 'None' && <div>Secondary Focus: <strong>{formatSubteamLabel(acc.secondarySubteam)}</strong></div>}
+                          {acc.createdBy && <div>Created by: <strong className="text-indigo-600 dark:text-indigo-400">{acc.createdBy}</strong></div>}
                         </div>
-                        <div className="mt-2.5 flex items-center gap-1.5 pt-1.5 border-t border-amber-100 dark:border-amber-955 text-xs text-slate-550 dark:text-slate-300">
+
+                        {acc.activationMode === 'scheduled' && acc.activationScheduledAt && (
+                          <div className="mt-1 flex items-center gap-1 text-[10px] font-mono text-amber-800 dark:text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
+                            <Calendar className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            <span>Auto-Activates: <strong>{new Date(acc.activationScheduledAt).toLocaleString()}</strong></span>
+                          </div>
+                        )}
+
+                        {acc.resetLinkMode && (
+                          <div className="mt-0.5 flex items-center gap-1 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                            <Key className="w-3 h-3 text-slate-400" />
+                            <span>
+                              Reset Link: {
+                                acc.resetLinkMode === 'automatic' ? 'Automatic upon activation' :
+                                acc.resetLinkMode === 'scheduled' && acc.resetLinkScheduledAt ? `Scheduled for ${new Date(acc.resetLinkScheduledAt).toLocaleString()}` :
+                                'Manual dispatch by Captain/Mentor'
+                              }
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="mt-2 flex items-center gap-1.5 pt-1.5 border-t border-amber-100 dark:border-amber-955 text-xs text-slate-550 dark:text-slate-300">
                           <span className="font-bold">Initial Leadership Status:</span>
                           <select
                             value={acc.leadership || 'None'}
@@ -340,9 +522,10 @@ export default function MemberDirectory({
                         <button
                           onClick={() => onApproveUser(acc.id)}
                           className="bg-emerald-600 hover:bg-emerald-505 text-white font-extrabold p-2 rounded-md text-[11px] uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all border-0 shadow-md"
+                          title={acc.resetLinkMode === 'automatic' ? 'Activate account and immediately dispatch password reset email' : 'Activate account now'}
                         >
                           <CheckCircle className="w-3.5 h-3.5" />
-                          <span>Approve</span>
+                          <span>{acc.resetLinkMode === 'automatic' ? 'Activate & Send Link' : 'Approve & Activate'}</span>
                         </button>
                         <button
                           onClick={() => onRejectUser(acc.id)}
@@ -501,6 +684,58 @@ export default function MemberDirectory({
                               <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-md font-mono text-[9px] font-black uppercase tracking-wider">
                                 {acc.leadership}
                               </span>
+                            </div>
+                          )}
+
+                          {/* Reset Link Status Badge */}
+                          {acc.resetLinkStatus === 'sent' && (
+                            <div className="flex items-center gap-1 text-[9px] font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              <Mail className="w-3 h-3 shrink-0" />
+                              <span className="truncate">Reset Sent {acc.resetLinkSentAt ? `(${new Date(acc.resetLinkSentAt).toLocaleDateString()})` : ''}</span>
+                            </div>
+                          )}
+
+                          {acc.resetLinkStatus === 'scheduled' && acc.resetLinkScheduledAt && (
+                            <div className="flex items-center justify-between gap-1 text-[9px] font-mono text-amber-800 dark:text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                              <span className="flex items-center gap-1 truncate">
+                                <Clock className="w-3 h-3 shrink-0" />
+                                <span className="truncate">Reset Sched: {new Date(acc.resetLinkScheduledAt).toLocaleDateString()}</span>
+                              </span>
+                              {isMentorOrCaptain && onSendPasswordReset && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsSendingResetId(acc.id);
+                                    onSendPasswordReset(acc).finally(() => setIsSendingResetId(null));
+                                  }}
+                                  disabled={isSendingResetId === acc.id}
+                                  className="text-[9px] font-extrabold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer ml-1 shrink-0"
+                                >
+                                  {isSendingResetId === acc.id ? '...' : 'Send Now'}
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {acc.resetLinkStatus === 'manual' && isMentorOrCaptain && onSendPasswordReset && (
+                            <div className="flex items-center justify-between gap-1 text-[9px] font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
+                              <span className="flex items-center gap-1">
+                                <Key className="w-3 h-3 shrink-0" />
+                                <span>Reset: Manual</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsSendingResetId(acc.id);
+                                  onSendPasswordReset(acc).finally(() => setIsSendingResetId(null));
+                                }}
+                                disabled={isSendingResetId === acc.id}
+                                className="text-[9px] font-extrabold text-indigo-700 dark:text-indigo-300 hover:underline cursor-pointer ml-1 shrink-0"
+                              >
+                                {isSendingResetId === acc.id ? '...' : 'Send Link'}
+                              </button>
                             </div>
                           )}
                         </div>
@@ -747,6 +982,68 @@ export default function MemberDirectory({
                         Mentor Security Controls
                       </span>
                       <div className="grid grid-cols-1 gap-2 mt-2">
+                        {/* Password Reset & Security Management Card */}
+                        <div className="border border-indigo-150 dark:border-indigo-900/30 p-2.5 rounded-lg bg-indigo-50/40 dark:bg-indigo-950/20 text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5 text-[11px]">
+                              <Key className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                              <span>Password Reset & Auth</span>
+                            </span>
+                            {selectedUserForAudit.resetLinkStatus === 'sent' && (
+                              <span className="text-[9px] font-mono bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 px-1.5 py-0.5 rounded font-bold">
+                                Dispatched
+                              </span>
+                            )}
+                            {selectedUserForAudit.resetLinkStatus === 'scheduled' && (
+                              <span className="text-[9px] font-mono bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 px-1.5 py-0.5 rounded font-bold">
+                                Scheduled
+                              </span>
+                            )}
+                            {(!selectedUserForAudit.resetLinkStatus || selectedUserForAudit.resetLinkStatus === 'manual' || selectedUserForAudit.resetLinkStatus === 'pending') && (
+                              <span className="text-[9px] font-mono bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-1.5 py-0.5 rounded font-bold">
+                                Ready / Manual
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-[10px] text-slate-500 font-mono space-y-0.5 dark:text-slate-400">
+                            {selectedUserForAudit.resetLinkSentAt ? (
+                              <div>Reset link sent: <strong>{new Date(selectedUserForAudit.resetLinkSentAt).toLocaleString()}</strong></div>
+                            ) : selectedUserForAudit.resetLinkScheduledAt ? (
+                              <div>Scheduled to send: <strong>{new Date(selectedUserForAudit.resetLinkScheduledAt).toLocaleString()}</strong></div>
+                            ) : (
+                              <div>Password reset link has not been sent yet.</div>
+                            )}
+                            {selectedUserForAudit.createdBy && (
+                              <div>Account creator: <strong>{selectedUserForAudit.createdBy}</strong></div>
+                            )}
+                          </div>
+
+                          {onSendPasswordReset && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsSendingResetId(selectedUserForAudit.id);
+                                onSendPasswordReset(selectedUserForAudit).finally(() => setIsSendingResetId(null));
+                              }}
+                              disabled={isSendingResetId === selectedUserForAudit.id}
+                              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-extrabold py-1.5 px-3 rounded text-[10.5px] uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                            >
+                              {isSendingResetId === selectedUserForAudit.id ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Dispatching Reset Link...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Mail className="w-3.5 h-3.5" />
+                                  <span>{selectedUserForAudit.resetLinkStatus === 'sent' ? 'Resend Password Reset Link' : 'Send Password Reset Link'}</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+
                         <div className="flex items-center justify-between border border-slate-150 p-2 rounded bg-slate-50 text-xs dark:bg-slate-800">
                           <span>Class Leadership Status:</span>
                           <select
@@ -783,6 +1080,446 @@ export default function MemberDirectory({
 
       </div>
     </div>
+
+    {/* CREATE ACCOUNT MODAL */}
+    <AnimatePresence>
+      {isCreateAccountModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md no-print overflow-y-auto"
+          onClick={() => !isSubmittingAccount && setIsCreateAccountModalOpen(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 15, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.95, y: 15, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 350 }}
+            className="relative w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-5 py-4 border-b border-slate-800 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-brand/10 border border-brand/30 text-brand">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold uppercase tracking-wider font-display">Create Team Member Account</h3>
+                  <p className="text-[11px] text-slate-400 font-sans">Provision credentials, subteam assignments, and automated password reset delivery.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isSubmittingAccount && setIsCreateAccountModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-md transition-colors"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmitCreateAccount} className="p-5 overflow-y-auto space-y-5 text-xs text-slate-800 dark:text-slate-200">
+              {createAccountError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg flex items-center gap-2 text-rose-600 dark:text-rose-400 text-xs font-semibold">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{createAccountError}</span>
+                </div>
+              )}
+
+              {/* SECTION 1: Member Credentials */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-1.5 pb-1 border-b border-slate-200 dark:border-slate-800">
+                  <span className="font-mono text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    1. Account Identity & Credentials
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Full Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Alex Johnson"
+                      value={newAccName}
+                      onChange={(e) => setNewAccName(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      School / Team Email <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="alex.johnson@school.edu"
+                      value={newAccEmail}
+                      onChange={(e) => setNewAccEmail(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                      Initial Access Key / School ID
+                    </label>
+                    <button
+                      type="button"
+                      onClick={generateTempKey}
+                      className="text-[10px] text-brand hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Key className="w-3 h-3" />
+                      <span>Generate Temp Passkey</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Student ID, lunch code, or temporary key (e.g. RR-9824)"
+                    value={newAccSchoolId}
+                    onChange={(e) => setNewAccSchoolId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Used for initial login or reference prior to password reset.</p>
+                </div>
+              </div>
+
+              {/* SECTION 2: Role & Subteam Assignment */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-1.5 pb-1 border-b border-slate-200 dark:border-slate-800">
+                  <span className="font-mono text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    2. Role & Subteam Assignment
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Account Level
+                    </label>
+                    <select
+                      value={newAccRole}
+                      onChange={(e) => setNewAccRole(e.target.value as any)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand font-medium"
+                    >
+                      <option value="member">Student Specialist</option>
+                      <option value="captain">Subteam Lead / Captain</option>
+                      <option value="mentor">Coach / Mentor</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Primary Subteam
+                    </label>
+                    <select
+                      value={newAccPrimarySubteam}
+                      onChange={(e) => setNewAccPrimarySubteam(e.target.value as any)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand font-medium"
+                    >
+                      <option value="Design/Build/Fabrication">Design / Build / Fab</option>
+                      <option value="Programming">Programming / Autonomous</option>
+                      <option value="Outreach">Community Outreach</option>
+                      <option value="Business & Media">Business, Media & Grants</option>
+                      <option value="Lead/Captain">Team Captain</option>
+                      <option value="Mentor">Head Coach / Mentor</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Class Leadership
+                    </label>
+                    <select
+                      value={newAccLeadership}
+                      onChange={(e) => setNewAccLeadership(e.target.value as any)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand font-medium"
+                    >
+                      <option value="None">None</option>
+                      <option value="Captain">Team Captain</option>
+                      <option value="Subteam leader">Subteam Leader</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 3: Account Activation & Password Reset Timing */}
+              <div className="space-y-4 p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-750">
+                <div className="flex items-center gap-1.5 pb-1 border-b border-slate-200 dark:border-slate-700">
+                  <span className="font-mono text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    3. Activation & Password Reset Timing
+                  </span>
+                </div>
+
+                {/* Sub-section A: Account Activation Mode */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                    Account Activation Schedule:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label 
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        newAccActivationMode === 'immediate'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500/40 text-emerald-950 dark:text-emerald-200'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="activationMode"
+                        checked={newAccActivationMode === 'immediate'}
+                        onChange={() => setNewAccActivationMode('immediate')}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="font-extrabold text-xs block">Immediate Activation</span>
+                        <span className="text-[10px] opacity-80 block">Active & approved immediately upon submission.</span>
+                      </div>
+                    </label>
+
+                    <label 
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        newAccActivationMode === 'scheduled'
+                          ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500/40 text-amber-950 dark:text-amber-200'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="activationMode"
+                        checked={newAccActivationMode === 'scheduled'}
+                        onChange={() => setNewAccActivationMode('scheduled')}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="font-extrabold text-xs block">Scheduled Activation</span>
+                        <span className="text-[10px] opacity-80 block">Remains queued and activates at the selected time.</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {newAccActivationMode === 'scheduled' && (
+                    <div className="mt-2.5 p-2.5 bg-white dark:bg-slate-850 rounded-lg border border-amber-200 dark:border-amber-900/40 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <label className="text-[10.5px] font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Activation Date & Time:</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={newAccActivationDateTime}
+                          onChange={(e) => setNewAccActivationDateTime(e.target.value)}
+                          className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-brand font-mono"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        <span className="text-[9.5px] text-slate-400 font-mono">Quick Presets:</span>
+                        <button
+                          type="button"
+                          onClick={() => setNewAccActivationDateTime(getFutureDateTimeLocal(1))}
+                          className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-semibold"
+                        >
+                          +1 Hour
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 1);
+                            d.setHours(8, 0, 0, 0);
+                            const tzOffset = d.getTimezoneOffset() * 60000;
+                            setNewAccActivationDateTime(new Date(d.getTime() - tzOffset).toISOString().slice(0, 16));
+                          }}
+                          className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-semibold"
+                        >
+                          Tomorrow 8:00 AM
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewAccActivationDateTime(getFutureDateTimeLocal(48))}
+                          className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-semibold"
+                        >
+                          +2 Days
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sub-section B: Password Reset Link Dispatch */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                    Password Reset Link Dispatch:
+                  </label>
+                  <div className="space-y-1.5">
+                    <label 
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        newAccResetLinkMode === 'automatic'
+                          ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-500/40 text-indigo-950 dark:text-indigo-200'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="resetLinkMode"
+                        checked={newAccResetLinkMode === 'automatic'}
+                        onChange={() => setNewAccResetLinkMode('automatic')}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="font-extrabold text-xs block">Send Automatically Upon Activation</span>
+                        <span className="text-[10px] opacity-80 block">
+                          The reset link is automatically emailed as soon as the account is activated ({newAccActivationMode === 'immediate' ? 'immediately after creation' : 'at the scheduled activation timestamp'}).
+                        </span>
+                      </div>
+                    </label>
+
+                    <label 
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        newAccResetLinkMode === 'scheduled'
+                          ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-500/40 text-indigo-950 dark:text-indigo-200'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="resetLinkMode"
+                        checked={newAccResetLinkMode === 'scheduled'}
+                        onChange={() => setNewAccResetLinkMode('scheduled')}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="font-extrabold text-xs block">Send Automatically at a Set Scheduled Time</span>
+                        <span className="text-[10px] opacity-80 block">
+                          Dispatches the reset link at a specific future moment (e.g. at the scheduled kickoff of team practice).
+                        </span>
+                      </div>
+                    </label>
+
+                    {newAccResetLinkMode === 'scheduled' && (
+                      <div className="ml-6 p-2.5 bg-white dark:bg-slate-850 rounded-lg border border-indigo-200 dark:border-indigo-900/40 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <label className="text-[10.5px] font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Reset Link Dispatch Time:</span>
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={newAccResetLinkDateTime}
+                            onChange={(e) => setNewAccResetLinkDateTime(e.target.value)}
+                            className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-brand font-mono"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                          <span className="text-[9.5px] text-slate-400 font-mono">Quick Presets:</span>
+                          <button
+                            type="button"
+                            onClick={() => setNewAccResetLinkDateTime(getFutureDateTimeLocal(2))}
+                            className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-semibold"
+                          >
+                            +2 Hours
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + 1);
+                              d.setHours(9, 0, 0, 0);
+                              const tzOffset = d.getTimezoneOffset() * 60000;
+                              setNewAccResetLinkDateTime(new Date(d.getTime() - tzOffset).toISOString().slice(0, 16));
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-semibold"
+                          >
+                            Tomorrow 9:00 AM
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <label 
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        newAccResetLinkMode === 'manual'
+                          ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-500/40 text-indigo-950 dark:text-indigo-200'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="resetLinkMode"
+                        checked={newAccResetLinkMode === 'manual'}
+                        onChange={() => setNewAccResetLinkMode('manual')}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="font-extrabold text-xs block">Manual Dispatch by Captain / Mentor</span>
+                        <span className="text-[10px] opacity-80 block">
+                          No link is sent automatically. A captain or mentor can click "Send Password Reset Link" in the roster when ready.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Summary badge */}
+                <div className="p-2.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/30 text-[11px] text-indigo-900 dark:text-indigo-300">
+                  <div className="flex items-center gap-1.5 font-bold mb-0.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Configuration Summary</span>
+                  </div>
+                  <p className="text-[10.5px] opacity-90">
+                    Account will {newAccActivationMode === 'immediate' ? 'activate immediately' : `activate on ${new Date(newAccActivationDateTime).toLocaleString()}`}. 
+                    {' '}Password reset link will be {
+                      newAccResetLinkMode === 'automatic'
+                        ? (newAccActivationMode === 'immediate' ? 'dispatched to the user immediately upon creation' : 'dispatched automatically once the scheduled activation time arrives')
+                        : newAccResetLinkMode === 'scheduled'
+                        ? `sent automatically on ${new Date(newAccResetLinkDateTime).toLocaleString()}`
+                        : 'held for manual dispatch by a Captain or Mentor'
+                    }.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => !isSubmittingAccount && setIsCreateAccountModalOpen(false)}
+                  disabled={isSubmittingAccount}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAccount}
+                  className="bg-brand hover:bg-brand-hover text-white font-extrabold px-4 py-2 text-xs rounded-lg uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-60 transition-all"
+                >
+                  {isSubmittingAccount ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Creating Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      <span>Create Account</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
 
     {/* ROSTER PDF EXPORT MENU MODAL */}
     <AnimatePresence>
