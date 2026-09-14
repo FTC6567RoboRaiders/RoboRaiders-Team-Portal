@@ -42,6 +42,7 @@ interface MobileMenuDrawerProps {
   pendingApprovalsCount?: number;
   hiddenWorkspaces?: string[];
   disabledModules?: string[];
+  navOrder?: string[];
 }
 
 export function MobileMenuDrawer({
@@ -59,7 +60,8 @@ export function MobileMenuDrawer({
   device,
   pendingApprovalsCount = 0,
   hiddenWorkspaces = [],
-  disabledModules = []
+  disabledModules = [],
+  navOrder = []
 }: MobileMenuDrawerProps) {
   if (!isOpen) return null;
 
@@ -172,6 +174,21 @@ export function MobileMenuDrawer({
     if (hiddenWorkspaces.includes(link.id) && link.id !== "landing" && link.id !== "settings") return false;
     return true;
   });
+
+  if (navOrder && navOrder.length > 0) {
+    visibleLinks.sort((a, b) => {
+      if (a.id === 'landing') return -1;
+      if (b.id === 'landing') return 1;
+      if (a.id === 'settings') return 1;
+      if (b.id === 'settings') return -1;
+      const idxA = navOrder.indexOf(a.id);
+      const idxB = navOrder.indexOf(b.id);
+      if (idxA === -1 && idxB === -1) return 0;
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
+  }
 
   const handleNavigate = (viewId: string) => {
     onSelectView(viewId);

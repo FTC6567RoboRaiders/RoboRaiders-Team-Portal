@@ -61,8 +61,12 @@ import {
   Smartphone,
   PanelLeft,
   PanelTop,
-  PanelLeftClose
+  PanelLeftClose,
+  Pin,
+  PinOff,
+  Palette
 } from 'lucide-react';
+import { applyAccentColor } from './utils/accentColor';
 import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction, GrantApplication, JournalEntryType, PersonABC, MeetingTodoItem, NavLayout, QuestionOfTheDay, QuestionAnswerSubmission } from './types';
 import { compressAndResizeImage } from './utils/image';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
@@ -1351,6 +1355,132 @@ export default function App() {
     const next = navLayout === 'sidebar' ? 'topbar' : 'sidebar';
     handleSetNavLayout(next);
   };
+
+  // Accent Color Theme state
+  const [accentColor, setAccentColor] = useState<string>(() => {
+    return localStorage.getItem('ftc_accent_color') || 'red';
+  });
+
+  useEffect(() => {
+    applyAccentColor(accentColor);
+    localStorage.setItem('ftc_accent_color', accentColor);
+  }, [accentColor]);
+
+  const handleSetAccentColor = (colorId: string) => {
+    setAccentColor(colorId);
+  };
+
+  // Pinned Workspaces state
+  const [pinnedWorkspaces, setPinnedWorkspaces] = useState<string[]>(() => {
+    return [];
+  });
+
+  useEffect(() => {
+    if (currentUser) {
+      const saved = localStorage.getItem(`ftc_pinned_workspaces_${currentUser.id}`);
+      if (saved) {
+        try {
+          setPinnedWorkspaces(JSON.parse(saved));
+        } catch (e) {
+          console.error('Failed to parse pinned workspaces');
+        }
+      } else {
+        setPinnedWorkspaces([]);
+      }
+    } else {
+      setPinnedWorkspaces([]);
+    }
+  }, [currentUser?.id]);
+
+  const togglePinWorkspace = (workspaceId: string) => {
+    setPinnedWorkspaces(prev => {
+      const next = prev.includes(workspaceId)
+        ? prev.filter(id => id !== workspaceId)
+        : [...prev, workspaceId];
+      if (currentUser) {
+        localStorage.setItem(`ftc_pinned_workspaces_${currentUser.id}`, JSON.stringify(next));
+      }
+      return next;
+    });
+  };
+
+  // Custom Navigation Order state
+  const [navOrder, setNavOrder] = useState<string[]>(() => {
+    return ['journal', 'time_entry', 'kanban', 'inventory', 'outreach', 'finance', 'handbook', 'grants', 'qotd'];
+  });
+
+  useEffect(() => {
+    if (currentUser) {
+      const saved = localStorage.getItem(`ftc_nav_order_${currentUser.id}`);
+      if (saved) {
+        try {
+          setNavOrder(JSON.parse(saved));
+        } catch (e) {
+          console.error('Failed to parse nav order');
+        }
+      }
+    }
+  }, [currentUser?.id]);
+
+  const handleUpdateNavOrder = (newOrder: string[]) => {
+    setNavOrder(newOrder);
+    if (currentUser) {
+      localStorage.setItem(`ftc_nav_order_${currentUser.id}`, JSON.stringify(newOrder));
+    }
+  };
+
+  // Weekly Digest Customization state
+  const [digestSettings, setDigestSettings] = useState<string[]>(() => {
+    return ['journals', 'outreach', 'hours', 'kanban'];
+  });
+
+  useEffect(() => {
+    if (currentUser) {
+      const saved = localStorage.getItem(`ftc_digest_settings_${currentUser.id}`);
+      if (saved) {
+        try {
+          setDigestSettings(JSON.parse(saved));
+        } catch (e) {
+          console.error('Failed to parse digest settings');
+        }
+      }
+    }
+  }, [currentUser?.id]);
+
+  const handleUpdateDigestSettings = (newSettings: string[]) => {
+    setDigestSettings(newSettings);
+    if (currentUser) {
+      localStorage.setItem(`ftc_digest_settings_${currentUser.id}`, JSON.stringify(newSettings));
+    }
+  };
+
+  const renderHiddenWorkspaceScreen = (moduleName: string) => (
+    <div className="max-w-2xl mx-auto my-12 p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-md space-y-4 font-sans">
+      <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center">
+        <EyeOff className="w-6 h-6" />
+      </div>
+      <h2 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-tight font-display">
+        {moduleName} Hidden in Quick Access
+      </h2>
+      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+        You have hidden this feature from your quick access navigation in Settings. To view or work in this module, unhide it in your settings panel.
+      </p>
+      <div className="flex items-center justify-center gap-3 pt-3">
+        <button
+          onClick={() => setCurrentView('landing')}
+          className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+        >
+          Return to Hub
+        </button>
+        <button
+          onClick={() => setCurrentView('settings')}
+          className="px-4 py-2 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand-hover transition-colors cursor-pointer shadow-xs"
+        >
+          Open Settings
+        </button>
+      </div>
+    </div>
+  );
 
   // Season Transition and Backups state (Mentor-Only option)
   const [isBackupTransitionOpen, setIsBackupTransitionOpen] = useState(false);
@@ -4011,15 +4141,28 @@ ${entry.planNextTime || '_No carry-over specified._'}
     });
   }
 
-  // Filter sidebar links dynamically based on disabled modules status
-  const renderedSidebarLinks = sidebarLinks.filter(link => {
-    if (disabledModules.includes(link.id)) {
-      // If module is disabled globally, only let Programming subteam or Captains/Mentors view it
-      return currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor;
-    }
-    if (hiddenWorkspaces.includes(link.id) && link.id !== "landing" && link.id !== "settings") return false;
-    return true;
-  });
+  // Filter and sort sidebar links dynamically based on disabled modules status and user navOrder
+  const renderedSidebarLinks = sidebarLinks
+    .filter(link => {
+      if (disabledModules.includes(link.id)) {
+        // If module is disabled globally, only let Programming subteam or Captains/Mentors view it
+        return currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor;
+      }
+      if (hiddenWorkspaces.includes(link.id) && link.id !== "landing" && link.id !== "settings") return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.id === 'landing') return -1;
+      if (b.id === 'landing') return 1;
+      if (a.id === 'settings' || a.id === 'help_guide' || a.id === 'approvals') return 1;
+      if (b.id === 'settings' || b.id === 'help_guide' || b.id === 'approvals') return -1;
+      const idxA = navOrder.indexOf(a.id);
+      const idxB = navOrder.indexOf(b.id);
+      if (idxA === -1 && idxB === -1) return 0;
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
 
   const handleDeleteKanbanTask = async (id: string) => {
     try {
@@ -4063,6 +4206,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
         onClearAllData={clearAllData}
         disabledModules={disabledModules}
         hiddenWorkspaces={hiddenWorkspaces}
+        navOrder={navOrder}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         navLayout={navLayout}
@@ -4321,6 +4465,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
             outreachEvents={outreachEvents}
             timeEntries={timeEntries}
             onNavigate={(view) => setCurrentView(view)}
+            digestSettings={digestSettings}
+            onUpdateDigestSettings={handleUpdateDigestSettings}
           />
 
           {/* DYNAMIC ROBOTICS CHAMPIONSHIP CONSOLE */}
@@ -5395,332 +5541,308 @@ ${entry.planNextTime || '_No carry-over specified._'}
             )}
           </AnimatePresence>
 
-          {/* Core Hub Grid Operations */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* CARD 1: TEAM JOURNAL */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="bg-brand/10 text-brand p-3 rounded-lg group-hover:scale-110 transition-transform">
-                    <BookOpen className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
-                      Team Journal
-                    </h3>
-                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5 dark:text-slate-500">
-                      Notebook Compiler &amp; CAD Layouts
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
-                  Maintain the official engineering journal. Feed in session planning targets, physical mechanism achievements, photographic schematics, 3D render attachments, and subteam problem-solution structures for competition judges review.
-                </p>
-                
-                {/* Journal Quick Stats */}
-                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Total Notebook Logs:</span>
-                  <strong className="text-slate-800 bg-slate-200 px-1.5 py-0.5 rounded font-bold dark:bg-slate-800 dark:text-slate-400">
-                    {entries.length} Entries
-                  </strong>
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setCurrentView('journal')}
-                  className="bg-brand hover:bg-brand-hover text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
-                >
-                  <span>Open Team Journal</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+          {/* Core Hub Grid Operations with Pinning & Customization */}
+          {(() => {
+            const allHubCards = [
+              {
+                id: 'journal',
+                title: 'Team Journal',
+                subtitle: 'Notebook Compiler & CAD Layouts',
+                icon: BookOpen,
+                iconBg: 'bg-brand/10 text-brand',
+                description: 'Maintain the official engineering journal. Feed in session planning targets, physical mechanism achievements, photographic schematics, 3D render attachments, and subteam problem-solution structures for competition judges review.',
+                statLabel: 'Total Notebook Logs:',
+                statValue: `${entries.length} Entries`,
+                actionView: 'journal',
+                actionText: 'Open Team Journal',
+                btnBg: 'bg-brand hover:bg-brand-hover text-white'
+              },
+              {
+                id: 'time_entry',
+                title: 'Hours Tracking & Clock-In',
+                subtitle: 'Attendance Ledger',
+                icon: Clock,
+                iconBg: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+                description: 'Track student contributions and clock-in logs. Check shop occupancy, analyze participation charts broken down by subteam focuses (Design/Build, Automation, Outreach), and compile hour indexes for FIRST awards submission.',
+                statLabel: 'Cumulative Registered Hours:',
+                statValue: `${timeEntries.reduce((acc, curr) => acc + curr.durationHours, 0).toFixed(1)} hrs`,
+                actionView: 'time_entry',
+                actionText: 'Open Hours Ledger',
+                btnBg: 'bg-cyan-600 hover:bg-cyan-700 text-white'
+              },
+              {
+                id: 'outreach',
+                title: 'Community Outreach Events',
+                subtitle: 'STEM Showcase, Demos & FLL Mentorship',
+                icon: Heart,
+                iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+                description: 'Record and showcase team-led community robotics exhibitions, STEM teaching labs, FLL workshop drives, and pitch decks. Upload rich action photo proofs and track quantized crowd reach metrics.',
+                statLabel: 'Documented Outreach Events:',
+                statValue: `${outreachEvents.length} Logs recorded`,
+                actionView: 'outreach',
+                actionText: 'Open Outreach Ledger',
+                btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              },
+              {
+                id: 'kanban',
+                title: 'Collaborative Kanban Board',
+                subtitle: 'Task Backlog & Progress Sprint',
+                icon: Layers,
+                iconBg: 'bg-brand/10 text-brand',
+                description: 'Draft tasks, assign key subteam members, choose priority levels, and drag & drop tickets through backlog, development, review, and completed lanes to manage and accelerate team velocity.',
+                statLabel: 'Tasks in Open Backlog:',
+                statValue: `${kanbanTasks.length} Active Tickets`,
+                actionView: 'kanban',
+                actionText: 'Open Kanban Board',
+                btnBg: 'bg-brand hover:bg-brand-hover text-white'
+              },
+              {
+                id: 'inventory',
+                title: 'Robotics Lab Inventory',
+                subtitle: 'Bin Tracking & Part Checkout',
+                icon: Boxes,
+                iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+                description: 'Manage shop hardware, raw metal extrusions, motors, sensors, and pneumatics. Create bin labels with QR codes and record part checkouts for assemblies.',
+                statLabel: 'Total Cataloged Parts:',
+                statValue: `${inventoryItems.length} Part Records`,
+                actionView: 'inventory',
+                actionText: 'Open Inventory',
+                btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              },
+              {
+                id: 'finance',
+                title: 'General Ledger',
+                subtitle: 'Budget & Spend Tracker',
+                icon: DollarSign,
+                iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+                description: "Track the team's balance sheets, raised funding vs. school allowances, and out-of-pocket reimbursements. Access real-time financial reporting breakdowns, expense pie charts, and funding sources.",
+                statLabel: 'Logged Transactions:',
+                statValue: `${ledgerTransactions.length} items logged`,
+                actionView: 'finance',
+                actionText: 'Open Ledger Panel',
+                btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              },
+              {
+                id: 'grants',
+                title: 'Grant & Sponsorship Tracker',
+                subtitle: 'Proposals, Awards & Deliverables',
+                icon: Award,
+                iconBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+                description: 'Track corporate sponsorships, FIRST STEM team grants, foundation proposals, and post-award requirements. Monitor proposal deadlines, win rates, and synchronize approved grant funding directly into the team ledger.',
+                statLabel: 'Awarded Funding:',
+                statValue: `$${grants.reduce((sum, g) => sum + (g.amountAwarded || 0), 0).toLocaleString()} (${grants.length} Proposals)`,
+                actionView: 'grants',
+                actionText: 'Open Grant Tracker',
+                btnBg: 'bg-amber-600 hover:bg-amber-700 text-white'
+              },
+              {
+                id: 'handbook',
+                title: 'Student Team Handbook',
+                subtitle: 'Rules, Safety Protocols & Conduct Code',
+                icon: Scroll,
+                iconBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+                description: 'Access the formal 2026-2027 RoboRaiders handbook. Review laboratory safety guidelines, student attendance minimums, and FLL community mentoring hours requirements.',
+                statLabel: 'Official Chapters:',
+                statValue: '20 Official Chapters',
+                actionView: 'handbook',
+                actionText: 'Open Handbook',
+                btnBg: 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-950'
+              },
+              {
+                id: 'qotd',
+                title: 'Question of the Day',
+                subtitle: 'Daily Challenge & Trivia',
+                icon: Sparkles,
+                iconBg: 'bg-amber-500/10 text-amber-500 dark:text-amber-400',
+                description: 'Test your robotics engineering knowledge with daily questions. Earn XP and level up your subteam standing!',
+                statLabel: 'Active Challenge:',
+                statValue: `${dailyQuestions.length} Questions`,
+                actionView: 'qotd',
+                actionText: 'Answer Daily Question',
+                btnBg: 'bg-amber-600 hover:bg-amber-700 text-white'
+              }
+            ];
 
-            {/* CARD 2: HOUR TRACKER & ATTENDANCE TERMINAL */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
-                    <Clock className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 font-display dark:text-slate-400">
-                      Hours Tracking &amp; Clock-In
-                    </h3>
-                    <p className="text-[10px] font-mono text-slate-404 uppercase tracking-widest mt-0.5">
-                      Attendance Ledger
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
-                  Track student contributions and clock-in logs. Check shop occupancy, analyze participation charts broken down by subteam focuses (Design/Build, Automation, Outreach), and compile hour indexes for FIRST awards submission.
-                </p>
-                
-                {/* Time Quick Stats */}
-                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Cumulative Registered Hours:</span>
-                  <strong className="text-slate-800 dark:text-cyan-350 bg-slate-200 px-1.5 py-0.5 rounded font-bold dark:bg-slate-800 dark:text-slate-400">
-                    {timeEntries.reduce((acc, curr) => acc + curr.durationHours, 0).toFixed(1)} hrs
-                  </strong>
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setCurrentView('time_entry')}
-                  className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
-                >
-                  <span>Open Hours Ledger</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+            const visibleCards = allHubCards.filter(c => !hiddenWorkspaces.includes(c.id));
+            const pinnedCards = visibleCards.filter(c => pinnedWorkspaces.includes(c.id));
 
-            {/* CARD 3: COMMUNITY OUTREACH EVENTS LEDGER */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-emerald-500/30 group dark:bg-slate-900 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
-                    <Heart className="w-6 h-6 fill-emerald-500/20" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
-                      Community Outreach Events
-                    </h3>
-                    <p className="text-[10px] font-mono text-emerald-600 dark:text-emerald-500 uppercase tracking-widest mt-0.5">
-                      STEM Showcase, Demos &amp; FLL Mentorship
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
-                  Record and showcase team-led community robotics exhibitions, STEM teaching labs, FLL workshop drives, and pitch decks. Upload rich action photo proofs and track quantized crowd reach metrics.
-                </p>
-                
-                {/* Outreach Quick Stats */}
-                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Documented Outreach Events:</span>
-                  <strong className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded font-bold">
-                    {outreachEvents.length} Logs recorded
-                  </strong>
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setCurrentView('outreach')}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
-                >
-                  <span>Open Outreach Ledger</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+            return (
+              <div className="space-y-8">
+                {/* Pinned Section */}
+                {pinnedCards.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Pin className="w-4 h-4 text-amber-500 fill-amber-500" />
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 font-display">
+                        Pinned Dashboard Features
+                      </h3>
+                      <span className="text-[10px] font-mono bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 px-2 py-0.5 rounded-full font-bold">
+                        {pinnedCards.length} Pinned
+                      </span>
+                    </div>
 
-            {/* CARD KANBAN: COLLABORATIVE TEAM KANBAN BOARD */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="bg-brand/10 text-brand p-3 rounded-lg group-hover:scale-110 transition-transform">
-                    <Layers className="w-6 h-6" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {pinnedCards.map(card => {
+                        const Icon = card.icon;
+                        return (
+                          <div key={'pinned_' + card.id} className="bg-white dark:bg-slate-900 border-2 border-amber-500/30 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all group relative dark:border-amber-500/20">
+                            <div>
+                              <div className="flex items-start justify-between gap-2 mb-4">
+                                <div className="flex items-center gap-3.5">
+                                  <div className={`${card.iconBg} p-3 rounded-lg group-hover:scale-110 transition-transform`}>
+                                    <Icon className="w-6 h-6" />
+                                  </div>
+                                  <div>
+                                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-300">
+                                      {card.title}
+                                    </h3>
+                                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5 dark:text-slate-500">
+                                      {card.subtitle}
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => togglePinWorkspace(card.id)}
+                                  className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                  title="Unpin card"
+                                >
+                                  <Pin className="w-4 h-4 fill-amber-500" />
+                                </button>
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed font-sans dark:text-slate-400">
+                                {card.description}
+                              </p>
+                              <div className="mt-4 bg-amber-500/5 p-3 rounded-lg border border-amber-500/10 flex items-center justify-between text-xs font-mono dark:bg-slate-800/80 dark:border-slate-800">
+                                <span className="text-slate-500 dark:text-slate-400">{card.statLabel}</span>
+                                <strong className="text-slate-800 dark:text-slate-300 bg-white dark:bg-slate-700 px-2 py-0.5 rounded font-bold shadow-xs">
+                                  {card.statValue}
+                                </strong>
+                              </div>
+                            </div>
+                            <div className="mt-6 flex justify-end">
+                              <button
+                                onClick={() => setCurrentView(card.actionView as any)}
+                                className={`${card.btnBg} px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded`}
+                              >
+                                <span>{card.actionText}</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
-                      Collaborative Kanban Board
-                    </h3>
-                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5 dark:text-slate-500">
-                      Task Backlog &amp; Progress Sprint
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
-                  Draft tasks, assign key subteam members, choose priority levels, and drag &amp; drop tickets through backlog, development, review, and completed lanes to manage and accelerate team velocity.
-                </p>
-                
-                {/* Kanban Quick Stats */}
-                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Tasks in Open Backlog:</span>
-                  <strong className="text-brand bg-brand/10 border border-brand/25 px-1.5 py-0.5 rounded font-bold">
-                    {kanbanTasks.length} Active Tickets
-                  </strong>
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setCurrentView('kanban')}
-                  className="bg-brand hover:bg-brand-hover text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
-                >
-                  <span>Open Kanban Board</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+                )}
 
-            {/* CARD handbook: STUDENT TEAM HANDBOOK */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="bg-brand/10 text-brand p-3 rounded-lg group-hover:scale-110 transition-transform">
-                    <Scroll className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
-                      Student Team Handbook
-                    </h3>
-                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5 dark:text-slate-500">
-                      Rules, Safety Protocols &amp; Conduct Code
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
-                  Access the formal 2026-2027 RoboRaiders handbook. Review laboratory safety guidelines, student attendance minimums, and FLL community mentoring hours requirements.
-                </p>
-                
-                {/* Handbook Quick Stats */}
-                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Official Chapters:</span>
-                  <strong className="text-brand bg-brand/10 border border-brand/25 px-1.5 py-0.5 rounded font-bold">
-                    20 Official Chapters
-                  </strong>
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setCurrentView('handbook')}
-                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded dark:bg-slate-950"
-                >
-                  <span>Open Handbook</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+                {/* Main Operations Grid */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 font-display">
+                    All Active Portal Operations ({visibleCards.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {visibleCards.map(card => {
+                      const Icon = card.icon;
+                      const isPinned = pinnedWorkspaces.includes(card.id);
+                      return (
+                        <div key={'hub_' + card.id} className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-brand/40 group dark:bg-slate-900 dark:border-slate-800">
+                          <div>
+                            <div className="flex items-start justify-between gap-2 mb-4">
+                              <div className="flex items-center gap-3.5">
+                                <div className={`${card.iconBg} p-3 rounded-lg group-hover:scale-110 transition-transform`}>
+                                  <Icon className="w-6 h-6" />
+                                </div>
+                                <div>
+                                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
+                                    {card.title}
+                                  </h3>
+                                  <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5 dark:text-slate-500">
+                                    {card.subtitle}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => togglePinWorkspace(card.id)}
+                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                  isPinned
+                                    ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-slate-800'
+                                    : 'text-slate-300 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-600 dark:hover:text-slate-300 dark:hover:bg-slate-800'
+                                }`}
+                                title={isPinned ? 'Unpin card from top' : 'Pin card to top'}
+                              >
+                                <Pin className={`w-4 h-4 ${isPinned ? 'fill-amber-500' : ''}`} />
+                              </button>
+                            </div>
+                            <p className="text-xs text-slate-605 leading-relaxed font-sans dark:text-slate-400">
+                              {card.description}
+                            </p>
+                            <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                              <span className="text-slate-500 dark:text-slate-400">{card.statLabel}</span>
+                              <strong className="text-slate-800 bg-slate-200 px-1.5 py-0.5 rounded font-bold dark:bg-slate-800 dark:text-slate-300">
+                                {card.statValue}
+                              </strong>
+                            </div>
+                          </div>
+                          <div className="mt-6 flex justify-end">
+                            <button
+                              onClick={() => setCurrentView(card.actionView as any)}
+                              className={`${card.btnBg} px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded`}
+                            >
+                              <span>{card.actionText}</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
 
-            {/* CARD ledger: GENERAL LEDGER */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-emerald-500/30 group dark:bg-slate-900 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
-                    <DollarSign className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
-                      General Ledger
-                    </h3>
-                    <p className="text-[10px] font-mono text-emerald-650 dark:text-emerald-400 uppercase tracking-widest mt-0.5">
-                      Budget &amp; Spend Tracker
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
-                  Track the team's balance sheets, raised funding vs. school allowances, and out-of-pocket reimbursements. Access real-time financial reporting breakdowns, expense pie charts, and funding sources.
-                </p>
-                
-                {/* Ledger Quick Stats */}
-                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Logged Transactions:</span>
-                  <strong className="text-emerald-600 bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 rounded font-bold">
-                    {ledgerTransactions.length} items logged
-                  </strong>
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setCurrentView('finance')}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
-                >
-                  <span>Open Ledger Panel</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+                    {/* Roster & Approvals Card */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-indigo-500/30 group dark:bg-slate-900 dark:border-slate-800">
+                      <div>
+                        <div className="flex items-center gap-3.5 mb-4">
+                          <div className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
+                            <Users className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 font-display dark:text-slate-400">
+                              Roster &amp; Approvals Directory
+                            </h3>
+                            <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-450 uppercase tracking-widest mt-0.5">
+                              Secure Team Management Directory
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
+                          Browse the comprehensive registered team directory, search primary/secondary subteam focuses, analyze performance level badges, and review real-time member approvals.
+                        </p>
 
-            {/* CARD grants: GRANT & SPONSORSHIP TRACKER */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-amber-500/30 group dark:bg-slate-900 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
-                    <Award className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 font-display dark:text-slate-400">
-                      Grant &amp; Sponsorship Tracker
-                    </h3>
-                    <p className="text-[10px] font-mono text-amber-650 dark:text-amber-400 uppercase tracking-widest mt-0.5">
-                      Proposals, Awards &amp; Deliverables
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
-                  Track corporate sponsorships, FIRST STEM team grants, foundation proposals, and post-award requirements. Monitor proposal deadlines, win rates, and synchronize approved grant funding directly into the team ledger.
-                </p>
-                
-                {/* Grant Quick Stats */}
-                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Awarded Funding:</span>
-                  <strong className="text-amber-600 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded font-bold">
-                    ${grants.reduce((sum, g) => sum + (g.amountAwarded || 0), 0).toLocaleString()} ({grants.length} Proposals)
-                  </strong>
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setCurrentView('grants')}
-                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
-                >
-                  <span>Open Grant Tracker</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* CARD 3: TEAM DIRECTORY - Available for ALL verified members */}
-            <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-md hover:shadow-lg transition-all hover:border-indigo-500/30 group dark:bg-slate-900 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 p-3 rounded-lg group-hover:scale-110 transition-transform">
-                    <Users className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-850 font-display dark:text-slate-400">
-                      Roster &amp; Approvals Directory
-                    </h3>
-                    <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-450 uppercase tracking-widest mt-0.5">
-                      Secure Team Management Directory
-                    </p>
+                        <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
+                          <span className="text-slate-500 dark:text-slate-400">Authorized Team Members:</span>
+                          <strong className="text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded font-bold">
+                            {accounts.length} Profiles
+                          </strong>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-6 flex justify-end">
+                        <button
+                          onClick={() => setCurrentView('approvals')}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
+                        >
+                          <span>Open Member Directory</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <p className="text-xs text-slate-605 leading-relaxed font-sans mt-2">
-                  Browse the comprehensive registered team directory, search primary/secondary subteam focuses, analyze performance level badges, and review real-time member approvals.
-                </p>
-
-                {/* Quick Stats */}
-                <div className="mt-4 bg-slate-50 p-3 rounded-lg border border-slate-150 flex items-center justify-between text-xs font-mono dark:bg-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Authorized Team Members:</span>
-                  <strong className="text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded font-bold">
-                    {accounts.length} Profiles
-                  </strong>
-                </div>
               </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setCurrentView('approvals')}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer rounded"
-                >
-                  <span>Open Member Directory</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+            );
+          })()}
 
             {/* ONLY MENTORS/CAPTAINS CAN VIEW ROSTER MANAGEMENT & EMAIL COMMUNICATIONS */}
             {isUserAdminOrMentor && (
-              <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
                 {/* CARD 4: EMAIL OUTBOX SIMULATOR */}
                 <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:border-indigo-550/30 group dark:bg-slate-900 dark:border-slate-800">
                   <div>
@@ -5830,9 +5952,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     </div>
                   </div>
                 </div>
-              </>
+              </div>
             )}
-          </div>
 
           {/* DYNAMIC ROBOTICS CHAMPIONSHIP CONSOLE (MOVED TO BOTTOM OF LANDING PAGE) */}
           {currentUser && (
@@ -5856,7 +5977,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
       {/* GENERAL LEDGER VIEW */}
       {/* ROBOTICS ROOM INVENTORY VIEW */}
       {currentView === 'inventory' && (
-        disabledModules.includes('inventory') && !isAuthorizedToAccessDisabled ? (
+        hiddenWorkspaces.includes('inventory') ? (
+          renderHiddenWorkspaceScreen('Robotics Lab Inventory')
+        ) : disabledModules.includes('inventory') && !isAuthorizedToAccessDisabled ? (
           renderDisabledModuleScreen('Robotics Lab Inventory')
         ) : (
           <InventoryManager
@@ -5874,7 +5997,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
       )}
 
       {currentView === 'finance' && (
-        disabledModules.includes('finance') && !isAuthorizedToAccessDisabled ? (
+        hiddenWorkspaces.includes('finance') ? (
+          renderHiddenWorkspaceScreen('General Ledger')
+        ) : disabledModules.includes('finance') && !isAuthorizedToAccessDisabled ? (
           renderDisabledModuleScreen('General Ledger')
         ) : (
           <GeneralLedger
@@ -5890,7 +6015,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* GRANT TRACKER VIEW */}
       {currentView === 'grants' && (
-        disabledModules.includes('grants') && !isAuthorizedToAccessDisabled ? (
+        hiddenWorkspaces.includes('grants') ? (
+          renderHiddenWorkspaceScreen('Grant Tracker')
+        ) : disabledModules.includes('grants') && !isAuthorizedToAccessDisabled ? (
           renderDisabledModuleScreen('Grant Tracker')
         ) : (
           <GrantTracker
@@ -5908,7 +6035,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* STUDENT TEAM HANDBOOK VIEW */}
       {currentView === 'handbook' && (
-        disabledModules.includes('handbook') && !isAuthorizedToAccessDisabled ? (
+        hiddenWorkspaces.includes('handbook') ? (
+          renderHiddenWorkspaceScreen('Student Handbook')
+        ) : disabledModules.includes('handbook') && !isAuthorizedToAccessDisabled ? (
           renderDisabledModuleScreen('Student Handbook')
         ) : (
           <StudentHandbook
@@ -5937,6 +6066,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
           activeSession={activeSession}
           hiddenWorkspaces={hiddenWorkspaces}
           onToggleWorkspaceVisibility={toggleWorkspaceVisibility}
+          accentColor={accentColor}
+          onSetAccentColor={handleSetAccentColor}
+          pinnedWorkspaces={pinnedWorkspaces}
+          onTogglePinWorkspace={togglePinWorkspace}
+          navOrder={navOrder}
+          onUpdateNavOrder={handleUpdateNavOrder}
+          digestSettings={digestSettings}
+          onUpdateDigestSettings={handleUpdateDigestSettings}
           counts={{
             journalEntries: entries.length,
             kanbanTasks: kanbanTasks.length,
@@ -5959,6 +6096,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* QUESTION OF THE DAY VIEW */}
       {currentView === 'qotd' && (
+        hiddenWorkspaces.includes('qotd') ? (
+          renderHiddenWorkspaceScreen('Question of the Day')
+        ) : (
         <QuestionOfTheDayHub
           currentUser={currentUser}
           users={accounts}
@@ -6067,11 +6207,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
           showToast={showToast}
           onNavigate={(view) => setCurrentView(view as any)}
         />
+        )
       )}
 
       {/* OUTREACH EVENTS HUB VIEW */}
       {currentView === 'outreach' && (
-        disabledModules.includes('outreach') && !isAuthorizedToAccessDisabled ? (
+        hiddenWorkspaces.includes('outreach') ? (
+          renderHiddenWorkspaceScreen('Outreach Logs')
+        ) : disabledModules.includes('outreach') && !isAuthorizedToAccessDisabled ? (
           renderDisabledModuleScreen('Outreach Logs')
         ) : (
           <OutreachHub
@@ -6087,7 +6230,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
       {/* COLLABORATIVE KANBAN BOARD VIEW */}
       {currentView === 'kanban' && (
-        disabledModules.includes('kanban') && !isAuthorizedToAccessDisabled ? (
+        hiddenWorkspaces.includes('kanban') ? (
+          renderHiddenWorkspaceScreen('Kanban Board')
+        ) : disabledModules.includes('kanban') && !isAuthorizedToAccessDisabled ? (
           renderDisabledModuleScreen('Kanban Board')
         ) : (
           <KanbanBoard
@@ -6149,10 +6294,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
       )}
 
       {/* TIME ENTRY LABORATORY HOURS LEDGER */}
-      {currentView === 'time_entry' && disabledModules.includes('time_entry') && !isAuthorizedToAccessDisabled && (
-        renderDisabledModuleScreen('Time Card')
-      )}
-      {currentView === 'time_entry' && (!disabledModules.includes('time_entry') || isAuthorizedToAccessDisabled) && (
+      {currentView === 'time_entry' && (
+        hiddenWorkspaces.includes('time_entry') ? (
+          renderHiddenWorkspaceScreen('Time Card')
+        ) : disabledModules.includes('time_entry') && !isAuthorizedToAccessDisabled ? (
+          renderDisabledModuleScreen('Time Card')
+        ) : (
         <div className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 no-print" id="time-hours-ledger-desk">
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -6566,42 +6713,44 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
 
         </div>
+        )
       )}
 
       {/* GOOGLE SITES COMPACT IFRAME TAB MENU */}
-      {currentView === 'journal' && disabledModules.includes('journal') && !isAuthorizedToAccessDisabled && (
-        renderDisabledModuleScreen('Notebook Logs')
-      )}
-      {currentView === 'journal' && (!disabledModules.includes('journal') || isAuthorizedToAccessDisabled) && (
-        <div className="no-print sm:hidden bg-white border-b border-slate-300 py-2 px-3 flex justify-center gap-1 sticky top-0 z-50 dark:bg-slate-900 dark:border-slate-800">
-          <button
-            onClick={() => setActiveTab('form')}
-            className={`flex-1 py-1.5 px-3 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
-              activeTab === 'form' 
-                ? 'bg-brand text-white' 
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
-            }`}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            {isEditing ? 'Draft Editor' : 'New Journal'}
-          </button>
-          <button
-            onClick={() => setActiveTab('archive')}
-            className={`flex-1 py-1.5 px-3 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
-              activeTab === 'archive' 
-                ? 'bg-brand text-white' 
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Logs ({filteredEntries.length})
-          </button>
-        </div>
-      )}
+      {currentView === 'journal' && (
+        hiddenWorkspaces.includes('journal') ? (
+          renderHiddenWorkspaceScreen('Notebook Logs')
+        ) : disabledModules.includes('journal') && !isAuthorizedToAccessDisabled ? (
+          renderDisabledModuleScreen('Notebook Logs')
+        ) : (
+          <>
+            <div className="no-print sm:hidden bg-white border-b border-slate-300 py-2 px-3 flex justify-center gap-1 sticky top-0 z-50 dark:bg-slate-900 dark:border-slate-800">
+              <button
+                onClick={() => setActiveTab('form')}
+                className={`flex-1 py-1.5 px-3 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
+                  activeTab === 'form' 
+                    ? 'bg-brand text-white' 
+                    : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {isEditing ? 'Draft Editor' : 'New Journal'}
+              </button>
+              <button
+                onClick={() => setActiveTab('archive')}
+                className={`flex-1 py-1.5 px-3 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
+                  activeTab === 'archive' 
+                    ? 'bg-brand text-white' 
+                    : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Logs ({filteredEntries.length})
+              </button>
+            </div>
 
-      {/* CORE HIGH DENSITY WORKING GRID */}
-      {currentView === 'journal' && (!disabledModules.includes('journal') || isAuthorizedToAccessDisabled) && (
-        <div className="flex-1 p-6 lg:p-10 max-w-[1700px] mx-auto w-full flex flex-col gap-8 no-print" id="journal-desk-view-container">
+            {/* CORE HIGH DENSITY WORKING GRID */}
+            <div className="flex-1 p-6 lg:p-10 max-w-[1700px] mx-auto w-full flex flex-col gap-8 no-print" id="journal-desk-view-container">
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
@@ -7863,13 +8012,14 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
 
           </div>
-
         </section>
-
       </main>
       </div>
+          </>
+        )
       )}
-        </div>
+
+      </div>
       </div>
 
 

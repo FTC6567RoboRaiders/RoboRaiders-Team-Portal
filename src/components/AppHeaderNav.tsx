@@ -55,11 +55,22 @@ interface AppHeaderNavProps {
   onClearAllData: () => void;
   disabledModules: string[];
   hiddenWorkspaces?: string[];
+  navOrder?: string[];
   isSidebarCollapsed: boolean;
   onToggleSidebar: () => void;
   navLayout: NavLayout;
   onToggleNavLayout: () => void;
   onSetNavLayout?: (layout: NavLayout) => void;
+}
+
+interface HeaderNavItem {
+  id: string;
+  label: string;
+  sub?: string;
+  icon: any;
+  badge?: number | string | null;
+  badgeColor?: string;
+  pulse?: boolean;
 }
 
 export function AppHeaderNav({
@@ -84,6 +95,7 @@ export function AppHeaderNav({
   onClearAllData,
   disabledModules,
   hiddenWorkspaces = [],
+  navOrder = [],
   isSidebarCollapsed,
   onToggleSidebar,
   navLayout,
@@ -119,105 +131,74 @@ export function AppHeaderNav({
     return true;
   };
 
-  const primaryNavItems = (
-    navLayout === 'topbar'
-      ? [
-          { id: 'landing', label: 'Hub', icon: Grid },
-          { 
-            id: 'journal', 
-            label: 'Notebook', 
-            icon: BookOpen,
-            badge: pendingReviewsCount > 0 ? pendingReviewsCount : null,
-            badgeColor: 'bg-amber-500'
-          },
-          { 
-            id: 'time_entry', 
-            label: 'Time Card', 
-            icon: Clock,
-            pulse: activeSession
-          },
-          { id: 'kanban', label: 'Tasks', icon: Layers },
-          { 
-            id: 'inventory', 
-            label: 'Inventory', 
-            icon: Boxes,
-            badge: lowStockCount > 0 ? lowStockCount : null,
-            badgeColor: 'bg-amber-500'
-          },
-          { id: 'outreach', label: 'Outreach', icon: Users },
-          { id: 'finance', label: 'Ledger', icon: DollarSign }
-        ]
-      : [
-          { id: 'landing', label: 'Hub', icon: Grid },
-          { 
-            id: 'journal', 
-            label: 'Notebook', 
-            icon: BookOpen,
-            badge: pendingReviewsCount > 0 ? pendingReviewsCount : null,
-            badgeColor: 'bg-amber-500'
-          },
-          { 
-            id: 'time_entry', 
-            label: 'Time Card', 
-            icon: Clock,
-            pulse: activeSession
-          },
-          { id: 'kanban', label: 'Tasks', icon: Layers },
-          { 
-            id: 'inventory', 
-            label: 'Inventory', 
-            icon: Boxes,
-            badge: lowStockCount > 0 ? lowStockCount : null,
-            badgeColor: 'bg-amber-500'
-          }
-        ]
-  ).filter(item => isModuleAccessible(item.id));
+  const allWorkspaceModules: HeaderNavItem[] = [
+    { 
+      id: 'journal', 
+      label: 'Notebook', 
+      sub: 'Engineering log entries',
+      icon: BookOpen,
+      badge: pendingReviewsCount > 0 ? pendingReviewsCount : null,
+      badgeColor: 'bg-amber-500'
+    },
+    { 
+      id: 'time_entry', 
+      label: 'Time Card', 
+      sub: 'Attendance & workshop clock-in',
+      icon: Clock,
+      pulse: activeSession
+    },
+    { id: 'kanban', label: 'Tasks', sub: 'Sprint tasks board', icon: Layers },
+    { 
+      id: 'inventory', 
+      label: 'Inventory', 
+      sub: 'Lab parts & tools',
+      icon: Boxes,
+      badge: lowStockCount > 0 ? lowStockCount : null,
+      badgeColor: 'bg-amber-500'
+    },
+    { id: 'outreach', label: 'Outreach', sub: 'Community impact', icon: Users },
+    { id: 'finance', label: 'Ledger', sub: 'Team financial records', icon: DollarSign },
+    { id: 'handbook', label: 'Handbook', sub: 'Rules & safety code', icon: FileText },
+    { id: 'grants', label: 'Grants', sub: 'Funding proposals', icon: Award },
+    { id: 'qotd', label: 'QOTD', sub: 'Daily challenge & trivia', icon: Sparkles }
+  ].filter(item => isModuleAccessible(item.id));
 
-  const secondaryModules = (
-    navLayout === 'topbar'
-      ? [
-          { id: 'qotd', label: 'Question of the Day', sub: 'Daily challenge & trivia', icon: Sparkles },
-          { id: 'grants', label: 'Grant Tracker', sub: 'Funding proposals', icon: Award },
-          { id: 'handbook', label: 'Student Handbook', sub: 'Guides & safety code', icon: FileText },
-          ...(isUserAdminOrMentor ? [
-            { 
-              id: 'approvals', 
-              label: 'Roster & Approvals', 
-              sub: 'Member access & reviews', 
-              icon: ShieldCheck,
-              badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null 
-            },
-            { 
-              id: 'system_dashboard', 
-              label: 'System Operations', 
-              sub: 'Analytics & database', 
-              icon: Terminal 
-            }
-          ] : [])
-        ]
-      : [
-          { id: 'qotd', label: 'Question of the Day', sub: 'Daily challenge & trivia', icon: Sparkles },
-          { id: 'outreach', label: 'Community Outreach', sub: 'Impact events & logs', icon: Users },
-          { id: 'finance', label: 'General Ledger', sub: 'Budgets & transactions', icon: DollarSign },
-          { id: 'grants', label: 'Grant Tracker', sub: 'Funding proposals', icon: Award },
-          { id: 'handbook', label: 'Student Handbook', sub: 'Guides & safety code', icon: FileText },
-          ...(isUserAdminOrMentor ? [
-            { 
-              id: 'approvals', 
-              label: 'Roster & Approvals', 
-              sub: 'Member access & reviews', 
-              icon: ShieldCheck,
-              badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null 
-            },
-            { 
-              id: 'system_dashboard', 
-              label: 'System Operations', 
-              sub: 'Analytics & database', 
-              icon: Terminal 
-            }
-          ] : [])
-        ]
-  ).filter(item => isModuleAccessible(item.id));
+  if (navOrder && navOrder.length > 0) {
+    allWorkspaceModules.sort((a, b) => {
+      const idxA = navOrder.indexOf(a.id);
+      const idxB = navOrder.indexOf(b.id);
+      if (idxA === -1 && idxB === -1) return 0;
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
+  }
+
+  const topCount = navLayout === 'topbar' ? 6 : 4;
+
+  const primaryNavItems: HeaderNavItem[] = [
+    { id: 'landing', label: 'Hub', icon: Grid },
+    ...allWorkspaceModules.slice(0, topCount)
+  ];
+
+  const secondaryModules: HeaderNavItem[] = [
+    ...allWorkspaceModules.slice(topCount),
+    ...(isUserAdminOrMentor ? [
+      { 
+        id: 'approvals', 
+        label: 'Roster & Approvals', 
+        sub: 'Member access & reviews', 
+        icon: ShieldCheck,
+        badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null 
+      },
+      { 
+        id: 'system_dashboard', 
+        label: 'System Operations', 
+        sub: 'Analytics & database', 
+        icon: Terminal 
+      }
+    ] : [])
+  ];
 
   const isCurrentViewSecondary = secondaryModules.some(m => m.id === currentView);
 
