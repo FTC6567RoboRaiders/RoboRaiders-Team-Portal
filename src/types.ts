@@ -28,11 +28,41 @@ export interface MeetingTodoItem {
   completed: boolean;
 }
 
+export type AttachmentCategory = 
+  | 'image'
+  | 'ms_word'
+  | 'ms_excel'
+  | 'ms_powerpoint'
+  | 'google_doc'
+  | 'google_sheet'
+  | 'google_slide'
+  | 'pdf'
+  | 'cad'
+  | 'code'
+  | 'text'
+  | 'archive'
+  | 'other';
+
 export interface JournalImage {
   id: string;
-  dataUrl: string; // Base64 representation for LocalStorage saving
+  dataUrl: string; // Base64 representation or URL
   name: string;
   size: number;
+  fileCategory?: AttachmentCategory;
+  mimeType?: string;
+  // Accessible Google File conversion metadata:
+  isGoogleConverted?: boolean;
+  googleDocType?: 'doc' | 'sheet' | 'slide';
+  googleDocTitle?: string;
+  googleViewUrl?: string; // Direct link or open URL
+  extractedHtml?: string; // Formatted document HTML (Word -> Google Doc)
+  extractedText?: string; // Plain text
+  extractedSheets?: { [sheetName: string]: any[][] }; // Parsed spreadsheet data (Excel -> Google Sheet)
+  sheetNames?: string[];
+  slideCount?: number;
+  cadInfo?: { extension: string; modelName: string };
+  codeLanguage?: string;
+  createdAt?: number;
 }
 
 export interface JournalEntry {
@@ -79,7 +109,7 @@ export interface AuthorProfile {
   name: string;
   schoolEmail: string;
   schoolId: string; // lunch #
-  primarySubteam: 'Design/Build/Fabrication' | 'Programming' | 'Outreach' | 'Business & Media' | 'Mentor' | 'Lead/Captain' | 'None';
+  primarySubteam: 'Design/Build/Fabrication' | 'Programming' | 'Outreach' | 'Business & Media' | 'Inspire' | 'Strategy' | 'Mentor' | 'Mentoring' | 'Lead/Captain' | 'None';
   secondarySubteam: 'Inspire' | 'Strategy' | 'None';
   tadpoleTag?: boolean;
   leadership?: 'None' | 'Captain' | 'Subteam leader';
@@ -90,7 +120,7 @@ export interface UserAccount {
   name: string;
   schoolEmail: string;
   schoolId: string; // lunch #
-  primarySubteam: 'Design/Build/Fabrication' | 'Programming' | 'Outreach' | 'Business & Media' | 'Mentor' | 'Lead/Captain' | 'None'; // Mentors can be any of these
+  primarySubteam: 'Design/Build/Fabrication' | 'Programming' | 'Outreach' | 'Business & Media' | 'Inspire' | 'Strategy' | 'Mentor' | 'Mentoring' | 'Lead/Captain' | 'None'; // Mentors can be any of these
   secondarySubteam: 'Inspire' | 'Strategy' | 'None';
   role: 'member' | 'mentor' | 'captain';
   status: 'Pending' | 'Approved' | 'Rejected';

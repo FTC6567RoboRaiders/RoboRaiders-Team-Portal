@@ -26,7 +26,20 @@ import {
   Trophy,
   FileDown
 } from 'lucide-react';
-import { UserAccount, JournalEntry, TimeEntry, KanbanTask, OutreachEvent, XPAdjustment } from '../types';
+import { 
+  UserAccount, 
+  JournalEntry, 
+  TimeEntry, 
+  KanbanTask, 
+  OutreachEvent, 
+  XPAdjustment,
+  QuestionAnswerSubmission,
+  QuestionOfTheDay,
+  GrantApplication,
+  LedgerTransaction,
+  InventoryTransaction,
+  InventoryItem
+} from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { computeUserGamification } from '../utils/gamification';
 import { jsPDF } from 'jspdf';
@@ -41,6 +54,12 @@ interface ArenaPortalProps {
   kanbanTasks?: KanbanTask[];
   outreachEvents?: OutreachEvent[];
   xpAdjustments?: XPAdjustment[];
+  qotdSubmissions?: QuestionAnswerSubmission[];
+  qotdQuestions?: QuestionOfTheDay[];
+  grants?: GrantApplication[];
+  ledgerTransactions?: LedgerTransaction[];
+  inventoryTransactions?: InventoryTransaction[];
+  inventoryItems?: InventoryItem[];
   onAddXpAdjustment?: (adj: Omit<XPAdjustment, 'id' | 'createdAt' | 'awardedBy' | 'awardedByEmail'>) => void;
   onDeleteXpAdjustment?: (id: string) => void;
 }
@@ -49,7 +68,7 @@ interface ArenaPortalProps {
 const getGamifiedIconLocal = (iconName: string, sizeClass = "w-4 h-4") => {
   switch (iconName) {
     case 'Wrench': return <Wrench className={`${sizeClass} text-slate-700 dark:text-slate-300`} />;
-    case 'Cpu': return <Settings className={`${sizeClass} text-cyan-600 dark:text-cyan-400`} />; // Fallback to Settings
+    case 'Cpu': return <Settings className={`${sizeClass} text-cyan-600 dark:text-cyan-400`} />;
     case 'BookOpen': return <BookOpen className={`${sizeClass} text-indigo-650 dark:text-indigo-400`} />;
     case 'Clock': return <Clock className={`${sizeClass} text-amber-600 dark:text-amber-400`} />;
     case 'FileUp': return <FileUp className={`${sizeClass} text-emerald-600 dark:text-emerald-400`} />;
@@ -70,6 +89,7 @@ const getGamifiedIconLocal = (iconName: string, sizeClass = "w-4 h-4") => {
     case 'Database': return <Database className={`${sizeClass} text-zinc-550`} />;
     case 'ShieldCheck': return <ShieldCheck className={`${sizeClass} text-emerald-500`} />;
     case 'Settings': return <Settings className={`${sizeClass} text-rose-500`} />;
+    case 'Boxes': return <Layers className={`${sizeClass} text-emerald-500`} />;
     default: return <Award className={sizeClass} />;
   }
 };
@@ -83,6 +103,12 @@ export default function ArenaPortal({
   kanbanTasks,
   outreachEvents,
   xpAdjustments,
+  qotdSubmissions,
+  qotdQuestions,
+  grants,
+  ledgerTransactions,
+  inventoryTransactions,
+  inventoryItems,
   onAddXpAdjustment,
   onDeleteXpAdjustment
 }: ArenaPortalProps) {
@@ -101,7 +127,20 @@ export default function ArenaPortal({
     setExpandedBadges(prev => ({ ...prev, [badgeId]: !prev[badgeId] }));
   };
 
-  const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+  const gameResult = computeUserGamification(
+    currentUser, 
+    entries, 
+    timeEntries, 
+    kanbanTasks, 
+    outreachEvents, 
+    xpAdjustments,
+    qotdSubmissions,
+    qotdQuestions,
+    grants,
+    ledgerTransactions,
+    inventoryTransactions,
+    inventoryItems
+  );
   const { stats, badges, quests } = gameResult;
 
   const activeLeaderboard = accounts
@@ -114,7 +153,20 @@ export default function ArenaPortal({
       !acc.schoolEmail.toLowerCase().includes('school.edu')
     )
     .map(acc => {
-      const data = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+      const data = computeUserGamification(
+        acc, 
+        entries, 
+        timeEntries, 
+        kanbanTasks, 
+        outreachEvents, 
+        xpAdjustments,
+        qotdSubmissions,
+        qotdQuestions,
+        grants,
+        ledgerTransactions,
+        inventoryTransactions,
+        inventoryItems
+      );
       return {
         account: acc,
         stats: data.stats,

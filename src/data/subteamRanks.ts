@@ -271,6 +271,134 @@ export const SUBTEAM_GUILDS: SubteamGuild[] = [
     ]
   },
   {
+    id: 'Inspire',
+    name: 'Inspire (The Culture Champions)',
+    codename: 'The Culture Champions',
+    color: 'purple',
+    icon: 'Award',
+    ranks: [
+      {
+        rank: 1,
+        title: 'The Energy Instigator',
+        explanation: 'Starts team chants and ensures enthusiasm remains high even during 7 AM pit inspections.'
+      },
+      {
+        rank: 2,
+        title: 'The Core Values Sentinel',
+        explanation: 'Practices Gracious Professionalism so intensely other teams ask for high-fives across the arena glass.'
+      },
+      {
+        rank: 3,
+        title: 'The Mascot Whisperer',
+        explanation: 'Commands team spirit, pit aesthetics, and banners to captivate tournament judges and visiting crowds.'
+      },
+      {
+        rank: 4,
+        title: 'The Judge Room Storyteller',
+        explanation: 'Weaves every engineering setback into an inspirational narrative arc of resilience and teamwork.'
+      },
+      {
+        rank: 5,
+        title: 'The Alliance Diplomat',
+        explanation: 'Builds goodwill with rival teams and organizes pit-sharing whenever motors or battery chargers fail.'
+      },
+      {
+        rank: 6,
+        title: 'The Morale Architect',
+        explanation: 'Distributes emergency snacks and positive pep talks right when autonomous code refuses to cooperate.'
+      },
+      {
+        rank: 7,
+        title: 'The Team Tradition Keeper',
+        explanation: 'Preserves the legendary rituals, lucky team chants, and ritual robot blessings before playoff rounds.'
+      },
+      {
+        rank: 8,
+        title: 'The Gracious Ambassador',
+        explanation: 'Represents the program at community banquets, school board demonstrations, and STEM symposiums.'
+      },
+      {
+        rank: 9,
+        title: 'The Culture Champion',
+        explanation: 'Transforms stressed teenagers into a unified, compassionate engineering family.'
+      },
+      {
+        rank: 10,
+        title: 'The FIRST Visionary',
+        explanation: 'Embodies the true spirit of Dr. Woodie Flowers with relentless optimism and selfless support.'
+      },
+      {
+        rank: 11,
+        title: 'The Inspire Award Legend',
+        explanation: 'The revered figure who makes judges weep tears of inspiration during pit walkthroughs.'
+      }
+    ]
+  },
+  {
+    id: 'Strategy',
+    name: 'Strategy (The Game Analysts)',
+    codename: 'The Game Analysts',
+    color: 'rose',
+    icon: 'Compass',
+    ranks: [
+      {
+        rank: 1,
+        title: 'The Rulebook Scholar',
+        explanation: 'Has read Game Manual Part 2 five times and highlighted all the loophole penalties.'
+      },
+      {
+        rank: 2,
+        title: 'The Scouting Scribe',
+        explanation: 'Fills clipboards and spreadsheets with cycle times, basket scoring rates, and endgame ascents.'
+      },
+      {
+        rank: 3,
+        title: 'The Match Tactician',
+        explanation: 'Draws path trajectories on mini whiteboards before every qualification match.'
+      },
+      {
+        rank: 4,
+        title: 'The Penalty Investigator',
+        explanation: 'Stands by the queueing table calculating opponent yellow card probabilities and pin counts.'
+      },
+      {
+        rank: 5,
+        title: 'The Alliance Selection Prophet',
+        explanation: 'Prepares 14 tiered pick lists ranked by tele-op cycle speed and autonomous consistency.'
+      },
+      {
+        rank: 6,
+        title: 'The Defense Strategist',
+        explanation: 'Finds legal pinch points and field zones to nullify the opponent powerhouse.'
+      },
+      {
+        rank: 7,
+        title: 'The Driver Coach Extraordinaire',
+        explanation: 'Keeps drivers calm under screaming arena lights with precise ten-second countdown cues.'
+      },
+      {
+        rank: 8,
+        title: 'The Data Model Maestro',
+        explanation: 'Transforms raw scouting entries into win probability charts and optimal scoring paths.'
+      },
+      {
+        rank: 9,
+        title: 'The Endgame Mastermind',
+        explanation: 'Calculates the exact second to stop cycling samples and hang on the high submersible.'
+      },
+      {
+        rank: 10,
+        title: 'The Grand Chessmaster',
+        explanation: 'Sees the competition field three moves ahead of every referee and opponent coach.'
+      },
+      {
+        rank: 11,
+        title: 'The Playoff Oracle',
+        explanation: 'Has never lost an elimination bracket timeout calculation or alliance strategy conference.'
+      }
+    ]
+  },
+  {
     id: 'Mentoring',
     name: 'Mentoring (The Advisory Board)',
     codename: 'The Wise Sages',

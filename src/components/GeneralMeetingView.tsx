@@ -15,20 +15,23 @@ import {
   Lock,
   ListOrdered
 } from 'lucide-react';
-import { JournalEntry, MeetingTodoItem } from '../types';
+import { JournalEntry, MeetingTodoItem, JournalImage } from '../types';
+import { NotebookAttachmentItem } from './NotebookAttachmentItem';
 
 interface GeneralMeetingViewProps {
   entry: JournalEntry;
   refCode: string;
   onToggleTodo?: (todoId: string) => void;
   onImageClick?: (index: number) => void;
+  onFileClick?: (file: JournalImage) => void;
 }
 
 export const GeneralMeetingView: React.FC<GeneralMeetingViewProps> = ({
   entry,
   refCode,
   onToggleTodo,
-  onImageClick
+  onImageClick,
+  onFileClick
 }) => {
   const attendees = entry.attendees || [];
   const absentAttendees = entry.absentAttendees || [];
@@ -335,29 +338,31 @@ export const GeneralMeetingView: React.FC<GeneralMeetingViewProps> = ({
         )}
       </div>
 
-      {/* 7. MEETING IMAGERY (WHITEBOARD, SLIDES, PROOFS) */}
+      {/* 7. MEETING IMAGERY & ATTACHED GOOGLE FILES */}
       {entry.images && entry.images.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-2">
-          <h2 className="text-[11px] font-black uppercase font-mono tracking-wider text-slate-800 dark:text-slate-200 border-b border-slate-105 dark:border-slate-800 pb-2">
-            6. Meeting Imagery &amp; Whiteboard Notes
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+        <div className="bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-105 dark:border-slate-800 pb-2">
+            <h2 className="text-[11px] font-black uppercase font-mono tracking-wider text-slate-800 dark:text-slate-200">
+              6. Meeting Files, Imagery &amp; Converted Google Docs ({entry.images.length})
+            </h2>
+            <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+              ✓ Open &amp; Accessible to Anyone
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {entry.images.map((img, idx) => (
-              <div 
+              <NotebookAttachmentItem
                 key={img.id}
-                onClick={() => onImageClick && onImageClick(idx)}
-                className="aspect-video bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 cursor-zoom-in hover:opacity-90 transition relative group"
-              >
-                <img 
-                  src={img.dataUrl} 
-                  alt={img.name} 
-                  className="w-full h-full object-cover" 
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-mono uppercase font-bold">
-                  Expand
-                </div>
-              </div>
+                file={img}
+                onOpenViewer={(f) => {
+                  if (onFileClick) {
+                    onFileClick(f);
+                  } else if (onImageClick) {
+                    onImageClick(idx);
+                  }
+                }}
+              />
             ))}
           </div>
         </div>

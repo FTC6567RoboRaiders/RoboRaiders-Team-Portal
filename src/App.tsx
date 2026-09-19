@@ -64,11 +64,16 @@ import {
   PanelLeftClose,
   Pin,
   PinOff,
-  Palette
+  Palette,
+  Images,
+  Link2
 } from 'lucide-react';
 import { applyAccentColor } from './utils/accentColor';
 import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction, GrantApplication, JournalEntryType, PersonABC, MeetingTodoItem, NavLayout, QuestionOfTheDay, QuestionAnswerSubmission } from './types';
 import { compressAndResizeImage } from './utils/image';
+import { processAnyNotebookFile, createGoogleLinkAttachment } from './utils/fileConverter';
+import { GoogleFileViewerModal } from './components/GoogleFileViewerModal';
+import { NotebookAttachmentItem } from './components/NotebookAttachmentItem';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { 
   signInWithEmailAndPassword, 
@@ -108,7 +113,7 @@ export interface XPAuditLogEntry {
   userName: string;
   userEmail: string;
   userId: string;
-  type: 'signup' | 'lab_hours' | 'journal_submit' | 'journal_quality' | 'journal_approve' | 'journal_image' | 'kanban_task' | 'outreach' | 'manual_adjustment';
+  type: 'signup' | 'lab_hours' | 'journal_submit' | 'journal_quality' | 'journal_approve' | 'journal_image' | 'kanban_task' | 'outreach' | 'manual_adjustment' | 'qotd_submit' | 'qotd_correct' | 'qotd_author' | 'grant_create' | 'grant_submit' | 'grant_requirement' | 'ledger_entry' | 'inventory_action' | 'inventory_item';
   amount: number;
   description: string;
   timestamp: number;
@@ -142,10 +147,11 @@ import { GeneralMeetingForm } from './components/GeneralMeetingForm';
 import { GeneralMeetingView } from './components/GeneralMeetingView';
 import { SettingsView } from './components/SettingsView';
 import QuestionOfTheDayHub from './components/QuestionOfTheDayHub';
+import { JournalGalleryView } from './components/JournalGalleryView';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
-const ATTENDANCE_SUBTEAMS: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Mentoring'];
+const ATTENDANCE_SUBTEAMS: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy', 'Mentoring'];
 
 // Subteam Color Mapping adapted to represent the crisp, High Density light palette
 export const getSubteamBadgeColor = (subteam: Subteam) => {
@@ -1212,7 +1218,20 @@ export default function App() {
   // Monitor level and trigger a celebratory pop-up on Rank gains
   useEffect(() => {
     if (currentUser) {
-      const gameResult = computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+      const gameResult = computeUserGamification(
+        currentUser, 
+        entries, 
+        timeEntries, 
+        kanbanTasks, 
+        outreachEvents, 
+        xpAdjustments,
+        dailySubmissions,
+        dailyQuestions,
+        grants,
+        ledgerTransactions,
+        inventoryTransactions,
+        inventoryItems
+      );
       const currentLevel = gameResult.stats.level;
       
       const ackKey = `ftc_acknowledged_level_${currentUser.id}`;
@@ -1751,8 +1770,8 @@ export default function App() {
             type: 'journal_approve',
             amount: 120,
             description: 'Mentor Log Verification Approval Bonus',
-            timestamp: j.approvedAt || dateTimestamp,
-            details: `Vetted, audited, and approved by Mentor/Captain: ${j.approvedBy || j.reviewedBy || 'Team Coach'}. Title: "${j.title || 'Untitled'}"`,
+            timestamp: j.reviewedAt || dateTimestamp,
+            details: `Vetted, audited, and approved by Mentor/Captain: ${j.reviewer || 'Team Coach'}. Title: "${j.title || 'Untitled'}"`,
             subteam: j.subteam
           });
         }
@@ -1779,7 +1798,190 @@ export default function App() {
         });
       });
 
-      // 4. Manual Adjustments page
+      // 4. Question of the Day: Submissions & Correct answers
+      const userSubmissions = (dailySubmissions || []).filter(s => 
+        s.userId === user.id || s.userEmail.toLowerCase() === email || s.userName.toLowerCase() === user.name.toLowerCase()
+      );
+      userSubmissions.forEach(s => {
+        const questionObj = (dailyQuestions || []).find(q => q.id === s.questionId);
+        const qTitle = questionObj?.question || 'Game Manual & Rules Quiz';
+
+        // Base participation XP
+        logs.push({
+          id: `qotd-sub-${s.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'qotd_submit',
+          amount: 25,
+          description: `Question of the Day Submission`,
+          timestamp: s.submittedAt || Date.now(),
+          details: `Submitted response for challenge: "${qTitle}". Selected option / answer documented.`
+        });
+
+        // Graded score bonus if correct / awarded points
+        if (s.pointsAwarded && s.pointsAwarded > 0) {
+          logs.push({
+            id: `qotd-score-${s.id}`,
+            userName: user.name,
+            userEmail: user.schoolEmail,
+            userId: user.id,
+            type: 'qotd_correct',
+            amount: s.pointsAwarded,
+            description: `QOTD Challenge Correct Answer Bonus`,
+            timestamp: (s.gradedAt || s.submittedAt || Date.now()),
+            details: `Scored +${s.pointsAwarded} pts on "${qTitle}". Evaluated by: ${s.gradedBy || 'Automated Rubric'}.`
+          });
+        }
+      });
+
+      // 5. Question of the Day: Authored questions
+      const userAuthoredQ = (dailyQuestions || []).filter(q => 
+        q.createdByEmail?.toLowerCase() === email || q.createdBy?.toLowerCase() === user.name.toLowerCase()
+      );
+      userAuthoredQ.forEach(q => {
+        logs.push({
+          id: `qotd-auth-${q.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'qotd_author',
+          amount: 35,
+          description: `Authored Team Trivia Challenge`,
+          timestamp: q.createdAt || Date.now(),
+          details: `Published Question of the Day: "${q.question}" (${q.category || 'General'} category).`
+        });
+      });
+
+      // 6. Grant Applications Tracker
+      const userGrants = (grants || []).filter(g => 
+        g.createdByEmail?.toLowerCase() === email || 
+        g.leadMemberEmail?.toLowerCase() === email || 
+        g.leadMemberName?.toLowerCase() === user.name.toLowerCase()
+      );
+      userGrants.forEach(g => {
+        logs.push({
+          id: `grant-init-${g.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'grant_create',
+          amount: 60,
+          description: `Documented Grant Pipeline Application`,
+          timestamp: g.createdAt || Date.now(),
+          details: `Organized grant pipeline: "${g.name}" ($${g.amountRequested.toLocaleString()} requested) for ${g.organization}.`
+        });
+
+        if (['Submitted', 'Under Review', 'Awarded', 'Partially Awarded'].includes(g.status)) {
+          logs.push({
+            id: `grant-status-${g.id}`,
+            userName: user.name,
+            userEmail: user.schoolEmail,
+            userId: user.id,
+            type: 'grant_submit',
+            amount: 100,
+            description: `Grant Application Advanced: ${g.status}`,
+            timestamp: g.updatedAt || g.createdAt || Date.now(),
+            details: `Milestone reached for grant "${g.name}" with status "${g.status}". Award amount: $${(g.amountAwarded || g.amountRequested || 0).toLocaleString()}.`
+          });
+        }
+      });
+
+      // Grant requirements completed
+      (grants || []).forEach(g => {
+        (g.requirements || []).forEach(req => {
+          if (req.completed && (req.completedBy?.toLowerCase() === user.name.toLowerCase() || userGrants.some(ug => ug.id === g.id))) {
+            logs.push({
+              id: `grant-req-${g.id}-${req.id}`,
+              userName: user.name,
+              userEmail: user.schoolEmail,
+              userId: user.id,
+              type: 'grant_requirement',
+              amount: 15,
+              description: `Completed Grant Deliverable Requirement`,
+              timestamp: g.updatedAt || g.createdAt || Date.now(),
+              details: `Fulfilled requirement: "${req.title}" for grant "${g.name}".`
+            });
+          }
+        });
+      });
+
+      // 7. General Ledger Transactions
+      const userLedger = (ledgerTransactions || []).filter(tx => 
+        tx.createdByEmail?.toLowerCase() === email || 
+        tx.paidBy?.toLowerCase() === user.name.toLowerCase()
+      );
+      userLedger.forEach(tx => {
+        logs.push({
+          id: `ledger-tx-${tx.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'ledger_entry',
+          amount: 25,
+          description: `Logged Financial Ledger Record`,
+          timestamp: tx.createdAt || new Date(tx.date).getTime(),
+          details: `Recorded ${tx.type.toUpperCase()}: "${tx.description}" ($${tx.amount.toFixed(2)}) under category "${tx.category}". Account: ${tx.account}.`
+        });
+      });
+
+      // 8. Lab Inventory & Quick Log movements
+      const userInvTx = (inventoryTransactions || []).filter(itx => 
+        itx.performedByEmail?.toLowerCase() === email || 
+        itx.performedBy?.toLowerCase() === user.name.toLowerCase()
+      );
+      userInvTx.forEach(itx => {
+        logs.push({
+          id: `inv-tx-${itx.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'inventory_action',
+          amount: 15,
+          description: `Lab Inventory Stock Action: ${itx.type}`,
+          timestamp: itx.timestamp || Date.now(),
+          details: `Stock update on "${itx.itemName || 'Hardware Part'}": ${itx.type} ${itx.quantityChanged > 0 ? '+' : ''}${itx.quantityChanged} units. Reason: "${itx.notes || 'Lab log'}".`
+        });
+      });
+
+      const userInvItems = (inventoryItems || []).filter(item => 
+        item.createdByEmail?.toLowerCase() === email || 
+        item.createdBy?.toLowerCase() === user.name.toLowerCase()
+      );
+      userInvItems.forEach(item => {
+        logs.push({
+          id: `inv-item-${item.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'inventory_item',
+          amount: 25,
+          description: `Cataloged New Hardware Asset`,
+          timestamp: item.createdAt || Date.now(),
+          details: `Registered part: "${item.name}" (SKU/Part #: ${item.sku || 'N/A'}, Category: ${item.category}). Initial stock: ${item.quantity}.`
+        });
+      });
+
+      // 9. Kanban Sprint Tasks Completed
+      const userTasksDone = (kanbanTasks || []).filter(t => 
+        (t.assignedTo?.toLowerCase() === user.name.toLowerCase() || t.assignedTo?.toLowerCase() === email) &&
+        t.column === 'done'
+      );
+      userTasksDone.forEach(t => {
+        logs.push({
+          id: `kanban-task-${t.id}`,
+          userName: user.name,
+          userEmail: user.schoolEmail,
+          userId: user.id,
+          type: 'kanban_task',
+          amount: 30,
+          description: `Completed Agile Sprint Task`,
+          timestamp: t.createdAt || Date.now(),
+          details: `Finished sprint ticket: "${t.title}". Subteam focus: ${t.subteam}. Priority: ${t.priority}.`
+        });
+      });
+
+      // 10. Manual Adjustments page
       const userAdjustments = (xpAdjustments || []).filter(adj => 
         adj.userId === user.id || adj.userEmail.toLowerCase() === email
       );
@@ -1825,6 +2027,10 @@ export default function App() {
   const [formProblemsAndSolutions, setFormProblemsAndSolutions] = useState<string[]>(['']);
   const [formPlanNextTime, setFormPlanNextTime] = useState('');
   const [formImages, setFormImages] = useState<JournalImage[]>([]);
+  const [selectedGoogleFile, setSelectedGoogleFile] = useState<JournalImage | null>(null);
+  const [isAddingGoogleLink, setIsAddingGoogleLink] = useState(false);
+  const [googleLinkUrl, setGoogleLinkUrl] = useState('');
+  const [googleLinkTitle, setGoogleLinkTitle] = useState('');
   const [formAttendees, setFormAttendees] = useState<string[]>([]);
   const [customAttendee, setCustomAttendee] = useState('');
 
@@ -1878,7 +2084,7 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'danger' | 'info' } | null>(null);
 
   // Embedded view Tab selector (allows perfect responsiveness inside Google Site iframes)
-  const [activeTab, setActiveTab] = useState<'form' | 'archive'>('form');
+  const [activeTab, setActiveTab] = useState<'form' | 'archive' | 'gallery'>('form');
 
   // Derived userRole from the logged-in user profile
   const userRole: 'author' | 'reviewer' = isUserAdminOrMentor ? 'reviewer' : 'author';
@@ -2283,7 +2489,20 @@ FTC #6567 Captains & Mentors`
           ? entries.filter(e => e.author.toLowerCase().includes(email) || e.author.toLowerCase().includes(acc.name.toLowerCase())).length
           : entries.filter(e => (e.author.toLowerCase().includes(email) || e.author.toLowerCase().includes(acc.name.toLowerCase())) && e.subteam === g.id).length;
 
-        const userGamified = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+        const userGamified = computeUserGamification(
+          acc, 
+          entries, 
+          timeEntries, 
+          kanbanTasks, 
+          outreachEvents, 
+          xpAdjustments,
+          dailySubmissions,
+          dailyQuestions,
+          grants,
+          ledgerTransactions,
+          inventoryTransactions,
+          inventoryItems
+        );
         const subStats = getSubteamStatsAndRank(g.id, guildHours, guildJournals, acc.role, userGamified.stats.xp);
         
         // Every rank from 1 up to subStats.currentRank.rank is achieved by this user
@@ -3275,7 +3494,7 @@ FTC #6567 Captains & Mentors`
       priority: 'High',
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      updatedBy: currentUser?.displayName || 'General Meeting'
+      updatedBy: currentUser?.name || 'General Meeting'
     };
     const updated = [newTask, ...kanbanTasks];
     saveKanbanTasksToLocalStorage(updated);
@@ -3456,24 +3675,46 @@ FTC #6567 Captains & Mentors`
   const processFile = async (file: File) => {
     setIsImageProcessing(true);
     try {
-        const base64 = await compressAndResizeImage(file);
-        setFormImages(prev => [...prev, {
-            id: Date.now().toString() + Math.random().toString(),
-            dataUrl: base64,
-            name: file.name,
-            size: file.size
-        } as any]);
-    } catch {
-        showToast('Image processing failed', 'danger');
+      const processed = await processAnyNotebookFile(file);
+      setFormImages(prev => [...prev, processed]);
+      if (processed.isGoogleConverted) {
+        showToast(
+          `Converted "${file.name}" to open Google ${processed.googleDocType === 'sheet' ? 'Sheet' : processed.googleDocType === 'slide' ? 'Slide' : 'Doc'} format (free to be seen for anyone)!`,
+          'success'
+        );
+      } else {
+        showToast(`Attached "${file.name}" to notebook log`, 'info');
+      }
+    } catch (err: any) {
+      showToast(`File processing failed: ${err?.message || 'Unknown error'}`, 'danger');
     } finally {
-        setIsImageProcessing(false);
+      setIsImageProcessing(false);
     }
   };
 
-  const handleRemoveImage = (index: number) => {
+  const handleAddGoogleLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleLinkUrl.trim()) return;
+    try {
+      const attachment = createGoogleLinkAttachment(googleLinkUrl, googleLinkTitle);
+      setFormImages(prev => [...prev, attachment]);
+      showToast(`Attached Google ${attachment.googleDocType === 'sheet' ? 'Sheet' : attachment.googleDocType === 'slide' ? 'Slide' : 'Doc'} link to notebook log!`, 'success');
+      setGoogleLinkUrl('');
+      setGoogleLinkTitle('');
+      setIsAddingGoogleLink(false);
+    } catch {
+      showToast('Invalid Google file link URL', 'danger');
+    }
+  };
+
+  const handleRemoveImage = (identifier: number | string) => {
+    if (typeof identifier === 'number') {
       const updated = [...formImages];
-      updated.splice(index, 1);
+      updated.splice(identifier, 1);
       setFormImages(updated);
+    } else {
+      setFormImages(formImages.filter(img => img.id !== identifier));
+    }
   };
 
   const handleDownloadBackup = () => handleExportJSON();
@@ -4195,7 +4436,20 @@ ${entry.planNextTime || '_No carry-over specified._'}
     );
   }
 
-  const userGamification = currentUser ? computeUserGamification(currentUser, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments) : null;
+  const userGamification = currentUser ? computeUserGamification(
+    currentUser, 
+    entries, 
+    timeEntries, 
+    kanbanTasks, 
+    outreachEvents, 
+    xpAdjustments,
+    dailySubmissions,
+    dailyQuestions,
+    grants,
+    ledgerTransactions,
+    inventoryTransactions,
+    inventoryItems
+  ) : null;
 
   let sidebarLinks: {
     id: 'landing' | 'journal' | 'time_entry' | 'kanban' | 'outreach' | 'handbook' | 'finance' | 'inventory' | 'approvals' | 'system_dashboard' | 'grants' | 'settings' | 'qotd' | 'help_guide';
@@ -4237,7 +4491,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
       label: 'Kanban Board',
       sublabel: 'Task cards',
       icon: Layers,
-      badge: kanbanTasks.filter(t => t.assignedTo?.toLowerCase() === currentUser?.schoolEmail.toLowerCase() && t.status !== 'Completed').length || null,
+      badge: kanbanTasks.filter(t => t.assignedTo?.toLowerCase() === currentUser?.name.toLowerCase() && t.column !== 'done').length || null,
       badgeColor: 'bg-indigo-500',
       color: 'text-indigo-400'
     },
@@ -4288,7 +4542,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
       label: 'Question of the Day',
       sublabel: 'Daily challenge & XP',
       icon: Sparkles,
-      badge: dailyQuestions.filter(q => q.active && !dailySubmissions.some(s => s.questionId === q.id && s.userId === currentUser?.id)).length || null,
+      badge: dailyQuestions.filter(q => q.status === 'active' && !dailySubmissions.some(s => s.questionId === q.id && s.userId === currentUser?.id)).length || null,
       badgeColor: 'bg-yellow-500 animate-pulse',
       color: 'text-yellow-400'
     },
@@ -6147,6 +6401,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
               kanbanTasks={kanbanTasks}
               outreachEvents={outreachEvents}
               xpAdjustments={xpAdjustments}
+              qotdSubmissions={dailySubmissions}
+              qotdQuestions={dailyQuestions}
+              grants={grants}
+              ledgerTransactions={ledgerTransactions}
+              inventoryTransactions={inventoryTransactions}
+              inventoryItems={inventoryItems}
               onAddXpAdjustment={handleAddXpAdjustment}
               onDeleteXpAdjustment={handleDeleteXpAdjustment}
             />
@@ -6361,7 +6621,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
               ...sub,
               status: isCorrect ? 'graded_correct' : 'graded_incorrect',
               pointsAwarded,
-              feedback,
+              mentorFeedback: feedback,
               gradedBy: currentUser?.name || 'Mentor',
               gradedAt: Date.now()
             };
@@ -6437,6 +6697,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
           kanbanTasks={kanbanTasks}
           outreachEvents={outreachEvents}
           xpAdjustments={xpAdjustments}
+          qotdSubmissions={dailySubmissions}
+          qotdQuestions={dailyQuestions}
+          grants={grants}
+          ledgerTransactions={ledgerTransactions}
+          inventoryTransactions={inventoryTransactions}
+          inventoryItems={inventoryItems}
           onBack={() => setCurrentView('landing')}
           onApproveUser={handleApproveUser}
           onRejectUser={handleRejectUser}
@@ -6910,18 +7176,18 @@ ${entry.planNextTime || '_No carry-over specified._'}
             <div className="no-print sm:hidden bg-white border-b border-slate-300 py-2 px-3 flex justify-center gap-1 sticky top-0 z-50 dark:bg-slate-900 dark:border-slate-800">
               <button
                 onClick={() => setActiveTab('form')}
-                className={`flex-1 py-1.5 px-3 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
+                className={`flex-1 py-1.5 px-2 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
                   activeTab === 'form' 
                     ? 'bg-brand text-white' 
                     : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
                 }`}
               >
                 <Plus className="w-3.5 h-3.5" />
-                {isEditing ? 'Draft Editor' : 'New Journal'}
+                {isEditing ? 'Draft' : 'New'}
               </button>
               <button
                 onClick={() => setActiveTab('archive')}
-                className={`flex-1 py-1.5 px-3 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
+                className={`flex-1 py-1.5 px-2 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
                   activeTab === 'archive' 
                     ? 'bg-brand text-white' 
                     : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
@@ -6929,6 +7195,18 @@ ${entry.planNextTime || '_No carry-over specified._'}
               >
                 <FileText className="w-3.5 h-3.5" />
                 Logs ({filteredEntries.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('gallery')}
+                className={`flex-1 py-1.5 px-2 rounded font-bold text-xs transition-colors duration-150 flex items-center justify-center gap-1 uppercase ${
+                  activeTab === 'gallery' 
+                    ? 'bg-brand text-white' 
+                    : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-500'
+                }`}
+                id="tab-mobile-gallery"
+              >
+                <Images className="w-3.5 h-3.5" />
+                Gallery ({entries.reduce((acc, e) => acc + (e.images ? e.images.length : 0), 0)})
               </button>
             </div>
 
@@ -6952,6 +7230,51 @@ ${entry.planNextTime || '_No carry-over specified._'}
             </div>
             
             <div className="flex items-center flex-wrap gap-2.5">
+              <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('form')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'form'
+                      ? 'bg-white dark:bg-slate-900 text-brand shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                  id="tab-desktop-form"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isEditing ? 'Draft Editor' : 'New Journal'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('archive')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'archive'
+                      ? 'bg-white dark:bg-slate-900 text-brand shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                  id="tab-desktop-archive"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Logs Archive</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('gallery')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'gallery'
+                      ? 'bg-white dark:bg-slate-900 text-brand shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                  id="tab-desktop-gallery"
+                >
+                  <Images className="w-3.5 h-3.5" />
+                  <span>Media Gallery</span>
+                  <span className="bg-brand/10 text-brand text-[10px] font-mono font-black px-1.5 py-0.5 rounded-full">
+                    {entries.reduce((acc, e) => acc + (e.images ? e.images.length : 0), 0)}
+                  </span>
+                </button>
+              </div>
+
               <button
                 onClick={() => setIsExportModalOpen(true)}
                 className="bg-brand hover:bg-brand-hover text-white font-extrabold px-5 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md font-sans border border-brand/20 outline-none"
@@ -6971,7 +7294,23 @@ ${entry.planNextTime || '_No carry-over specified._'}
           </div>
 
           <main className={`flex-1 flex flex-col gap-8 ${entriesToPrint ? 'print:hidden' : ''}`}>
-        
+            {activeTab === 'gallery' ? (
+              <JournalGalleryView
+                entries={entries}
+                onSelectEntry={(entry) => {
+                  setSelectedEntry(entry);
+                  setActiveTab('archive');
+                }}
+                onOpenNewJournal={() => {
+                  setActiveTab('form');
+                  resetForm();
+                }}
+                onBackToLogs={() => {
+                  setActiveTab('archive');
+                }}
+              />
+            ) : (
+              <>
         {/* PANEL: DRAFT REGISTRATION FORM (TOP ROW) */}
         <section 
           className={`w-full flex flex-col gap-4 ${
@@ -7213,21 +7552,74 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       />
                     </div>
 
-                    {/* Image upload (spanning lg:col-span-4) */}
+                    {/* Notebook Attachments & Converted Google Files (spanning lg:col-span-4) */}
                     <div className="lg:col-span-4 border border-slate-200 rounded p-2.5 bg-slate-50 dark:bg-slate-800 dark:border-slate-800">
-                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
-                        Image Attachments
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                        <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                          Notebook Attachments &amp; Converted Files
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingGoogleLink(prev => !prev)}
+                          className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                          title="Attach an existing Google Docs, Sheets, or Slides link"
+                        >
+                          <Link2 className="w-3 h-3" />
+                          <span>+ Google Drive / Doc Link</span>
+                        </button>
+                      </div>
+
+                      {/* Optional Google Doc / Sheet link input card */}
+                      {isAddingGoogleLink && (
+                        <div className="mb-2 p-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-xs space-y-2 animate-in fade-in">
+                          <div className="flex items-center justify-between font-bold text-blue-900 dark:text-blue-200 text-[11px]">
+                            <span className="flex items-center gap-1.5">
+                              <Globe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                              Attach Accessible Google File (Free to view for anyone)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setIsAddingGoogleLink(false)}
+                              className="text-slate-400 hover:text-slate-600 p-0.5"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <input 
+                            type="url" 
+                            placeholder="Paste Google Docs, Sheets, Slides or Drive shareable link..." 
+                            value={googleLinkUrl}
+                            onChange={(e) => setGoogleLinkUrl(e.target.value)}
+                            className="w-full text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                          />
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              placeholder="Document title (optional)..." 
+                              value={googleLinkTitle}
+                              onChange={(e) => setGoogleLinkTitle(e.target.value)}
+                              className="flex-1 text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                            <button 
+                              type="button" 
+                              onClick={handleAddGoogleLink} 
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs transition cursor-pointer"
+                            >
+                              Attach Link
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       <div
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         onClick={() => fileInputRef.current?.click()}
-                        className={`border border-dashed rounded p-4 text-center cursor-pointer transition-colors ${
+                        className={`border border-dashed rounded p-3 text-center cursor-pointer transition-colors ${
                           isDraggingOver 
                             ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200' 
-                            : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-600'
+                            : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/50'
                         }`}
                         id="image-dropzone"
                       >
@@ -7235,56 +7627,39 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           type="file"
                           ref={fileInputRef}
                           multiple
-                          accept="image/*"
                           onChange={handleImageUpload}
                           className="hidden"
                         />
                         
                         {isImageProcessing ? (
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded"></div>
-                            <span className="text-[10px] text-brand font-bold">OPTIMIZING PICTURE DATA...</span>
+                          <div className="flex flex-col items-center gap-1 py-1">
+                            <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded-full"></div>
+                            <span className="text-[10px] text-brand font-bold uppercase tracking-wider">Processing &amp; Converting File...</span>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center gap-1">
-                            <FileUp className="w-6 h-6 text-slate-400 group-hover:text-brand dark:text-slate-500" />
-                            <span className="text-xs font-bold text-slate-500 uppercase dark:text-slate-400">Drag image or browse</span>
-                            <span className="text-[9px] text-slate-400 uppercase tracking-tighter dark:text-slate-500">JPEG, PNG optimized automatically</span>
+                            <FileUp className="w-5 h-5 text-slate-400 group-hover:text-brand dark:text-slate-400" />
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                              Drag any file here, or click to browse
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-mono tracking-tight dark:text-slate-400">
+                              MS Word, Excel &amp; PowerPoint auto-convert into open Google Docs • CAD, Code &amp; Images
+                            </span>
                           </div>
                         )}
                       </div>
 
-                      {/* Micro Preview of Uploaded images */}
+                      {/* Preview list of uploaded files */}
                       {formImages.length > 0 && (
-                        <div className="grid grid-cols-4 gap-1.5 mt-2" id="grid-draft-images">
+                        <div className="flex flex-col gap-1.5 mt-2" id="grid-draft-images">
                           {formImages.map((img) => (
-                            <div 
-                              key={img.id} 
-                              onClick={() => setExpandedImage({ 
-                                images: formImages.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
-                                currentIndex: formImages.findIndex(i => i.id === img.id)
-                              })}
-                              className="group relative border border-slate-300 rounded aspect-square overflow-hidden bg-slate-200 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-brand dark:bg-slate-800 dark:border-slate-800"
-                              title="Click to zoom preview"
-                            >
-                              <img 
-                                src={img.dataUrl} 
-                                alt={img.name} 
-                                className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 pointer-events-none"
-                                referrerPolicy="no-referrer"
-                              />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveImage(img.id);
-                                }}
-                                className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-0.5 rounded shadow transition-all hover:scale-110 z-10 cursor-pointer"
-                                title="Delete image"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            <NotebookAttachmentItem
+                              key={img.id}
+                              file={img}
+                              isEditable={true}
+                              onOpenViewer={(f) => setSelectedGoogleFile(f)}
+                              onRemove={(id) => handleRemoveImage(id)}
+                            />
                           ))}
                         </div>
                       )}
@@ -7328,12 +7703,64 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </>
               )}
 
-              {/* Photo attachments for General Meeting if in meeting mode */}
+              {/* Files, Documents & Converted Google Files for General Meeting */}
               {formEntryType === 'general_meeting' && (
                 <div className="border border-slate-200 rounded-xl p-3 bg-white dark:bg-slate-900 dark:border-slate-800">
-                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
-                    Meeting Photos &amp; Whiteboard Captures (Optional)
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                      Meeting Attachments &amp; Converted Google Files
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingGoogleLink(prev => !prev)}
+                      className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Link2 className="w-3 h-3" />
+                      <span>+ Google Drive / Doc Link</span>
+                    </button>
+                  </div>
+
+                  {/* Optional Google link input */}
+                  {isAddingGoogleLink && (
+                    <div className="mb-2 p-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-xs space-y-2 animate-in fade-in">
+                      <div className="flex items-center justify-between font-bold text-blue-900 dark:text-blue-200 text-[11px]">
+                        <span className="flex items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                          Attach Accessible Google File (Free to view for anyone)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingGoogleLink(false)}
+                          className="text-slate-400 hover:text-slate-600 p-0.5"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <input 
+                        type="url" 
+                        placeholder="Paste Google Docs, Sheets, Slides or Drive shareable link..." 
+                        value={googleLinkUrl}
+                        onChange={(e) => setGoogleLinkUrl(e.target.value)}
+                        className="w-full text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                      />
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Document title (optional)..." 
+                          value={googleLinkTitle}
+                          onChange={(e) => setGoogleLinkTitle(e.target.value)}
+                          className="flex-1 text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <button 
+                          type="button" 
+                          onClick={handleAddGoogleLink} 
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs transition cursor-pointer"
+                        >
+                          Attach Link
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div
                     onDragOver={handleDragOver}
@@ -7350,52 +7777,38 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       type="file"
                       ref={fileInputRef}
                       multiple
-                      accept="image/*"
                       onChange={handleImageUpload}
                       className="hidden"
                     />
                     
                     {isImageProcessing ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded"></div>
-                        <span className="text-[10px] text-brand font-bold">OPTIMIZING PICTURE DATA...</span>
+                      <div className="flex flex-col items-center gap-1 py-1">
+                        <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded-full"></div>
+                        <span className="text-[10px] text-brand font-bold uppercase tracking-wider">Processing &amp; Converting File...</span>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-center gap-2">
-                        <FileUp className="w-4 h-4 text-slate-400" />
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Attach whiteboard photos or meeting slides</span>
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        <FileUp className="w-5 h-5 text-slate-400" />
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                          Attach any file, presentation, spreadsheet, or whiteboard photos
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-mono">
+                          MS Office files auto-convert to open Google Docs &amp; Sheets (free to be seen for anyone)
+                        </span>
                       </div>
                     )}
                   </div>
 
                   {formImages.length > 0 && (
-                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                    <div className="flex flex-col gap-1.5 mt-2">
                       {formImages.map((img) => (
-                        <div 
-                          key={img.id} 
-                          onClick={() => setExpandedImage({ 
-                            images: formImages.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
-                            currentIndex: formImages.findIndex(i => i.id === img.id)
-                          })}
-                          className="group relative border border-slate-300 rounded-lg aspect-square overflow-hidden bg-slate-200 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-purple-600 dark:bg-slate-800 dark:border-slate-700"
-                        >
-                          <img 
-                            src={img.dataUrl} 
-                            alt={img.name} 
-                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 pointer-events-none"
-                            referrerPolicy="no-referrer"
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveImage(img.id);
-                            }}
-                            className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-0.5 rounded shadow transition-all hover:scale-110 z-10 cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
+                        <NotebookAttachmentItem
+                          key={img.id}
+                          file={img}
+                          isEditable={true}
+                          onOpenViewer={(f) => setSelectedGoogleFile(f)}
+                          onRemove={(id) => handleRemoveImage(id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -7449,11 +7862,23 @@ ${entry.planNextTime || '_No carry-over specified._'}
         >
           {/* HIGH DENSITY SEARCH & FILTER BOX */}
           <div className="bg-white border border-slate-205 rounded-xl p-4 lg:p-5 shadow-sm no-print text-slate-900 dark:bg-slate-900 dark:text-slate-400">
-            <div className="flex items-center gap-1 px-1 mb-2 border-b border-slate-100 pb-1 shrink-0 dark:border-slate-800">
-              <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest dark:text-slate-400">
-                Search &amp; Filter Team Journal
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1 mb-2 border-b border-slate-100 pb-1.5 shrink-0 dark:border-slate-800">
+              <div className="flex items-center gap-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest dark:text-slate-400">
+                  Search &amp; Filter Team Journal
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('gallery')}
+                className="self-start sm:self-auto bg-brand/10 hover:bg-brand/20 text-brand border border-brand/30 px-3 py-1 rounded-lg text-[11px] font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                id="btn-archive-gallery-link"
+                title="View all attached images in an automated gallery categorized by subteam"
+              >
+                <Images className="w-3.5 h-3.5" />
+                <span>Automated Photo Gallery ({entries.reduce((acc, e) => acc + (e.images ? e.images.length : 0), 0)} Photos)</span>
+              </button>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -7779,12 +8204,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         onImageClick={(idx) => {
                           const imgs = selectedEntry.images || [];
                           if (imgs.length > 0) {
-                            setExpandedImage({
-                              images: imgs.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
-                              currentIndex: idx
-                            });
+                            setSelectedGoogleFile(imgs[idx]);
                           }
                         }}
+                        onFileClick={(file) => setSelectedGoogleFile(file)}
                       />
                     ) : (
                       <>
@@ -7936,48 +8359,24 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         </div>
                       )}
 
-                      {/* Notebook imagery */}
+                      {/* Attached Files & Converted Google Docs/Sheets */}
                       {selectedEntry.images.length > 0 && (
-                        <div className="space-y-1.5">
-                          <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] font-bold dark:text-slate-400">
-                            Session Imagery Proofs (Chassis maps, tests, wiring diagrams)
-                          </strong>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] font-bold dark:text-slate-400">
+                              Attached Evidence, Files &amp; Google Docs ({selectedEntry.images.length})
+                            </strong>
+                            <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                              ✓ Open &amp; Accessible to Anyone
+                            </span>
+                          </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {selectedEntry.images.map((img) => (
-                              <div key={img.id} className="border border-slate-300 bg-white rounded p-1 flex flex-col gap-1 ring-1 ring-slate-205 dark:ring-slate-800 dark:bg-slate-900 dark:border-slate-800">
-                                <div 
-                                  onClick={() => setExpandedImage({ 
-                                    images: selectedEntry.images.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
-                                    currentIndex: selectedEntry.images.findIndex(i => i.id === img.id)
-                                  })}
-                                  className="aspect-[4/3] rounded overflow-hidden bg-slate-100 flex items-center justify-center border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity relative group/thumb dark:bg-slate-800 dark:border-slate-800"
-                                  title="Click to view expanded image"
-                                >
-                                  <img 
-                                    src={img.dataUrl} 
-                                    alt={img.name} 
-                                    className="max-h-full max-w-full object-contain pointer-events-none transition-transform duration-200 group-hover/thumb:scale-[1.02]"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                  <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/10 transition-colors flex items-center justify-center">
-                                    <span className="opacity-0 group-hover/thumb:opacity-100 transition-opacity bg-slate-950/90 text-white text-[9px] font-mono uppercase tracking-wider px-2 py-1 rounded flex items-center gap-1 shadow">
-                                      🔍 Click to Expand
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="text-[9px] font-mono text-slate-500 px-1 truncate shrink-0 flex justify-between items-center dark:text-slate-400">
-                                  <span className="truncate">📁 {img.name} ({(img.size / 1024).toFixed(1)} KB)</span>
-                                  <button
-                                    onClick={() => setExpandedImage({ 
-                                      images: selectedEntry.images.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
-                                      currentIndex: selectedEntry.images.findIndex(i => i.id === img.id)
-                                    })}
-                                    className="text-[9px] font-bold text-slate-400 hover:text-brand transition-colors cursor-pointer dark:text-slate-500"
-                                  >
-                                    [ZOOM]
-                                  </button>
-                                </div>
-                              </div>
+                              <NotebookAttachmentItem
+                                key={img.id}
+                                file={img}
+                                onOpenViewer={(f) => setSelectedGoogleFile(f)}
+                              />
                             ))}
                           </div>
                         </div>
@@ -8196,6 +8595,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
           </div>
         </section>
+        </>
+      )}
       </main>
       </div>
           </>
@@ -8326,7 +8727,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
         )}
       </AnimatePresence>
 
-      {/* Create / Edit Profile Modal */}
+      {/* Accessible Google File Viewer Modal (Office files converted to Google Docs / Sheets & any notebook file) */}
+      <GoogleFileViewerModal
+        file={selectedGoogleFile}
+        onClose={() => setSelectedGoogleFile(null)}
+        showToast={showToast}
+      />
       <AnimatePresence>
         {isCreateProfileOpen && (
           <motion.div
@@ -10181,7 +10587,7 @@ FTC #6567 Captains & Mentors`
       isMenuOpen={isMobileMenuOpen}
       activeSession={!!currentUser}
       pendingReviewsCount={entries.filter(e => e.status === 'Pending Review' && canUserApproveEntry(currentUser, e)).length}
-      unassignedTasksCount={kanbanTasks.filter(t => !t.assigneeEmail && t.status !== 'done').length}
+      unassignedTasksCount={kanbanTasks.filter(t => (t.assignedTo === 'Unassigned' || !t.assignedTo) && t.column !== 'done').length}
     />
 
     <MobileMenuDrawer 

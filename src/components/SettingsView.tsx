@@ -112,8 +112,8 @@ export function SettingsView({
   counts
 }: SettingsViewProps) {
   const [name, setName] = useState(currentUser.name);
-  const [primarySubteam, setPrimarySubteam] = useState<Subteam>(currentUser.primarySubteam || 'Design/Build/Fabrication');
-  const [secondarySubteam, setSecondarySubteam] = useState<Subteam>(currentUser.secondarySubteam || 'None' as any);
+  const [primarySubteam, setPrimarySubteam] = useState<string>(currentUser.primarySubteam || 'Design/Build/Fabrication');
+  const [secondarySubteam, setSecondarySubteam] = useState<string>(currentUser.secondarySubteam || 'None');
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
@@ -126,7 +126,7 @@ export function SettingsView({
     setIsSaving(true);
     setSaveFeedback(null);
     try {
-      const success = await onUpdateProfile(name.trim(), primarySubteam, secondarySubteam);
+      const success = await onUpdateProfile(name.trim(), primarySubteam as any, secondarySubteam as any);
       if (success) {
         setSaveFeedback('Profile settings saved successfully!');
         setTimeout(() => setSaveFeedback(null), 3500);
@@ -376,8 +376,8 @@ export function SettingsView({
                   >
                     <div className="flex items-center gap-3">
                       {/* Drag Handle & Reorder Arrows */}
-                      <div className="flex items-center gap-1.5 shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <GripVertical className="w-4 h-4 cursor-grab active:cursor-grabbing text-slate-400" title="Drag to reorder workspace menu" />
+                      <div className="flex items-center gap-1.5 shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" title="Drag to reorder workspace menu">
+                        <GripVertical className="w-4 h-4 cursor-grab active:cursor-grabbing text-slate-400" />
                         <div className="flex flex-col gap-0.5">
                           <button
                             type="button"
@@ -562,6 +562,8 @@ export function SettingsView({
                       <option value="Programming">💻 Programming</option>
                       <option value="Outreach">🌍 Outreach</option>
                       <option value="Business & Media">📈 Business &amp; Media</option>
+                      <option value="Inspire">✨ Inspire</option>
+                      <option value="Strategy">🎯 Strategy</option>
                       {isMentorOrAdmin && (
                         <>
                           <option value="Mentor">🛡️ Coach / Mentor</option>

@@ -12,7 +12,20 @@ export const DEMO_ENTRIES: JournalEntry[] = [
       "Motor mounting screws were slightly loose because of threading mismatch. Fixed by replacing with custom locking nuts."
     ],
     planNextTime: "Wire and test motor controllers to run full drivetrain speed tests.",
-    images: [],
+    images: [
+      {
+        id: "demo-img-cad-1",
+        name: "modular_gripper_cad_v2.svg",
+        size: 2450,
+        dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="260" viewBox="0 0 400 260"><rect width="100%" height="100%" fill="%230f172a"/><text x="20" y="35" fill="%2338bdf8" font-family="monospace" font-size="14" font-weight="bold">ONSHAPE CAD // MODULAR INTAKE</text><text x="20" y="55" fill="%2364748b" font-family="monospace" font-size="11">SUBTEAM: DESIGN / BUILD // REV 2.4</text><rect x="60" y="80" width="120" height="110" rx="8" fill="none" stroke="%2338bdf8" stroke-width="3"/><rect x="220" y="80" width="120" height="110" rx="8" fill="none" stroke="%23f59e0b" stroke-width="3"/><path d="M120 135 L280 135" stroke="%2322c55e" stroke-width="4" stroke-dasharray="6 4"/><circle cx="120" cy="135" r="14" fill="%2338bdf8"/><circle cx="280" cy="135" r="14" fill="%23f59e0b"/><text x="85" y="225" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">Left Gripper Rail</text><text x="240" y="225" fill="white" font-family="sans-serif" font-size="11" font-weight="bold">Right Compliant Wheel</text></svg>'
+      },
+      {
+        id: "demo-img-chassis-2",
+        name: "chassis_rail_assembly.svg",
+        size: 1980,
+        dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="260" viewBox="0 0 400 260"><rect width="100%" height="100%" fill="%231e293b"/><text x="20" y="35" fill="%23f97316" font-family="monospace" font-size="14" font-weight="bold">HARDWARE ASSEMBLY // DRIVETRAIN</text><rect x="50" y="70" width="300" height="120" rx="10" fill="none" stroke="%23f97316" stroke-width="3"/><circle cx="90" cy="190" r="28" fill="%230f172a" stroke="%2338bdf8" stroke-width="4"/><circle cx="310" cy="190" r="28" fill="%230f172a" stroke="%2338bdf8" stroke-width="4"/><text x="135" y="135" fill="white" font-family="monospace" font-size="13">MECANUM DRIVE BASE</text><text x="140" y="155" fill="%2394a3b8" font-family="monospace" font-size="10">18" x 18" SIZING CUBE VALID</text></svg>'
+      }
+    ],
     createdAt: Date.now() - 3 * 24 * 3600 * 1000,
     updatedAt: Date.now() - 3 * 24 * 3600 * 1000,
     status: "Approved",

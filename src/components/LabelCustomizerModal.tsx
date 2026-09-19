@@ -171,7 +171,7 @@ export function LabelCustomizerModal({
           name: item.name,
           sku: item.sku || undefined,
           loc: item.location,
-          subArea: item.subArea || undefined
+          subArea: (item as any).subArea || undefined
         });
 
         try {

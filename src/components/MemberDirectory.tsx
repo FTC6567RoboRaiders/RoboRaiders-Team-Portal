@@ -27,7 +27,20 @@ import {
   AlertCircle,
   Check
 } from 'lucide-react';
-import { UserAccount, JournalEntry, TimeEntry, KanbanTask, OutreachEvent, XPAdjustment } from '../types';
+import { 
+  UserAccount, 
+  JournalEntry, 
+  TimeEntry, 
+  KanbanTask, 
+  OutreachEvent, 
+  XPAdjustment,
+  QuestionAnswerSubmission,
+  QuestionOfTheDay,
+  GrantApplication,
+  LedgerTransaction,
+  InventoryTransaction,
+  InventoryItem
+} from '../types';
 import { computeUserGamification, calculateJournalQualityScore } from '../utils/gamification';
 
 interface MemberDirectoryProps {
@@ -38,6 +51,12 @@ interface MemberDirectoryProps {
   kanbanTasks: KanbanTask[];
   outreachEvents: OutreachEvent[];
   xpAdjustments: XPAdjustment[];
+  qotdSubmissions?: QuestionAnswerSubmission[];
+  qotdQuestions?: QuestionOfTheDay[];
+  grants?: GrantApplication[];
+  ledgerTransactions?: LedgerTransaction[];
+  inventoryTransactions?: InventoryTransaction[];
+  inventoryItems?: InventoryItem[];
   onBack: () => void;
   onApproveUser: (userId: string) => Promise<void>;
   onRejectUser: (userId: string) => Promise<void>;
@@ -69,6 +88,12 @@ export default function MemberDirectory({
   kanbanTasks,
   outreachEvents,
   xpAdjustments,
+  qotdSubmissions,
+  qotdQuestions,
+  grants,
+  ledgerTransactions,
+  inventoryTransactions,
+  inventoryItems,
   onBack,
   onApproveUser,
   onRejectUser,
@@ -345,9 +370,20 @@ export default function MemberDirectory({
     // Allow users to export the full directory including gamification logic
     accounts.forEach((acc) => {
       // Recompute logic per acc
-      // NOTE gamification for MemberDirectory components only uses these props: 
-      // computeUserGamification(user: UserAccount, journals: JournalEntry[], timeEntries: TimeEntry[], kanbanTasks: KanbanTask[], outreachEvents: OutreachEvent[], xpAdjs: XPAdjustment[])
-      const g = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+      const g = computeUserGamification(
+        acc, 
+        entries, 
+        timeEntries, 
+        kanbanTasks, 
+        outreachEvents, 
+        xpAdjustments,
+        qotdSubmissions,
+        qotdQuestions,
+        grants,
+        ledgerTransactions,
+        inventoryTransactions,
+        inventoryItems
+      );
       const audit = getUserXpAudit(acc);
       const outreachCount = audit.outreachLogs.length;
 
@@ -593,6 +629,11 @@ export default function MemberDirectory({
                 >
                   <option value="All">All Subteams</option>
                   <option value="Design/Build/Fabrication">Design &amp; Build</option>
+                  <option value="Programming">Programming</option>
+                  <option value="Outreach">Outreach</option>
+                  <option value="Business & Media">Business &amp; Media</option>
+                  <option value="Inspire">Inspire</option>
+                  <option value="Strategy">Strategy</option>
                   <option value="Control/Automation">Control Loop &amp; Code</option>
                   <option value="Outreach/Inspire">Inspire &amp; Outreach</option>
                   <option value="Strategy/Scouting">Strategy &amp; Scouting</option>
@@ -626,7 +667,20 @@ export default function MemberDirectory({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {filteredRoster.map((acc) => {
                   const isSelected = selectedUserForAudit?.id === acc.id;
-                  const userGamifiedInfo = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+                  const userGamifiedInfo = computeUserGamification(
+                    acc, 
+                    entries, 
+                    timeEntries, 
+                    kanbanTasks, 
+                    outreachEvents, 
+                    xpAdjustments,
+                    qotdSubmissions,
+                    qotdQuestions,
+                    grants,
+                    ledgerTransactions,
+                    inventoryTransactions,
+                    inventoryItems
+                  );
                   
                   return (
                     <div 
@@ -771,7 +825,20 @@ export default function MemberDirectory({
             </div>
           ) : (
             (() => {
-              const selectedGamified = computeUserGamification(selectedUserForAudit, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+              const selectedGamified = computeUserGamification(
+                selectedUserForAudit, 
+                entries, 
+                timeEntries, 
+                kanbanTasks, 
+                outreachEvents, 
+                xpAdjustments,
+                qotdSubmissions,
+                qotdQuestions,
+                grants,
+                ledgerTransactions,
+                inventoryTransactions,
+                inventoryItems
+              );
               const auditData = getUserXpAudit(selectedUserForAudit);
               
               const isLeadActionsAvailable = isMentorOrCaptain && (selectedUserForAudit.id !== 'a-admin' && selectedUserForAudit.id !== currentUser?.id);
@@ -1229,6 +1296,8 @@ export default function MemberDirectory({
                       <option value="Programming">Programming / Autonomous</option>
                       <option value="Outreach">Community Outreach</option>
                       <option value="Business & Media">Business, Media & Grants</option>
+                      <option value="Inspire">Inspire</option>
+                      <option value="Strategy">Strategy</option>
                       <option value="Lead/Captain">Team Captain</option>
                       <option value="Mentor">Head Coach / Mentor</option>
                     </select>
@@ -1813,7 +1882,20 @@ export default function MemberDirectory({
               </thead>
               <tbody>
                 {accounts.filter(a => a.status === 'Approved').map(acc => {
-                  const g = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+                  const g = computeUserGamification(
+                    acc, 
+                    entries, 
+                    timeEntries, 
+                    kanbanTasks, 
+                    outreachEvents, 
+                    xpAdjustments,
+                    qotdSubmissions,
+                    qotdQuestions,
+                    grants,
+                    ledgerTransactions,
+                    inventoryTransactions,
+                    inventoryItems
+                  );
                   return (
                     <tr key={acc.id} className="border-b border-slate-300 dark:border-slate-800">
                       <td className="py-2 px-2 font-bold">{acc.name}</td>
@@ -1832,7 +1914,20 @@ export default function MemberDirectory({
         )}
 
         {accounts.filter(a => a.status === 'Approved').map((acc, index, array) => {
-                          const g = computeUserGamification(acc, entries, timeEntries, kanbanTasks, outreachEvents, xpAdjustments);
+          const g = computeUserGamification(
+            acc, 
+            entries, 
+            timeEntries, 
+            kanbanTasks, 
+            outreachEvents, 
+            xpAdjustments,
+            qotdSubmissions,
+            qotdQuestions,
+            grants,
+            ledgerTransactions,
+            inventoryTransactions,
+            inventoryItems
+          );
           const audit = getUserXpAudit(acc);
           const journalXp = audit.journalLogs.reduce((sum, item) => sum + item.xp, 0);
           const timeXp = audit.hoursLogs.reduce((sum, item) => sum + item.xp, 0);

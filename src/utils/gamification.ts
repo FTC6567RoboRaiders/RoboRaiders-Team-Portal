@@ -1,4 +1,17 @@
-import { JournalEntry, TimeEntry, UserAccount, KanbanTask, OutreachEvent, XPAdjustment } from '../types';
+import { 
+  JournalEntry, 
+  TimeEntry, 
+  UserAccount, 
+  KanbanTask, 
+  OutreachEvent, 
+  XPAdjustment,
+  QuestionAnswerSubmission,
+  QuestionOfTheDay,
+  GrantApplication,
+  LedgerTransaction,
+  InventoryTransaction,
+  InventoryItem
+} from '../types';
 import { getSubteamStatsAndRank } from '../data/subteamRanks';
 
 export interface Badge {
@@ -192,9 +205,15 @@ export const computeUserGamification = (
   user: UserAccount,
   entries: JournalEntry[],
   timeEntries: TimeEntry[],
-  _kanbanTasks?: KanbanTask[],
+  kanbanTasks?: KanbanTask[],
   outreachEvents?: OutreachEvent[],
-  xpAdjustments?: XPAdjustment[]
+  xpAdjustments?: XPAdjustment[],
+  qotdSubmissions?: QuestionAnswerSubmission[],
+  qotdQuestions?: QuestionOfTheDay[],
+  grants?: GrantApplication[],
+  ledgerTransactions?: LedgerTransaction[],
+  inventoryTransactions?: InventoryTransaction[],
+  inventoryItems?: InventoryItem[]
 ): { stats: UserStats; badges: Badge[]; quests: Quest[] } => {
   const email = user.schoolEmail.toLowerCase();
   
@@ -217,10 +236,10 @@ export const computeUserGamification = (
   });
 
   // Calculate quality-driven XP
-  // 10 XP per hour of lab attendance
+  // 1. 10 XP per hour of lab attendance
   const hoursXp = Math.floor(userHours.reduce((sum, h) => sum + h.durationHours, 0) * 10);
   
-  // 50 XP per Journal Entry published + actual quality score bonus (0 to 105 XP)
+  // 2. 50 XP per Journal Entry published + actual quality score bonus (0 to 105 XP)
   const journalCountXp = userJournals.length * 50;
   
   // Award full quality points directly as extra XP
@@ -234,10 +253,7 @@ export const computeUserGamification = (
   const imagesCount = userJournals.reduce((sum, j) => sum + (j.images?.length || 0), 0);
   const imageXp = imagesCount * 15;
 
-  // Completed Kanban Tasks no longer award XP
-  const kanbanXp = 0;
-
-  // 50 XP per Outreach Event participated in
+  // 3. 50 XP per Outreach Event participated in
   const participatedOutreach = (outreachEvents || []).filter(ev => 
     ev.participants?.some(p => 
       p.toLowerCase() === user.name.toLowerCase() || 
@@ -247,14 +263,111 @@ export const computeUserGamification = (
   );
   const outreachXp = participatedOutreach.length * 50;
 
-  // Manual adjustments from Mentors/Admins
+  // 4. Question of the Day: Submissions + Correct Answers + Authored Questions
+  const userSubmissions = (qotdSubmissions || []).filter(s => 
+    (s.userId === user.id || s.userEmail.toLowerCase() === email || s.userName.toLowerCase() === user.name.toLowerCase()) &&
+    (!user.createdAt || s.submittedAt >= user.createdAt)
+  );
+  // +25 XP base participation per submitted answer, PLUS points scored for correct/graded answers
+  const qotdParticipationXp = userSubmissions.length * 25;
+  const qotdScoreXp = userSubmissions.reduce((sum, s) => sum + (s.pointsAwarded || 0), 0);
+
+  // +35 XP per Question of the Day authored/published to challenge teammates
+  const userAuthoredQuestions = (qotdQuestions || []).filter(q => 
+    (q.createdByEmail?.toLowerCase() === email || q.createdBy?.toLowerCase() === user.name.toLowerCase()) &&
+    (!user.createdAt || q.createdAt >= user.createdAt)
+  );
+  const qotdAuthorXp = userAuthoredQuestions.length * 35;
+
+  const totalQotdXp = qotdParticipationXp + qotdScoreXp + qotdAuthorXp;
+
+  // 5. Grant Tracker: +60 XP per grant created/led, +100 XP bonus for submitted/awarded, +15 XP per requirement completed
+  const userGrants = (grants || []).filter(g => 
+    (g.createdByEmail?.toLowerCase() === email || 
+     g.leadMemberEmail?.toLowerCase() === email || 
+     g.leadMemberName?.toLowerCase() === user.name.toLowerCase()) &&
+    (!user.createdAt || g.createdAt >= user.createdAt)
+  );
+  const grantCreateXp = userGrants.length * 60;
+  const grantAdvancedXp = userGrants.filter(g => 
+    ['Submitted', 'Under Review', 'Awarded', 'Partially Awarded'].includes(g.status)
+  ).length * 100;
+  
+  // Requirements completed
+  let grantReqsCompleted = 0;
+  (grants || []).forEach(g => {
+    (g.requirements || []).forEach(req => {
+      if (req.completed && (
+        req.completedBy?.toLowerCase() === user.name.toLowerCase() ||
+        (userGrants.some(ug => ug.id === g.id))
+      )) {
+        grantReqsCompleted++;
+      }
+    });
+  });
+  const grantReqsXp = grantReqsCompleted * 15;
+  const totalGrantXp = grantCreateXp + grantAdvancedXp + grantReqsXp;
+
+  // 6. General Ledger: +25 XP per logged financial transaction / receipt
+  const userLedgerTx = (ledgerTransactions || []).filter(tx => 
+    (tx.createdByEmail?.toLowerCase() === email || 
+     tx.paidBy?.toLowerCase() === user.name.toLowerCase()) &&
+    (!user.createdAt || tx.createdAt >= user.createdAt)
+  );
+  const ledgerXp = userLedgerTx.length * 25;
+
+  // 7. Lab Inventory: +15 XP per stock movement / Quick Log, +25 XP per part item cataloged
+  const userInvTx = (inventoryTransactions || []).filter(itx => 
+    (itx.performedByEmail?.toLowerCase() === email || 
+     itx.performedBy?.toLowerCase() === user.name.toLowerCase()) &&
+    (!user.createdAt || itx.timestamp >= user.createdAt)
+  );
+  const invTxXp = userInvTx.length * 15;
+
+  const userInvItems = (inventoryItems || []).filter(item => 
+    (item.createdByEmail?.toLowerCase() === email || 
+     item.createdBy?.toLowerCase() === user.name.toLowerCase()) &&
+    (!user.createdAt || item.createdAt >= user.createdAt)
+  );
+  const invItemXp = userInvItems.length * 25;
+  const totalInventoryXp = invTxXp + invItemXp;
+
+  // 8. Kanban Tasks: +30 XP per completed task assigned to user, +10 XP per maintained task
+  const userCompletedTasks = (kanbanTasks || []).filter(t => 
+    (t.assignedTo?.toLowerCase() === user.name.toLowerCase() || t.assignedTo?.toLowerCase() === email) &&
+    t.column === 'done'
+  );
+  const kanbanDoneXp = userCompletedTasks.length * 30;
+
+  const userMaintainedTasks = (kanbanTasks || []).filter(t => 
+    t.updatedBy?.toLowerCase() === user.name.toLowerCase() &&
+    (!user.createdAt || t.createdAt >= user.createdAt)
+  );
+  const kanbanMaintainXp = userMaintainedTasks.length * 10;
+  const kanbanXp = kanbanDoneXp + kanbanMaintainXp;
+
+  // 9. Manual adjustments from Mentors/Admins
   const userAdjustments = (xpAdjustments || []).filter(adj => 
     ((adj.userId === user.id || adj.userEmail.toLowerCase() === email) && !isSignupBonus(adj.reason)) &&
     (!user.createdAt || adj.createdAt >= user.createdAt)
   );
   const manualXp = userAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
 
-  const totalXp = Math.max(0, hoursXp + journalCountXp + qualityXpBonus + approvedJournalXp + imageXp + kanbanXp + outreachXp + manualXp); // base sign up + kanban removed!
+  const totalXp = Math.max(
+    0, 
+    hoursXp + 
+    journalCountXp + 
+    qualityXpBonus + 
+    approvedJournalXp + 
+    imageXp + 
+    outreachXp + 
+    totalQotdXp + 
+    totalGrantXp + 
+    ledgerXp + 
+    totalInventoryXp + 
+    kanbanXp + 
+    manualXp
+  );
 
   const totalHours = userHours.reduce((sum, h) => sum + h.durationHours, 0);
   const totalJournals = userJournals.length;
@@ -428,7 +541,47 @@ export const computeUserGamification = (
       icon: "Database",
       reqText: "5+ written entries"
     },
-    // --- 8. Specific subteams and items ---
+    // --- 8. App Engagement Badges (Trivia, Grants, Ledger, Logistics, Agile) ---
+    {
+      id: "trivia_scholar",
+      name: "Rules Scholar",
+      description: "Answer at least 3 Question of the Day game manual or programming challenges.",
+      category: "special",
+      icon: "Sparkles",
+      reqText: "3 QOTD submissions"
+    },
+    {
+      id: "grant_hunter",
+      name: "Funding Strategist",
+      description: "Create, lead, or advance a Grant Application in the Grant Tracker.",
+      category: "special",
+      icon: "Award",
+      reqText: "1+ Grant application"
+    },
+    {
+      id: "finance_treasurer",
+      name: "Fiscal Officer",
+      description: "Document funding, parts purchases, or reimbursements in the General Ledger.",
+      category: "special",
+      icon: "Briefcase",
+      reqText: "1+ Ledger transaction"
+    },
+    {
+      id: "stock_master",
+      name: "Logistics Specialist",
+      description: "Perform 3 or more Quick Log stock updates, checkouts, or catalog new hardware.",
+      category: "build",
+      icon: "Settings",
+      reqText: "3+ Inventory actions"
+    },
+    {
+      id: "agile_sprinter",
+      name: "Sprint Champion",
+      description: "Complete 2 or more Kanban sprint task cards.",
+      category: "code",
+      icon: "Layers",
+      reqText: "2+ Kanban cards done"
+    },
     {
       id: "safety_officer",
       name: "Safety Marshal",
@@ -463,14 +616,14 @@ export const computeUserGamification = (
     }
   ];
 
-  // Evaluate each of the 24 badges
+  // Evaluate each badge
   const evaluatedBadges: Badge[] = initialBadges.map(b => {
     let unlocked = false;
     let progress = 0;
 
     switch (b.id) {
       case "first_spark":
-        unlocked = totalJournals > 0 || totalHours > 0;
+        unlocked = totalJournals > 0 || totalHours > 0 || userSubmissions.length > 0 || userGrants.length > 0 || userLedgerTx.length > 0 || userInvTx.length > 0;
         progress = unlocked ? 100 : 0;
         break;
       case "iron_grip":
@@ -529,7 +682,6 @@ export const computeUserGamification = (
         progress = Math.min(100, Math.floor((distinctSubteams / 2) * 100));
         break;
       case "debugger":
-        // solved if they have either written 2 separate entries with problems, or scored problems count
         const totalProblemsDocs = userJournals.reduce((sum, j) => sum + (j.problemsAndSolutions?.length || 0), 0);
         unlocked = totalProblemsDocs >= 2;
         progress = Math.min(100, Math.floor((totalProblemsDocs / 2) * 100));
@@ -568,6 +720,27 @@ export const computeUserGamification = (
         unlocked = totalJournals >= 5;
         progress = Math.min(100, Math.floor((totalJournals / 5) * 100));
         break;
+      case "trivia_scholar":
+        unlocked = userSubmissions.length >= 3;
+        progress = Math.min(100, Math.floor((userSubmissions.length / 3) * 100));
+        break;
+      case "grant_hunter":
+        unlocked = userGrants.length >= 1;
+        progress = unlocked ? 100 : 0;
+        break;
+      case "finance_treasurer":
+        unlocked = userLedgerTx.length >= 1;
+        progress = unlocked ? 100 : 0;
+        break;
+      case "stock_master":
+        const totalInvActions = userInvTx.length + userInvItems.length;
+        unlocked = totalInvActions >= 3;
+        progress = Math.min(100, Math.floor((totalInvActions / 3) * 100));
+        break;
+      case "agile_sprinter":
+        unlocked = userCompletedTasks.length >= 2;
+        progress = Math.min(100, Math.floor((userCompletedTasks.length / 2) * 100));
+        break;
       case "safety_officer":
         unlocked = userJournals.some(j => {
           const text = (j.accomplished || '').toLowerCase();
@@ -601,23 +774,22 @@ export const computeUserGamification = (
     } as Badge;
   });
 
-  // --- 25. Determine All-Unlocked "How Did We Get Here?" Secret Badge ---
+  // --- Determine All-Unlocked "How Did We Get Here?" Secret Badge ---
   const initialUnlockedCount = evaluatedBadges.filter(b => b.unlocked).length;
-  const isSecretUnlocked = initialUnlockedCount >= 24; // 24 badges fully unlocked
-  const secretProgress = Math.floor((initialUnlockedCount / 24) * 100);
+  const isSecretUnlocked = initialUnlockedCount >= (initialBadges.length - 1);
+  const secretProgress = Math.floor((initialUnlockedCount / (initialBadges.length - 1)) * 100);
 
   const secretBadge: Badge = {
     id: "how_did_we_get_here",
     name: "How Did We Get Here?",
-    description: "The absolute zenith of FTC documentation: Unlock all 24 initial badges on the achievement board.",
+    description: "The absolute zenith of FTC documentation: Unlock all primary badges on the achievement board.",
     category: "general",
-    icon: "Compass", // Use a gorgeous icon!
+    icon: "Compass",
     unlocked: isSecretUnlocked,
     progress: secretProgress,
-    reqText: "Unlock 24 other achievements"
+    reqText: `Unlock ${initialBadges.length - 1} other achievements`
   };
 
-  // Add the 25th badge to the array!
   const finalBadges = [...evaluatedBadges, secretBadge];
 
   // Align team members ranks with the defined ranks from spreadsheet
@@ -673,6 +845,26 @@ export const computeUserGamification = (
       unlocked: totalHours >= 4,
       xpReward: 100,
       icon: "Wrench"
+    },
+    {
+      id: "quest_trivia_challenge",
+      name: "Daily Rules Quiz",
+      description: "Submit at least 1 Question of the Day game manual challenge.",
+      targetCount: 1,
+      currentCount: userSubmissions.length > 0 ? 1 : 0,
+      unlocked: userSubmissions.length > 0,
+      xpReward: 60,
+      icon: "Sparkles"
+    },
+    {
+      id: "quest_inventory_logistics",
+      name: "Lab Logistics",
+      description: "Perform a Quick Log stock movement or catalog a hardware asset in Lab Inventory.",
+      targetCount: 1,
+      currentCount: (userInvTx.length + userInvItems.length) > 0 ? 1 : 0,
+      unlocked: (userInvTx.length + userInvItems.length) > 0,
+      xpReward: 50,
+      icon: "Boxes"
     },
     {
       id: "quest_journal_depth",

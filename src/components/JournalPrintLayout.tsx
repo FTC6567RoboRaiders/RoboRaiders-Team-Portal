@@ -585,6 +585,31 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                           </div>
                         </div>
                       )}
+
+                      {/* 5. Attached Documentation, CAD & Converted Google Files */}
+                      {entry.images && entry.images.length > 0 && (
+                        <div className="pt-2 border-t border-dashed border-slate-300">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <FileText className="w-3.5 h-3.5 text-slate-700" />
+                            <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                              5. Attached Evidence, CAD Models &amp; Converted Google Files ({entry.images.length})
+                            </h3>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {entry.images.map((img) => (
+                              <div key={img.id} className="p-2 bg-slate-50 border border-slate-200 rounded text-[9px] font-mono flex items-center justify-between">
+                                <span className="font-bold truncate text-slate-800">
+                                  {img.isGoogleConverted ? (img.googleDocType === 'doc' ? '📄 Google Doc: ' : img.googleDocType === 'sheet' ? '📊 Google Sheet: ' : '📽️ Google Slide: ') : '📁 '}
+                                  {img.googleDocTitle || img.name}
+                                </span>
+                                <span className="text-slate-500 shrink-0 ml-1">
+                                  {(img.size / 1024).toFixed(1)} KB {img.isGoogleConverted ? '• Accessible' : ''}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

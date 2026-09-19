@@ -386,8 +386,78 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ]
   },
   {
+    id: 'mentor-tools-management',
+    title: '11. Mentor Tools & Member Management Tutorial',
+    shortTitle: 'Mentor Tutorial',
+    category: 'admin',
+    icon: Users,
+    iconColor: 'text-purple-600',
+    estimatedMinutes: 5,
+    summary: 'Comprehensive step-by-step tutorial for Mentors and Coaches on approving members, reviewing engineering notebooks, rubric grading, manual XP grants, and team administrative operations.',
+    steps: [
+      {
+        title: '1. Reviewing & Approving Pending Registrations',
+        desc: 'Open the "Member Directory" from the sidebar. Filter by "Pending" status to inspect new student signups. Review their school email and requested subteam focus, then click "Approve Registration" or "Reject".'
+      },
+      {
+        title: '2. Promoting Roles & Assigning Leadership Titles',
+        desc: 'In the Member Directory, click on any verified member. Use the leadership selector to designate them as "Subteam leader" or "Captain". You can also promote members to "Mentor" or "Captain" role classes.'
+      },
+      {
+        title: '3. Pre-Registering & Admin Account Creation',
+        desc: 'Click "Create New Account" in the Member Directory. Choose "Immediate Activation" or "Scheduled Activation", configure password reset delivery (Automatic link, Scheduled, or Manual), and assign their primary subteam.'
+      },
+      {
+        title: '4. Auditing Engineering Journals & Verification Stamps',
+        desc: 'Visit the "Review Hub" or "Engineering Notebook". Click "Audit & Approve" on submitted logs to award the student a +120 XP Mentor Verification Bonus and attach official mentor review timestamps.'
+      },
+      {
+        title: '5. Question of the Day: Question Authoring & Grading Desk',
+        desc: 'In the Question of the Day workspace, mentors can create new trivia/rule challenges using the 1-click template library or custom questions. For open-ended questions, open the "Mentor Grading Desk" to assign score points (+1 to +100 XP) and leave feedback notes.'
+      },
+      {
+        title: '6. Gamification Arena: Manual XP Grants & Penalties',
+        desc: 'In the "Arena Portal" under the "Mentor XP Control" tab, select any student, enter an XP amount (e.g. +50 for robot transport, +100 for tournament pit lead), provide a reason, and submit to create an immutable audit record.'
+      },
+      {
+        title: '7. Financial Ledger & Grant Milestone Tracking',
+        desc: 'Review out-of-pocket reimbursement receipts, categorize hardware expenditures, and advance grant application stages from "Draft" to "Submitted" and "Awarded".'
+      }
+    ],
+    keyFeatures: [
+      { title: 'One-Click Full Roster PDF & CSV Export', desc: 'Export formatted student attendance, accumulated lab hours, notebook counts, and XP levels for school administration.' },
+      { title: 'Dynamic Member Audit Inspector', desc: 'Inspect any member’s chronological XP breakdown across journals, lab stopwatch shifts, outreach events, trivia scores, and grants.' },
+      { title: 'Safe Account Purge & Deactivation', desc: 'Securely revoke access for graduating seniors or transfer students with confirmation checks.' },
+      { title: 'Emergency Profile Edits', desc: 'Mentors can update student name typos, school email formatting, or subteam affiliations without requiring the student to re-register.' }
+    ],
+    proTips: [
+      'Encourage peer review among Subteam Leaders, but reserve final Mentor Verification for official competition notebook entries.',
+      'Use the Mentor XP Control tab to recognize unsung heroes who help with workshop cleanup, pit setup, or safety inspections.',
+      'Check the Question of the Day Grading Desk before each weekly team meeting to clear pending student submissions.'
+    ],
+    callout: {
+      type: 'mentor',
+      title: 'Mentor & Coach Ethos',
+      text: 'FIRST mentors empower students to design, build, and document their own robots. Use the approval and feedback tools to guide technical inquiry and celebrate student growth!'
+    },
+    faqItems: [
+      {
+        q: 'Can a mentor reset a student\'s password if they lose access?',
+        a: 'Yes. In the Member Directory, select the student profile and click "Send Password Reset Link" or edit their credentials directly.'
+      },
+      {
+        q: 'What should I do if a student submits a low-quality journal entry?',
+        a: 'Do not click "Approve". Instead, leave constructive guidance in the entry comments requesting additional CAD schematics, testing data, or next-step objectives before granting verification.'
+      },
+      {
+        q: 'How do XP adjustments impact the team leaderboard?',
+        a: 'Manual XP adjustments immediately update the student’s total XP, subteam leaderboard standing, and unlocked level badges with full audit trail transparency.'
+      }
+    ]
+  },
+  {
     id: 'database-sync',
-    title: '11. Data Persistence, Backups & Season Reset',
+    title: '12. Data Persistence, Backups & Season Reset',
     shortTitle: 'Backups & Sync',
     category: 'admin',
     icon: Database,
@@ -407,7 +477,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
   },
   {
     id: 'faq-troubleshooting',
-    title: '12. FAQ & Troubleshooting Guide',
+    title: '13. FAQ & Troubleshooting Guide',
     shortTitle: 'FAQ & Tips',
     category: 'faq',
     icon: HelpCircle,
@@ -524,7 +594,7 @@ export default function PortalHelpGuide({
       if (activeTrack === 'trivia' && !['quick-start', 'qotd-trivia', 'gamification-arena', 'faq-troubleshooting'].includes(sec.id)) {
         return false;
       }
-      if (activeTrack === 'leadership' && !['general-ledger', 'roster-security', 'database-sync', 'qotd-trivia'].includes(sec.id)) {
+      if (activeTrack === 'leadership' && !['general-ledger', 'roster-security', 'mentor-tools-management', 'database-sync', 'qotd-trivia'].includes(sec.id)) {
         return false;
       }
 
@@ -977,7 +1047,7 @@ export default function PortalHelpGuide({
       <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
         <span className="text-slate-400 font-bold uppercase text-[10px] shrink-0 tracking-wider">Subteam Tracks:</span>
         {[
-          { id: 'all', label: 'All 12 Chapters', icon: Sparkles },
+          { id: 'all', label: 'All 13 Chapters', icon: Sparkles },
           { id: 'trivia', label: '🔥 Daily Trivia & XP', icon: Flame },
           { id: 'mechanical', label: '🛠️ Mechanical & Lab', icon: Wrench },
           { id: 'software', label: '💻 Autonomous & Code', icon: Code },

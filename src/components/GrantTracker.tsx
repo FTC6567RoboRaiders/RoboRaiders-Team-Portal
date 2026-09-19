@@ -428,7 +428,7 @@ export default function GrantTracker({
       deadlineDate: '',
       leadMemberName: currentUser?.name || '',
       leadMemberEmail: currentUser?.schoolEmail || '',
-      subteamFocus: currentUser?.primarySubteam || 'Team-wide',
+      subteamFocus: (['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'].includes(currentUser?.primarySubteam as any) ? currentUser?.primarySubteam : 'Team-wide') as any,
       applicationUrl: '',
       portalLoginNotes: '',
       description: '',
