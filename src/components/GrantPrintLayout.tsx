@@ -151,19 +151,21 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
         {/* PAGE 1: EXECUTIVE SUMMARY & MASTER PIPELINE TABLE */}
         <div className={`w-full ${isPreview ? 'max-w-xl' : 'pdf-document-page'}`}>
           <div 
-            className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+            className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-avoid-break ${
               isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
             }`}
             style={{
               aspectRatio: isPreview ? paperAspect : undefined,
               pageBreakAfter: 'always',
-              breakAfter: 'page'
+              breakAfter: 'page',
+              pageBreakInside: 'avoid',
+              breakInside: 'avoid'
             }}
           >
             <div className="flex flex-col gap-4">
               
               {/* DOCUMENT HEADER */}
-              <div className="border-b-4 border-slate-950 pb-3 flex justify-between items-start gap-4">
+              <div className="pdf-header-plate border-b-4 border-slate-950 pb-3 flex justify-between items-start gap-4">
                 <div className="flex items-center gap-4">
                   <RoboraidersLogo className="w-16 h-16 shrink-0" />
                   <div>
@@ -193,7 +195,7 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
 
               {/* FINANCIAL KPIS CALLOUT */}
               {showKPIs && (
-                <div className="grid grid-cols-4 gap-2.5 bg-slate-50 border border-slate-300 p-2.5 rounded font-mono">
+                <div className="pdf-section-card grid grid-cols-4 gap-2.5 bg-slate-50 border border-slate-300 p-2.5 rounded font-mono">
                   <div className="border-r border-slate-200 pr-2">
                     <span className="text-[8.5px] uppercase font-bold text-slate-500 block">Total Awarded</span>
                     <span className="text-base font-black text-emerald-700 block">
@@ -238,7 +240,7 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
 
               {/* STATUS PIPELINE SUMMARY STRIP */}
               {showBreakdown && (
-                <div className="border border-slate-200 rounded p-2 bg-white text-[9px]">
+                <div className="pdf-section-card border border-slate-200 rounded p-2 bg-white text-[9px]">
                   <span className="text-[8.5px] font-mono font-bold uppercase tracking-wider text-slate-500 block mb-1">
                     Pipeline Distribution by Status
                   </span>
@@ -262,7 +264,7 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
 
               {/* UPCOMING DEADLINES WARNING (IF ANY) */}
               {upcomingDeadlines.length > 0 && (
-                <div className="bg-amber-50 border border-amber-300 p-2 rounded flex items-center gap-2 text-[9.5px]">
+                <div className="pdf-section-card bg-amber-50 border border-amber-300 p-2 rounded flex items-center gap-2 text-[9.5px]">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                   <div className="text-amber-900 font-sans">
                     <strong>Urgent Deadlines (Next 30 Days): </strong>
@@ -280,7 +282,7 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
                   <span className="text-[8.5px] font-mono text-slate-400">Amounts in USD ($)</span>
                 </div>
 
-                <div className="overflow-hidden border border-slate-300 rounded">
+                <div className="pdf-section-card overflow-hidden border border-slate-300 rounded">
                   <table className="w-full text-left text-[8.5px] border-collapse font-mono">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase text-[8px] tracking-wider">
@@ -388,7 +390,7 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
             </div>
 
             {/* PAGE FOOTER */}
-            <div className="border-t border-slate-300 pt-2.5 mt-3 flex justify-between items-center text-[8.5px] font-mono text-slate-500">
+            <div className="pdf-signoff-block border-t border-slate-300 pt-2.5 mt-3 flex justify-between items-center text-[8.5px] font-mono text-slate-500">
               <div>FTC Team #6567 RoboRaiders • Grant &amp; Sponsorship Report</div>
               <div>Page 1 of {showRequirements && grants.some(g => g.requirements.length > 0) ? '2' : '1'}</div>
             </div>
@@ -400,19 +402,21 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
         {showRequirements && grants.some(g => g.requirements.length > 0 || g.notes || g.description) && (
           <div className={`w-full ${isPreview ? 'max-w-xl' : 'pdf-document-page'}`}>
             <div 
-              className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+              className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-entry-sheet ${
                 isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
               }`}
               style={{
                 aspectRatio: isPreview ? paperAspect : undefined,
                 pageBreakAfter: 'always',
-                breakAfter: 'page'
+                breakAfter: 'page',
+                pageBreakInside: 'auto',
+                breakInside: 'auto'
               }}
             >
               <div className="flex flex-col gap-3.5">
                 
                 {/* PAGE 2 HEADER */}
-                <div className="border-b-3 border-slate-950 pb-2 flex justify-between items-end">
+                <div className="pdf-header-plate border-b-3 border-slate-950 pb-2 flex justify-between items-end">
                   <div>
                     <span className="text-[9px] font-mono font-black uppercase tracking-widest text-slate-500">
                       FTC #6567 ROBORAIDERS • DELIVERABLES AUDIT
@@ -435,7 +439,7 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
                     const pct = reqTotal > 0 ? Math.round((reqDone / reqTotal) * 100) : 0;
 
                     return (
-                      <div key={grant.id} className="border border-slate-200 rounded p-2.5 bg-slate-50/50">
+                      <div key={grant.id} className="pdf-section-card border border-slate-200 rounded p-2.5 bg-slate-50/50">
                         
                         <div className="flex justify-between items-start mb-1.5">
                           <div>
@@ -513,7 +517,7 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
 
                 {/* EXECUTIVE VERIFICATION / SIGNOFF BLOCK */}
                 {showSignoff && (
-                  <div className="border-t-2 border-slate-300 pt-3 mt-2 font-mono text-[8.5px]">
+                  <div className="pdf-signoff-block border-t-2 border-slate-300 pt-3 mt-2 font-mono text-[8.5px]">
                     <span className="text-[8px] font-bold uppercase text-slate-500 tracking-wider block mb-2">
                       Executive Verification &amp; Coach Sign-Off
                     </span>
@@ -537,7 +541,7 @@ export const GrantPrintLayout: React.FC<GrantPrintLayoutProps> = ({
               </div>
 
               {/* PAGE 2 FOOTER */}
-              <div className="border-t border-slate-300 pt-2.5 mt-3 flex justify-between items-center text-[8.5px] font-mono text-slate-500">
+              <div className="pdf-signoff-block border-t border-slate-300 pt-2.5 mt-3 flex justify-between items-center text-[8.5px] font-mono text-slate-500">
                 <div>FTC Team #6567 RoboRaiders • Grant &amp; Sponsorship Report</div>
                 <div>Page 2 of 2 • Official Documentation</div>
               </div>

@@ -134,10 +134,15 @@ input, select, textarea {
 
 @page {
   size: letter portrait;
-  margin: 0.35in 0.45in;
+  margin: 0.35in 0.4in;
 }
 
 @media print {
+  @page {
+    size: letter portrait;
+    margin: 0.35in 0.4in;
+  }
+
   .print-only {
     display: block !important;
   }
@@ -194,9 +199,8 @@ input, select, textarea {
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
-    min-height: 9.8in !important;
-    margin: 0 0 0.4in 0 !important;
-    padding: 0.15in !important;
+    margin: 0 0 0.3in 0 !important;
+    padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
     background: #ffffff !important;
@@ -204,8 +208,8 @@ input, select, textarea {
     color: #0f172a !important;
     page-break-after: always !important;
     break-after: page !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
     box-sizing: border-box !important;
     border-radius: 0 !important;
   }
@@ -216,9 +220,40 @@ input, select, textarea {
     margin-bottom: 0 !important;
   }
 
-  .avoid-break, .keep-together {
+  /* Single-page units that must not split */
+  .pdf-avoid-break, .avoid-break, .keep-together {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+
+  /* Structural page headers and titles */
+  .pdf-header-plate {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* Section cards inside multi-page entries that should flow cleanly without mid-card cuts */
+  .pdf-section-card, .pdf-photo-block {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 0.85rem !important;
+  }
+
+  /* Signature and verification footers */
+  .pdf-signoff-block {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-top: 1.25rem !important;
+  }
+
+  /* Entry sheet styling allowing clean multi-page continuation */
+  .pdf-entry-sheet {
+    box-decoration-break: clone !important;
+    -webkit-box-decoration-break: clone !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
   }
 
   table {

@@ -110,13 +110,11 @@
     <circle cx="256" cy="256" r="165" fill="none" stroke="#505058" stroke-width="1" opacity="0.8"/>
 
     <!-- Curved Text: ROBORAIDERS 6567 (Top Arc) -->
-    <!-- Shadow text for depth -->
     <text fill="#141416" font-family="'Impact', 'Arial Black', sans-serif" font-weight="900" font-size="34" letter-spacing="3.5" dy="12">
       <textPath href="#topTextPath" startOffset="50%" text-anchor="middle">
         ROBORAIDERS 6567
       </textPath>
     </text>
-    <!-- Metallic foreground text -->
     <text fill="#d8d8e2" font-family="'Impact', 'Arial Black', sans-serif" font-weight="900" font-size="34" letter-spacing="3.5" dy="10">
       <textPath href="#topTextPath" startOffset="50%" text-anchor="middle">
         ROBORAIDERS 6567
@@ -124,13 +122,11 @@
     </text>
 
     <!-- Curved Text: FIRST TECH CHALLENGE (Bottom Arc) -->
-    <!-- Shadow text -->
     <text fill="#141416" font-family="'Impact', 'Arial Black', sans-serif" font-weight="900" font-size="21.5" letter-spacing="3" dy="19">
       <textPath href="#bottomTextPath" startOffset="50%" text-anchor="middle">
         FIRST TECH CHALLENGE
       </textPath>
     </text>
-    <!-- Metallic foreground text -->
     <text fill="#9c9ca8" font-family="'Impact', 'Arial Black', sans-serif" font-weight="900" font-size="21.5" letter-spacing="3" dy="17">
       <textPath href="#bottomTextPath" startOffset="50%" text-anchor="middle">
         FIRST TECH CHALLENGE
@@ -139,7 +135,6 @@
 
     <!-- Left FIRST Tech Challenge Logo Marker -->
     <g transform="translate(80, 256) scale(0.72)">
-      <!-- FTC Block Symbol -->
       <path d="M-14,-10 L-2,-10 L-2,-6 L-10,-6 L-10,-2 L-4,-2 L-4,2 L-10,2 L-10,10 L-14,10 Z" fill="#b0b0bc"/>
       <rect x="0" y="-10" width="14" height="4" fill="#b0b0bc"/>
       <rect x="5" y="-6" width="4" height="16" fill="#b0b0bc"/>
@@ -251,7 +246,6 @@
 
       <!-- Glowing Red Robotic Optic Sensor / Eye -->
       <g filter="url(#eyeGlow)">
-        <!-- Outer Eye Arc -->
         <path 
           d="M 120,96.5 Q 125,95.5 128,99.5" 
           fill="none" 
@@ -259,7 +253,6 @@
           stroke-width="2.2" 
           stroke-linecap="round" 
         />
-        <!-- Hot Center Core -->
         <circle cx="126.5" cy="98.5" r="1.2" fill="#ffdede" />
         <circle cx="126.5" cy="98.5" r="2.2" fill="#ff3344" opacity="0.8" />
       </g>

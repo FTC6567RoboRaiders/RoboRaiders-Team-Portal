@@ -140,13 +140,15 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
             )}
             
             <div 
-              className={`bg-white text-slate-950 p-10 sm:p-14 flex flex-col justify-between relative border-4 border-double border-slate-950 mx-auto select-text ${
+              className={`bg-white text-slate-950 p-10 sm:p-14 flex flex-col justify-between relative border-4 border-double border-slate-950 mx-auto select-text pdf-avoid-break ${
                 isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border-4 border-double border-slate-950'
               }`}
               style={{
                 aspectRatio: isPreview ? paperAspect : undefined,
                 pageBreakAfter: 'always',
-                breakAfter: 'page'
+                breakAfter: 'page',
+                pageBreakInside: 'avoid',
+                breakInside: 'avoid'
               }}
             >
               {/* Header Team Crest */}
@@ -250,13 +252,15 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
               )}
 
               <div 
-                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-avoid-break ${
                   isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
                 }`}
                 style={{
                   aspectRatio: isPreview ? paperAspect : undefined,
                   pageBreakAfter: 'always',
-                  breakAfter: 'page'
+                  breakAfter: 'page',
+                  pageBreakInside: 'avoid',
+                  breakInside: 'avoid'
                 }}
               >
                 <div>
@@ -393,18 +397,20 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
               )}
 
               <div 
-                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-entry-sheet ${
                   isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
                 }`}
                 style={{
                   aspectRatio: isPreview ? paperAspect : undefined,
                   pageBreakAfter: 'always',
-                  breakAfter: 'page'
+                  breakAfter: 'page',
+                  pageBreakInside: 'auto',
+                  breakInside: 'auto'
                 }}
               >
                 <div>
                   {/* Top Running Header */}
-                  <div className="border-b-3 border-slate-950 pb-2.5 flex justify-between items-center mb-5">
+                  <div className="pdf-header-plate border-b-3 border-slate-950 pb-2.5 flex justify-between items-center mb-5">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-100 uppercase tracking-wide text-slate-950">
                         {entry.subteam}
@@ -420,7 +426,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                   </div>
 
                   {/* Main Entry Title */}
-                  <h2 className="text-lg sm:text-xl font-black text-slate-950 mb-4 font-display uppercase tracking-tight leading-snug border-b border-slate-200 pb-2">
+                  <h2 className="pdf-header-plate text-lg sm:text-xl font-black text-slate-950 mb-4 font-display uppercase tracking-tight leading-snug border-b border-slate-200 pb-2">
                     {entry.title || (entry.entryType === 'general_meeting' ? 'General Team Meeting' : 'Engineering Session Log')}
                   </h2>
 
@@ -428,7 +434,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                   {entry.entryType === 'general_meeting' ? (
                     <div className="space-y-4 text-xs font-sans leading-relaxed text-slate-800">
                       {/* 1. Agenda */}
-                      <div>
+                      <div className="pdf-section-card">
                         <div className="flex items-center gap-1.5 mb-1">
                           <ListOrdered className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -441,7 +447,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       </div>
 
                       {/* 2. Attendance Area */}
-                      <div>
+                      <div className="pdf-section-card">
                         <div className="flex items-center gap-1.5 mb-1">
                           <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -469,7 +475,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       </div>
 
                       {/* 3. ABCs (Accomplishments, Blockers, Commitments) */}
-                      <div>
+                      <div className="pdf-section-card">
                         <div className="flex items-center gap-1.5 mb-1">
                           <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -479,7 +485,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                         {entry.abcs && entry.abcs.length > 0 ? (
                           <div className="space-y-2">
                             {entry.abcs.map((item, idx) => (
-                              <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
+                              <div key={idx} className="pdf-avoid-break p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
                                 <div className="flex justify-between items-center border-b border-slate-200 pb-1">
                                   <span className="font-bold text-slate-900 text-[10px]">{item.name}</span>
                                   {item.subteam && (
@@ -514,7 +520,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                       {/* 4. Finance Announced */}
                       {entry.financeAnnounced && (
-                        <div>
+                        <div className="pdf-section-card">
                           <div className="flex items-center gap-1.5 mb-1">
                             <Coins className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -529,7 +535,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                       {/* 5. Final To-Do List */}
                       {entry.finalTodoList && entry.finalTodoList.length > 0 && (
-                        <div>
+                        <div className="pdf-section-card">
                           <div className="flex items-center gap-1.5 mb-1">
                             <CheckSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -538,7 +544,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                           </div>
                           <div className="p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
                             {entry.finalTodoList.map((todo, idx) => (
-                              <div key={idx} className="flex items-center justify-between text-[9px] py-0.5 border-b border-slate-200/60 last:border-0">
+                              <div key={idx} className="pdf-avoid-break flex items-center justify-between text-[9px] py-0.5 border-b border-slate-200/60 last:border-0">
                                 <span className={`flex items-center gap-1.5 ${todo.completed ? 'line-through text-slate-400' : 'text-slate-900 font-medium'}`}>
                                   <span>{todo.completed ? '☑' : '☐'}</span>
                                   <span>{todo.task}</span>
@@ -557,7 +563,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                     <div className="space-y-4 text-xs font-sans leading-relaxed text-slate-800">
                       
                       {/* 1. Objectives & Goals Planned */}
-                      <div>
+                      <div className="pdf-section-card">
                         <div className="flex items-center gap-1.5 mb-1">
                           <FileText className="w-3.5 h-3.5 text-slate-600 shrink-0" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -570,7 +576,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       </div>
 
                       {/* 2. Work Accomplished & Implementation */}
-                      <div>
+                      <div className="pdf-section-card">
                         <div className="flex items-center gap-1.5 mb-1">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -584,7 +590,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                       {/* 3. Problems Encountered & Solutions */}
                       {entry.problemsAndSolutions && (
-                        <div>
+                        <div className="pdf-section-card">
                           <div className="flex items-center gap-1.5 mb-1">
                             <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -599,7 +605,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                       {/* 4. Engineering Challenges & Troubleshooting */}
                       {entry.challenges && !entry.problemsAndSolutions && (
-                        <div>
+                        <div className="pdf-section-card">
                           <div className="flex items-center gap-1.5 mb-1">
                             <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -614,7 +620,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                       {/* 5. Next Steps & Future Action Items */}
                       {(entry.nextSteps || entry.planNextTime) && (
-                        <div>
+                        <div className="pdf-section-card">
                           <div className="flex items-center gap-1.5 mb-1">
                             <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -629,7 +635,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                       {/* 6. Embedded Photographic Documentation & CAD Renders */}
                       {entry.images && entry.images.length > 0 && (
-                        <div>
+                        <div className="pdf-section-card">
                           <div className="flex items-center gap-1.5 mb-1.5">
                             <ImageIcon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -638,7 +644,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             {entry.images.map((img, imgIdx) => (
-                              <div key={imgIdx} className="border border-slate-300 rounded p-1.5 bg-slate-50 flex flex-col items-center">
+                              <div key={imgIdx} className="pdf-avoid-break border border-slate-300 rounded p-1.5 bg-slate-50 flex flex-col items-center">
                                 <img 
                                   src={img.dataUrl} 
                                   alt={img.name || `Figure ${imgIdx + 1}`} 
@@ -658,7 +664,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                 </div>
 
                 {/* Running Page Footer with Official Sign-Off Block */}
-                <div className="mt-6 pt-3 border-t-2 border-slate-950 space-y-2">
+                <div className="pdf-signoff-block mt-6 pt-3 border-t-2 border-slate-950 space-y-2">
                   <div className="grid grid-cols-2 gap-6 text-[9.5px] font-mono text-slate-700">
                     <div className="border-b border-slate-300 pb-0.5">
                       <span className="text-[8px] uppercase font-bold text-slate-500 block">Lead Student Sign-off:</span>

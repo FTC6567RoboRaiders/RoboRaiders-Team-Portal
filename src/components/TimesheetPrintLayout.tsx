@@ -174,13 +174,15 @@ export const TimesheetPrintLayout: React.FC<TimesheetPrintLayoutProps> = ({
             )}
 
             <div 
-              className={`bg-white text-slate-950 p-10 sm:p-14 flex flex-col justify-between relative border-4 border-double border-slate-950 mx-auto select-text ${
+              className={`bg-white text-slate-950 p-10 sm:p-14 flex flex-col justify-between relative border-4 border-double border-slate-950 mx-auto select-text pdf-avoid-break ${
                 isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border-4 border-double border-slate-950'
               }`}
               style={{
                 aspectRatio: isPreview ? paperAspect : undefined,
                 pageBreakAfter: 'always',
-                breakAfter: 'page'
+                breakAfter: 'page',
+                pageBreakInside: 'avoid',
+                breakInside: 'avoid'
               }}
             >
               {/* Header Team Crest */}
@@ -280,18 +282,20 @@ export const TimesheetPrintLayout: React.FC<TimesheetPrintLayoutProps> = ({
             )}
 
             <div 
-              className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+              className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-avoid-break ${
                 isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
               }`}
               style={{
                 aspectRatio: isPreview ? paperAspect : undefined,
                 pageBreakAfter: 'always',
-                breakAfter: 'page'
+                breakAfter: 'page',
+                pageBreakInside: 'avoid',
+                breakInside: 'avoid'
               }}
             >
               <div>
                 {/* TOC Header */}
-                <div className="border-b-4 border-slate-950 pb-3 mb-4 flex justify-between items-end">
+                <div className="pdf-header-plate border-b-4 border-slate-950 pb-3 mb-4 flex justify-between items-end">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <Bookmark className="w-4 h-4 text-cyan-700" />
@@ -310,7 +314,7 @@ export const TimesheetPrintLayout: React.FC<TimesheetPrintLayoutProps> = ({
                 </div>
 
                 {/* Subteam Distribution Summary */}
-                <div className="mb-4">
+                <div className="pdf-section-card mb-4">
                   <span className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider block mb-1.5">
                     Subteam Hours Distribution
                   </span>
@@ -326,7 +330,7 @@ export const TimesheetPrintLayout: React.FC<TimesheetPrintLayoutProps> = ({
                 </div>
 
                 {/* Member Summary Ledger Table */}
-                <div className="border border-slate-300 rounded overflow-hidden">
+                <div className="pdf-section-card border border-slate-300 rounded overflow-hidden">
                   <table className="w-full text-left text-[8.5px] border-collapse font-mono">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase text-[8px] tracking-wider">
@@ -365,7 +369,7 @@ export const TimesheetPrintLayout: React.FC<TimesheetPrintLayoutProps> = ({
               </div>
 
               {/* Bottom Verification Sign-Off */}
-              <div className="mt-auto pt-4 border-t-2 border-slate-950 flex justify-between items-center text-[10px] font-mono text-slate-600">
+              <div className="pdf-signoff-block mt-auto pt-4 border-t-2 border-slate-950 flex justify-between items-center text-[10px] font-mono text-slate-600">
                 <div>
                   <span>SUPERVISOR SIGNATURE: _______________________</span>
                 </div>
@@ -393,18 +397,20 @@ export const TimesheetPrintLayout: React.FC<TimesheetPrintLayoutProps> = ({
               )}
 
               <div 
-                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-entry-sheet ${
                   isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
                 }`}
                 style={{
                   aspectRatio: isPreview ? paperAspect : undefined,
                   pageBreakAfter: 'always',
-                  breakAfter: 'page'
+                  breakAfter: 'page',
+                  pageBreakInside: 'auto',
+                  breakInside: 'auto'
                 }}
               >
                 <div>
                   {/* Top Running Header */}
-                  <div className="border-b-3 border-slate-950 pb-2.5 flex justify-between items-center mb-4">
+                  <div className="pdf-header-plate border-b-3 border-slate-950 pb-2.5 flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-100 uppercase tracking-wide text-slate-950">
                         HOURS LEDGER
@@ -420,12 +426,12 @@ export const TimesheetPrintLayout: React.FC<TimesheetPrintLayoutProps> = ({
                   </div>
 
                   {/* Section Title */}
-                  <h2 className="text-base sm:text-lg font-black text-slate-950 mb-3 font-display uppercase tracking-tight">
+                  <h2 className="pdf-header-plate text-base sm:text-lg font-black text-slate-950 mb-3 font-display uppercase tracking-tight">
                     Detailed Time Logs &amp; Activity Breakdown
                   </h2>
 
                   {/* Ledger Table */}
-                  <div className="border border-slate-300 rounded overflow-hidden">
+                  <div className="pdf-section-card border border-slate-300 rounded overflow-hidden">
                     <table className="w-full text-left text-[8.5px] border-collapse font-mono">
                       <thead>
                         <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase text-[8px] tracking-wider">
@@ -464,7 +470,7 @@ export const TimesheetPrintLayout: React.FC<TimesheetPrintLayoutProps> = ({
                 </div>
 
                 {/* Running Page Footer with Sign-Off */}
-                <div className="mt-auto pt-3 border-t-2 border-slate-950 flex justify-between items-center text-[9px] font-mono text-slate-600">
+                <div className="pdf-signoff-block mt-auto pt-3 border-t-2 border-slate-950 flex justify-between items-center text-[9px] font-mono text-slate-600">
                   <div>
                     <span>FIRST TECH CHALLENGE TEAM #6567 ROBORAIDERS</span>
                   </div>

@@ -104,13 +104,15 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
             )}
 
             <div 
-              className={`bg-white text-slate-950 p-10 sm:p-14 flex flex-col justify-between relative border-4 border-double border-slate-950 mx-auto select-text ${
+              className={`bg-white text-slate-950 p-10 sm:p-14 flex flex-col justify-between relative border-4 border-double border-slate-950 mx-auto select-text pdf-avoid-break ${
                 isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border-4 border-double border-slate-950'
               }`}
               style={{
                 aspectRatio: isPreview ? paperAspect : undefined,
                 pageBreakAfter: 'always',
-                breakAfter: 'page'
+                breakAfter: 'page',
+                pageBreakInside: 'avoid',
+                breakInside: 'avoid'
               }}
             >
               {/* Header Team Crest */}
@@ -210,18 +212,20 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
             )}
 
             <div 
-              className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+              className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-avoid-break ${
                 isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
               }`}
               style={{
                 aspectRatio: isPreview ? paperAspect : undefined,
                 pageBreakAfter: 'always',
-                breakAfter: 'page'
+                breakAfter: 'page',
+                pageBreakInside: 'avoid',
+                breakInside: 'avoid'
               }}
             >
               <div>
                 {/* TOC Header */}
-                <div className="border-b-4 border-slate-950 pb-3 mb-4 flex justify-between items-end">
+                <div className="pdf-header-plate border-b-4 border-slate-950 pb-3 mb-4 flex justify-between items-end">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <Bookmark className="w-4 h-4 text-emerald-700" />
@@ -240,7 +244,7 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
                 </div>
 
                 {/* Table */}
-                <div className="border border-slate-300 rounded overflow-hidden">
+                <div className="pdf-section-card border border-slate-300 rounded overflow-hidden">
                   <table className="w-full text-left text-[8.5px] border-collapse font-mono">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase text-[8px] tracking-wider">
@@ -284,7 +288,7 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
               </div>
 
               {/* Bottom Verification Sign-Off */}
-              <div className="mt-auto pt-4 border-t-2 border-slate-950 flex justify-between items-center text-[10px] font-mono text-slate-600">
+              <div className="pdf-signoff-block mt-auto pt-4 border-t-2 border-slate-950 flex justify-between items-center text-[10px] font-mono text-slate-600">
                 <div>
                   <span>CAPTAIN SIGNATURE: _______________________</span>
                 </div>
@@ -314,18 +318,20 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
               )}
 
               <div
-                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-entry-sheet ${
                   isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
                 }`}
                 style={{
                   aspectRatio: isPreview ? paperAspect : undefined,
                   pageBreakAfter: 'always',
-                  breakAfter: 'page'
+                  breakAfter: 'page',
+                  pageBreakInside: 'auto',
+                  breakInside: 'auto'
                 }}
               >
                 <div>
                   {/* FTC Standard Header Plate */}
-                  <div className="border-b-3 border-slate-950 pb-2.5 flex justify-between items-center mb-5">
+                  <div className="pdf-header-plate border-b-3 border-slate-950 pb-2.5 flex justify-between items-center mb-5">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-100 uppercase tracking-wide text-slate-950">
                         OUTREACH RECORD
@@ -340,7 +346,7 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
                     </div>
                   </div>
 
-                  <h2 className="text-lg sm:text-xl font-black uppercase font-display tracking-tight text-slate-950 mb-4 border-b border-slate-200 pb-2">
+                  <h2 className="pdf-header-plate text-lg sm:text-xl font-black uppercase font-display tracking-tight text-slate-950 mb-4 border-b border-slate-200 pb-2">
                     {ev.title}
                   </h2>
 
@@ -348,7 +354,7 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
                   <div className="space-y-4 text-xs font-sans leading-relaxed text-slate-800">
                     
                     {/* 1. Community Engagement Narrative */}
-                    <div>
+                    <div className="pdf-section-card">
                       <div className="flex items-center gap-1.5 mb-1">
                         <FileText className="w-3.5 h-3.5 text-slate-700" />
                         <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -361,7 +367,7 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
                     </div>
 
                     {/* 2. Impact Metrics & Community Reach */}
-                    <div>
+                    <div className="pdf-section-card">
                       <div className="flex items-center gap-1.5 mb-1">
                         <Award className="w-3.5 h-3.5 text-emerald-700" />
                         <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -394,7 +400,7 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
 
                     {/* 3. Event Imagery & Photographic Documentation */}
                     {ev.images && ev.images.length > 0 && (
-                      <div>
+                      <div className="pdf-section-card pdf-avoid-break">
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <ImageIcon className="w-3.5 h-3.5 text-indigo-700" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
@@ -422,7 +428,7 @@ export const OutreachPrintLayout: React.FC<OutreachPrintLayoutProps> = ({
                 </div>
 
                 {/* Running Page Footer with Sign-Off */}
-                <div className="mt-6 pt-3 border-t-2 border-slate-950 flex justify-between items-center text-[9px] font-mono text-slate-600">
+                <div className="pdf-signoff-block mt-6 pt-3 border-t-2 border-slate-950 flex justify-between items-center text-[9px] font-mono text-slate-600">
                   <div>
                     <span>FIRST TECH CHALLENGE TEAM #6567 ROBORAIDERS</span>
                   </div>
