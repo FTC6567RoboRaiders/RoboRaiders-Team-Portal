@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   BookOpen, 
   Plus, 
@@ -66,15 +66,47 @@ import {
   PinOff,
   Palette,
   Images,
-  Link2
+  SlidersHorizontal,
+  Target
 } from 'lucide-react';
 import { applyAccentColor } from './utils/accentColor';
-import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction, GrantApplication, JournalEntryType, PersonABC, MeetingTodoItem, NavLayout, QuestionOfTheDay, QuestionAnswerSubmission } from './types';
+import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction, GrantApplication, JournalEntryType, PersonABC, MeetingTodoItem, NavLayout, QuestionOfTheDay, QuestionAnswerSubmission, PageTransitionStyle, ToastNotification } from './types';
 import { compressAndResizeImage } from './utils/image';
-import { processAnyNotebookFile, createGoogleLinkAttachment } from './utils/fileConverter';
-import { GoogleFileViewerModal } from './components/GoogleFileViewerModal';
-import { NotebookAttachmentItem } from './components/NotebookAttachmentItem';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
+import { JournalFullTextIndex, SearchResultItem } from './utils/journalSearchIndex';
+import { SearchHighlightedText } from './components/SearchHighlightedText';
+
+const PAGE_TRANSITION_VARIANTS: Record<PageTransitionStyle, {
+  initial: Record<string, any>;
+  animate: Record<string, any>;
+  exit: Record<string, any>;
+  transition: Record<string, any>;
+}> = {
+  smooth: {
+    initial: { opacity: 0, y: 14 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -10 },
+    transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
+  },
+  fade: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+    transition: { duration: 0.18, ease: 'easeInOut' }
+  },
+  slide: {
+    initial: { opacity: 0, x: 24 },
+    animate: { opacity: 1, x: 0 },
+    exit: { opacity: 0, x: -24 },
+    transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
+  },
+  none: {
+    initial: { opacity: 1 },
+    animate: { opacity: 1 },
+    exit: { opacity: 1 },
+    transition: { duration: 0 }
+  }
+};
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -148,6 +180,9 @@ import { GeneralMeetingView } from './components/GeneralMeetingView';
 import { SettingsView } from './components/SettingsView';
 import QuestionOfTheDayHub from './components/QuestionOfTheDayHub';
 import { JournalGalleryView } from './components/JournalGalleryView';
+import { QuickActionMenu } from './components/QuickActionMenu';
+import { NotificationToastContainer } from './components/NotificationToastContainer';
+import { dispatchDailyMentorSummary, getLastDailyDigestRecord } from './services/mentorSummaryService';
 
 const SUBTEAM_LIST: Subteam[] = ['Design/Build/Fabrication', 'Programming', 'Outreach', 'Business & Media', 'Inspire', 'Strategy'];
 
@@ -502,6 +537,11 @@ export default function App() {
     xpAdjustmentsRef.current = xpAdjustments;
   }, [xpAdjustments]);
 
+  const accountsRef = useRef<UserAccount[]>([]);
+  useEffect(() => {
+    accountsRef.current = accounts;
+  }, [accounts]);
+
   // Persistent sync
   useEffect(() => {
     localStorage.setItem('ftc_time_entries', JSON.stringify(timeEntries));
@@ -512,6 +552,77 @@ export default function App() {
   }, [xpAdjustments]);
 
   // --- FIREBASE SYNC & ON-SNAP LIFECYCLE ---
+  const isQuotaError = (err: unknown): boolean => {
+    if (!err) return false;
+    const str = err instanceof Error ? err.message : String(err);
+    return str.includes('Quota limit exceeded') || str.includes('quota') || str.includes('resource-exhausted') || str.includes('RESOURCE_EXHAUSTED');
+  };
+
+  const syncAccountsToFirestore = async (newAccounts: UserAccount[]) => {
+    for (const acc of newAccounts) {
+      const match = accountsRef.current.find(a => a.id === acc.id);
+      if (!match || JSON.stringify(match) !== JSON.stringify(acc)) {
+        try {
+          await setDoc(doc(db, 'users', acc.id), cleanForFirestore(acc));
+        } catch (e) {
+          if (!isQuotaError(e)) {
+            handleFirestoreError(e, OperationType.UPDATE, `users/${acc.id}`);
+          }
+        }
+      }
+    }
+    for (const acc of accountsRef.current) {
+      if (!newAccounts.some(a => a.id === acc.id)) {
+        try {
+          await deleteDoc(doc(db, 'users', acc.id));
+        } catch (e) {
+          if (!isQuotaError(e)) {
+            handleFirestoreError(e, OperationType.DELETE, `users/${acc.id}`);
+          }
+        }
+      }
+    }
+  };
+
+  const syncMembersWithFirebase = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'users'));
+      const firebaseAccounts: UserAccount[] = [];
+      querySnapshot.forEach((docSnap) => {
+        if (docSnap.exists()) {
+          const accData = docSnap.data() as UserAccount;
+          firebaseAccounts.push({
+            ...accData,
+            primarySubteam: (accData.primarySubteam as string) === 'Build' ? 'Design/Build/Fabrication' : accData.primarySubteam
+          });
+        }
+      });
+
+      if (firebaseAccounts.length > 0) {
+        // Firebase data takes absolute priority!
+        setAccounts(firebaseAccounts);
+        localStorage.setItem('ftc_user_accounts', JSON.stringify(firebaseAccounts));
+        showToast(`Synchronized ${firebaseAccounts.length} team member profile(s) from Firebase! (Cloud data prioritized)`, 'success');
+      } else {
+        if (accounts.length > 0) {
+          for (const acc of accounts) {
+            await setDoc(doc(db, 'users', acc.id), cleanForFirestore(acc));
+          }
+          showToast(`Uploaded ${accounts.length} local member profiles to Firebase users collection!`, 'success');
+        } else {
+          showToast('No member accounts found in Firebase or local storage.', 'info');
+        }
+      }
+    } catch (e) {
+      if (isQuotaError(e)) {
+        console.warn("Firestore daily quota limit reached during sync. Using cached local member profiles.");
+        showToast("Firestore daily quota limit reached. Using local member data cache.", "info");
+        return;
+      }
+      handleFirestoreError(e, OperationType.LIST, 'users');
+    }
+  };
+
   const syncXpAdjustmentsToFirestore = async (newAdjustments: XPAdjustment[]) => {
     for (const adj of newAdjustments) {
       const match = xpAdjustmentsRef.current.find(a => a.id === adj.id);
@@ -862,6 +973,9 @@ export default function App() {
         setCurrentUser(found);
         localStorage.setItem('ftc_current_user', JSON.stringify(found));
         showToast(`Logged into ${found.name} account successfully!`, 'success');
+        if (found.status === 'Approved') {
+          // Logged in
+        }
       } else {
         showToast('Auth succeeded, but no user document found in Firestore.', 'danger');
       }
@@ -877,14 +991,24 @@ export default function App() {
       if (listenersStartedRef.current) return;
       listenersStartedRef.current = true;
 
-      // Users listener
+      // Users listener - Firebase data takes priority!
       const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
         const list: UserAccount[] = [];
         snapshot.forEach(d => {
-          list.push(d.data() as UserAccount);
+          const accData = d.data() as UserAccount;
+          list.push({
+            ...accData,
+            primarySubteam: (accData.primarySubteam as string) === 'Build' ? 'Design/Build/Fabrication' : accData.primarySubteam
+          });
         });
         if (list.length > 0) {
           setAccounts(list);
+          localStorage.setItem('ftc_user_accounts', JSON.stringify(list));
+        } else if (accountsRef.current.length > 0) {
+          // If Firestore collection is empty, seed local accounts up to Firestore
+          accountsRef.current.forEach(acc => {
+            setDoc(doc(db, 'users', acc.id), cleanForFirestore(acc)).catch(err => console.warn("Error seeding account to Firestore", err));
+          });
         }
       }, (error) => {
         console.warn("users snapshot listener warning:", error);
@@ -1389,6 +1513,25 @@ export default function App() {
     setAccentColor(colorId);
   };
 
+  // Page Transition Animation State
+  const [pageTransition, setPageTransition] = useState<PageTransitionStyle>(() => {
+    const saved = localStorage.getItem('ftc_page_transition');
+    return (saved === 'smooth' || saved === 'fade' || saved === 'slide' || saved === 'none') ? saved : 'smooth';
+  });
+
+  const handleSetPageTransition = (style: PageTransitionStyle) => {
+    setPageTransition(style);
+    localStorage.setItem('ftc_page_transition', style);
+  };
+
+  // Scroll workspace content pane to top whenever navigating to a different view
+  useEffect(() => {
+    const pane = document.getElementById('workspace-content-pane');
+    if (pane) {
+      pane.scrollTop = 0;
+    }
+  }, [currentView]);
+
   // Pinned Workspaces state
   const [pinnedWorkspaces, setPinnedWorkspaces] = useState<string[]>(() => {
     return [];
@@ -1413,14 +1556,37 @@ export default function App() {
 
   const togglePinWorkspace = (workspaceId: string) => {
     setPinnedWorkspaces(prev => {
-      const next = prev.includes(workspaceId)
+      const isPinned = prev.includes(workspaceId);
+      const next = isPinned
         ? prev.filter(id => id !== workspaceId)
-        : [...prev, workspaceId];
+        : [workspaceId, ...prev];
       if (currentUser) {
         localStorage.setItem(`ftc_pinned_workspaces_${currentUser.id}`, JSON.stringify(next));
       }
       return next;
     });
+
+    // If newly pinning, also immediately bring to the top (index 0) of navOrder
+    setNavOrder(prevOrder => {
+      const allDefaults = ['journal', 'time_entry', 'kanban', 'inventory', 'outreach', 'finance', 'handbook', 'grants', 'qotd'];
+      const current = prevOrder.length > 0 ? prevOrder : allDefaults;
+      if (!pinnedWorkspaces.includes(workspaceId)) {
+        const filtered = current.filter(id => id !== workspaceId);
+        const updated = [workspaceId, ...filtered];
+        if (currentUser) {
+          localStorage.setItem(`ftc_nav_order_${currentUser.id}`, JSON.stringify(updated));
+        }
+        return updated;
+      }
+      return current;
+    });
+  };
+
+  const handleUpdatePinnedWorkspaces = (newPinned: string[]) => {
+    setPinnedWorkspaces(newPinned);
+    if (currentUser) {
+      localStorage.setItem(`ftc_pinned_workspaces_${currentUser.id}`, JSON.stringify(newPinned));
+    }
   };
 
   // Custom Navigation Order state
@@ -2027,10 +2193,6 @@ export default function App() {
   const [formProblemsAndSolutions, setFormProblemsAndSolutions] = useState<string[]>(['']);
   const [formPlanNextTime, setFormPlanNextTime] = useState('');
   const [formImages, setFormImages] = useState<JournalImage[]>([]);
-  const [selectedGoogleFile, setSelectedGoogleFile] = useState<JournalImage | null>(null);
-  const [isAddingGoogleLink, setIsAddingGoogleLink] = useState(false);
-  const [googleLinkUrl, setGoogleLinkUrl] = useState('');
-  const [googleLinkTitle, setGoogleLinkTitle] = useState('');
   const [formAttendees, setFormAttendees] = useState<string[]>([]);
   const [customAttendee, setCustomAttendee] = useState('');
 
@@ -2071,6 +2233,8 @@ export default function App() {
     subteam: 'All',
     author: '',
     searchQuery: '',
+    searchFieldScope: 'all',
+    searchMatchMode: 'all',
     startDate: '',
     endDate: '',
     status: 'All'
@@ -2082,6 +2246,33 @@ export default function App() {
 
   // Toast System state
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'danger' | 'info' } | null>(null);
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+  const [dismissedAnnouncementIds, setDismissedAnnouncementIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('ftc_dismissed_announcements');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismissAnnouncement = (id: string) => {
+    setDismissedAnnouncementIds(prev => {
+      const updated = prev.includes(id) ? prev : [...prev, id];
+      localStorage.setItem('ftc_dismissed_announcements', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleClearAllAnnouncements = () => {
+    const allIds = systemNotifications.map(n => n.id);
+    setDismissedAnnouncementIds(allIds);
+    localStorage.setItem('ftc_dismissed_announcements', JSON.stringify(allIds));
+  };
+
+  const handleDismissToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
 
   // Embedded view Tab selector (allows perfect responsiveness inside Google Site iframes)
   const [activeTab, setActiveTab] = useState<'form' | 'archive' | 'gallery'>('form');
@@ -2681,8 +2872,8 @@ FTC #6567 Captains & Mentors`
       setCurrentUser(found);
       localStorage.setItem('ftc_current_user', JSON.stringify(found));
       if (found.status === 'Approved') {
-          showToast(`Welcome back, ${found.name}!`, 'success');
-        } else if (found.status === 'Rejected') {
+        showToast(`Welcome back, ${found.name}!`, 'success');
+      } else if (found.status === 'Rejected') {
           showToast('Account Access Request was rejected by Mentors.', 'danger');
         } else {
           showToast('Access pending administrator approval.', 'info');
@@ -3086,6 +3277,9 @@ const handleStartEditProfile = (authorName: string) => {
 
     const finalTitle = formEntryType === 'general_meeting' ? (formTitle.trim() || 'General Team Meeting') : undefined;
 
+    let finalUpdatedEntries: JournalEntry[] = [];
+    let currentSavedEntry: JournalEntry | undefined = undefined;
+
     if (isEditing && editingId) {
       const updated = entries.map((entry) => {
         if (entry.id === editingId) {
@@ -3113,6 +3307,7 @@ const handleStartEditProfile = (authorName: string) => {
             reviewNotes: null,
             reviewedAt: null
           };
+          currentSavedEntry = u;
           setSelectedEntry(u);
           setDoc(doc(db, 'journalEntries', u.id), cleanForFirestore(u)).catch(err => {
             console.warn(`Error writing journal entry ${u.id}:`, err);
@@ -3121,6 +3316,7 @@ const handleStartEditProfile = (authorName: string) => {
         }
         return entry;
       });
+      finalUpdatedEntries = updated;
       saveEntriesToLocalStorage(updated);
       showToast(submissionType === 'Pending Review' ? 'Journal entry submitted for review!' : 'Draft record updated successfully.', 'success');
     } else {
@@ -3149,7 +3345,9 @@ const handleStartEditProfile = (authorName: string) => {
         reviewNotes: null,
         reviewedAt: null
       };
+      currentSavedEntry = u;
       const updated = [u, ...entries];
+      finalUpdatedEntries = updated;
       setDoc(doc(db, 'journalEntries', u.id), cleanForFirestore(u)).catch(err => {
         console.warn(`Error writing new journal entry ${u.id}:`, err);
       });
@@ -3159,25 +3357,17 @@ const handleStartEditProfile = (authorName: string) => {
     }
 
     if (submissionType === 'Pending Review') {
-      const mentorsAndCaptains = accounts.filter(a => a.role === 'mentor' || a.role === 'captain');
-      mentorsAndCaptains.forEach(mc => {
-        sendEmailNotification(
-          mc.schoolEmail,
-          `[FTC #6567] Journal Awaiting Review: ${formAuthor.trim()}`,
-          `Hello ${mc.name},
-
-A new journal entry has been submitted to the FTC #6567 Workspace and is awaiting review:
-
-• Author: ${formAuthor.trim()}
-• Date of Action: ${formDate}
-• Subteam Division: ${formSubteam}
-
-Please log in to the RoboRaiders Team Portal, filter by "Pending Review" on the engineering desk, and inspect the submission to approve or request revision.
-
-Best regards,
-FTC #6567 Robotics Log System`
-        );
+      // Automatically dispatch daily 'Pending Review' summary to team mentors via email system
+      const digestResult = dispatchDailyMentorSummary({
+        allEntries: finalUpdatedEntries,
+        accounts,
+        sendEmail: sendEmailNotification,
+        newlyAddedEntry: currentSavedEntry
       });
+
+      if (digestResult.dispatched) {
+        showToast(`Daily 'Pending Review' summary dispatched to ${digestResult.recipients.length} mentor(s).`, 'info');
+      }
 
       // Also send confirmation email to the submitting user to confirm receipt
       const authorEmail = currentUser?.schoolEmail || accounts.find(a => a.name.toLowerCase() === formAuthor.trim().toLowerCase())?.schoolEmail;
@@ -3189,7 +3379,7 @@ FTC #6567 Robotics Log System`
 
 Your journal entry for subteam "${formSubteam}" (dated ${formDate}) has been successfully received by the RoboRaiders system. 
 
-It has been submitted for pending mentor review and will be audited and approved soon by a team mentor or captain.
+It has been submitted for pending mentor review and included in the automated daily mentor digest.
 
 Thank you for your engineering documentation contribution!
 
@@ -3447,11 +3637,21 @@ FTC #6567 Captains & Mentors`
   };
 
 
-  const showToast = (text: string, type: 'success' | 'danger' | 'info') => {
-    setStatusMessage({text, type});
-    setTimeout(() => {
-      setStatusMessage(null);
-    }, 4000);
+  const showToast = (
+    text: string, 
+    type: 'success' | 'danger' | 'info' | 'warning' = 'info',
+    title?: string,
+    duration: number = 4200
+  ) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const newToast: ToastNotification = { id, text, type, title, timestamp: Date.now(), duration };
+    setStatusMessage({ text, type: type === 'warning' ? 'info' : type });
+    setToasts(prev => [newToast, ...prev.slice(0, 3)]);
+    if (duration > 0) {
+      setTimeout(() => {
+        handleDismissToast(id);
+      }, duration);
+    }
   };
 
   const saveEntriesToLocalStorage = (updated: JournalEntry[]) => {
@@ -3675,35 +3875,17 @@ FTC #6567 Captains & Mentors`
   const processFile = async (file: File) => {
     setIsImageProcessing(true);
     try {
-      const processed = await processAnyNotebookFile(file);
-      setFormImages(prev => [...prev, processed]);
-      if (processed.isGoogleConverted) {
-        showToast(
-          `Converted "${file.name}" to open Google ${processed.googleDocType === 'sheet' ? 'Sheet' : processed.googleDocType === 'slide' ? 'Slide' : 'Doc'} format (free to be seen for anyone)!`,
-          'success'
-        );
-      } else {
-        showToast(`Attached "${file.name}" to notebook log`, 'info');
-      }
-    } catch (err: any) {
-      showToast(`File processing failed: ${err?.message || 'Unknown error'}`, 'danger');
-    } finally {
-      setIsImageProcessing(false);
-    }
-  };
-
-  const handleAddGoogleLink = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!googleLinkUrl.trim()) return;
-    try {
-      const attachment = createGoogleLinkAttachment(googleLinkUrl, googleLinkTitle);
-      setFormImages(prev => [...prev, attachment]);
-      showToast(`Attached Google ${attachment.googleDocType === 'sheet' ? 'Sheet' : attachment.googleDocType === 'slide' ? 'Slide' : 'Doc'} link to notebook log!`, 'success');
-      setGoogleLinkUrl('');
-      setGoogleLinkTitle('');
-      setIsAddingGoogleLink(false);
+        const base64 = await compressAndResizeImage(file);
+        setFormImages(prev => [...prev, {
+            id: Date.now().toString() + Math.random().toString(),
+            dataUrl: base64,
+            name: file.name,
+            size: file.size
+        } as any]);
     } catch {
-      showToast('Invalid Google file link URL', 'danger');
+        showToast('Image processing failed', 'danger');
+    } finally {
+        setIsImageProcessing(false);
     }
   };
 
@@ -3887,42 +4069,40 @@ ${entry.planNextTime || '_No carry-over specified._'}
     });
   };
 
-  const filteredEntries = entries.filter((entry) => {
-    if (filters.entryType && filters.entryType !== 'All') {
-      const currentType = entry.entryType || 'subteam';
-      if (currentType !== filters.entryType) return false;
+  // Full-Text Inverted Search Index for Journal Entries
+  const journalFullTextIndex = useMemo(() => new JournalFullTextIndex(entries), [entries]);
+
+  const activeSearchFields = useMemo<('title' | 'planned' | 'accomplished')[]>(() => {
+    if (filters.searchFieldScope === 'title') return ['title'];
+    if (filters.searchFieldScope === 'planned') return ['planned'];
+    if (filters.searchFieldScope === 'accomplished') return ['accomplished'];
+    return ['title', 'planned', 'accomplished']; // Default: simultaneous search across title, planned & accomplished
+  }, [filters.searchFieldScope]);
+
+  const journalSearchResults: SearchResultItem[] = useMemo(() => {
+    return journalFullTextIndex.search(filters.searchQuery, {
+      fields: activeSearchFields,
+      matchMode: filters.searchMatchMode || 'all',
+      subteam: filters.subteam,
+      status: filters.status,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      author: filters.author,
+      entryType: filters.entryType
+    });
+  }, [journalFullTextIndex, filters, activeSearchFields]);
+
+  const filteredEntries = useMemo(() => {
+    return journalSearchResults.map(item => item.entry);
+  }, [journalSearchResults]);
+
+  const searchResultsMap = useMemo(() => {
+    const map = new Map<string, SearchResultItem>();
+    for (const item of journalSearchResults) {
+      map.set(item.entry.id, item);
     }
-    if (filters.subteam !== 'All' && entry.subteam !== filters.subteam) return false;
-    if (filters.author.trim() && !entry.author.toLowerCase().includes(filters.author.toLowerCase())) return false;
-    if (filters.searchQuery.trim()) {
-      const q = filters.searchQuery.toLowerCase();
-      const probs = Array.isArray(entry.problemsAndSolutions) ? entry.problemsAndSolutions : [];
-      const abcsText = (entry.abcs || []).map(a => `${a.name} ${a.accomplishments} ${a.blockers} ${a.commitments}`).join(' ');
-      const todosText = (entry.finalTodoList || []).map(t => `${t.task} ${t.assignee || ''}`).join(' ');
-      const fields = [
-        entry.title || '',
-        entry.author || '',
-        entry.planned || '',
-        entry.accomplished || '',
-        entry.planNextTime || '',
-        entry.agenda || '',
-        entry.financeAnnounced || '',
-        abcsText,
-        todosText,
-        entry.subteam || '',
-        entry.date || '',
-        ...probs
-      ].join(' ').toLowerCase();
-      if (!fields.includes(q)) return false;
-    }
-    if (filters.startDate && entry.date < filters.startDate) return false;
-    if (filters.endDate && entry.date > filters.endDate) return false;
-    if (filters.status !== 'All') {
-      const s = entry.status || 'Pending Review';
-      if (s !== filters.status) return false;
-    }
-    return true;
-  });
+    return map;
+  }, [journalSearchResults]);
 
   // Synchronously auto-clear selected entry if it gets filtered out of active query results
   useEffect(() => {
@@ -3932,7 +4112,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
         setSelectedEntry(null);
       }
     }
-  }, [entries, filters, selectedEntry?.id]);
+  }, [filteredEntries, selectedEntry?.id]);
 
   const filteredTimeEntries = timeEntries.filter(t => {
     const matchesSearch = 
@@ -3969,20 +4149,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
         </div>
 
         {/* Toast alerts inside login page */}
-        {statusMessage && (
-          <div className="fixed top-4 right-4 max-w-sm z-50 shadow-lg border animate-slide-in">
-            <div className={`p-3 rounded-md text-xs font-bold flex items-center gap-2.5 ${
-              statusMessage.type === 'success' 
-                ? 'bg-emerald-100 border-emerald-400 text-emerald-950' 
-                : statusMessage.type === 'danger'
-                ? 'bg-rose-100 border-rose-400 text-rose-900'
-                : 'bg-indigo-100 border-indigo-400 text-indigo-950'
-            }`}>
-              <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
-              <span>{statusMessage.text}</span>
-            </div>
-          </div>
-        )}
+        <NotificationToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
         <div className="w-full max-w-md bg-white/95 dark:bg-slate-900 border border-slate-200 rounded-xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center relative z-10 backdrop-blur-xs dark:border-slate-800">
           {/* Logo */}
@@ -4333,20 +4500,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center font-sans p-4 border-t-8 border-brand transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`} id="pending-root">
         {/* Toast alerts inside pending page */}
-        {statusMessage && (
-          <div className="fixed top-4 right-4 max-w-sm z-50 shadow-lg border animate-slide-in">
-            <div className={`p-3 rounded-md text-xs font-bold flex items-center gap-2.5 ${
-              statusMessage.type === 'success' 
-                ? 'bg-emerald-100 border-emerald-400 text-emerald-950' 
-                : statusMessage.type === 'danger'
-                ? 'bg-rose-100 border-rose-400 text-rose-950'
-                : 'bg-indigo-100 border-indigo-400 text-indigo-950'
-            }`}>
-              <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
-              <span>{statusMessage.text}</span>
-            </div>
-          </div>
-        )}
+        <NotificationToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
         <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-6 md:p-8 shadow-xl flex flex-col items-center justify-center relative dark:bg-slate-900 dark:border-slate-800">
           
@@ -4553,14 +4707,6 @@ ${entry.planNextTime || '_No carry-over specified._'}
       icon: HelpCircle,
       badge: null,
       color: 'text-indigo-400'
-    },
-    {
-      id: 'settings',
-      label: 'Settings & Profile',
-      sublabel: 'Preferences & layout',
-      icon: Settings,
-      badge: null,
-      color: 'text-slate-400'
     }
   ];
 
@@ -4583,14 +4729,23 @@ ${entry.planNextTime || '_No carry-over specified._'}
         // If module is disabled globally, only let Programming subteam or Captains/Mentors view it
         return currentUser?.primarySubteam === 'Programming' || isUserAdminOrMentor;
       }
-      if (hiddenWorkspaces.includes(link.id) && link.id !== "landing" && link.id !== "settings") return false;
+      if (hiddenWorkspaces.includes(link.id) && link.id !== "landing") return false;
       return true;
     })
     .sort((a, b) => {
       if (a.id === 'landing') return -1;
       if (b.id === 'landing') return 1;
-      if (a.id === 'settings' || a.id === 'help_guide' || a.id === 'approvals') return 1;
-      if (b.id === 'settings' || b.id === 'help_guide' || b.id === 'approvals') return -1;
+      if (a.id === 'help_guide' || a.id === 'approvals') return 1;
+      if (b.id === 'help_guide' || b.id === 'approvals') return -1;
+      const isPinnedA = pinnedWorkspaces.includes(a.id);
+      const isPinnedB = pinnedWorkspaces.includes(b.id);
+      if (isPinnedA && !isPinnedB) return -1;
+      if (!isPinnedA && isPinnedB) return 1;
+      if (isPinnedA && isPinnedB) {
+        const pinIdxA = pinnedWorkspaces.indexOf(a.id);
+        const pinIdxB = pinnedWorkspaces.indexOf(b.id);
+        if (pinIdxA !== -1 && pinIdxB !== -1) return pinIdxA - pinIdxB;
+      }
       const idxA = navOrder.indexOf(a.id);
       const idxB = navOrder.indexOf(b.id);
       if (idxA === -1 && idxB === -1) return 0;
@@ -4623,7 +4778,13 @@ ${entry.planNextTime || '_No carry-over specified._'}
         currentUser={currentUser}
         userGamification={userGamification}
         currentView={currentView}
-        onSelectView={(v: any) => setCurrentView(v)}
+        onSelectView={(v: any, filterStatus?: string) => {
+          setCurrentView(v);
+          if (v === 'journal' && filterStatus) {
+            setFilters(prev => ({ ...prev, status: filterStatus as any }));
+            showToast(`Filtered journal to show ${filterStatus} entries.`, 'info');
+          }
+        }}
         isDark={isDark}
         onToggleTheme={() => setIsDark(!isDark)}
         onOpenSettings={openSettingsModal}
@@ -4635,6 +4796,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
         needsRevisionCount={userRole === 'author' ? entries.filter(e => e.status === 'Needs Revision').length : 0}
         lowStockCount={inventoryItems.filter(i => i.quantity <= i.minQuantity).length}
         pendingApprovalsCount={accounts.filter(a => a.status === 'Pending').length}
+        systemNotifications={systemNotifications}
+        dismissedAnnouncementIds={dismissedAnnouncementIds}
+        onDismissAnnouncement={handleDismissAnnouncement}
+        onClearAllAnnouncements={handleClearAllAnnouncements}
         onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
@@ -4642,6 +4807,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
         disabledModules={disabledModules}
         hiddenWorkspaces={hiddenWorkspaces}
         navOrder={navOrder}
+        pinnedWorkspaces={pinnedWorkspaces}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         navLayout={navLayout}
@@ -4649,76 +4815,8 @@ ${entry.planNextTime || '_No carry-over specified._'}
         onSetNavLayout={handleSetNavLayout}
       />
 
-      {/* DYNAMIC SYSTEM WORKFLOW INTELLIGENCE NOTIFICATIONS */}
-      <AnimatePresence>
-        {currentUser && entries.filter(e => e.status === 'Pending Review' && canUserApproveEntry(currentUser, e)).length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="bg-amber-500/10 border-b border-amber-500/30 text-amber-900 dark:text-amber-300 px-4 py-2 text-xs flex justify-between items-center gap-2 no-print shrink-0"
-          >
-            <div className="flex items-center gap-2">
-              <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase font-mono">Pending Reviews</span>
-              <span className="text-slate-700 dark:text-slate-300">
-                🔔 There are <strong>{entries.filter(e => e.status === 'Pending Review' && canUserApproveEntry(currentUser, e)).length} entries</strong> awaiting your approval. Filter by 'Pending Review' to inspect and process them.
-              </span>
-            </div>
-            <button 
-              onClick={() => {
-                setFilters({ ...filters, status: 'Pending Review' });
-                setCurrentView('journal');
-                showToast('Filtered entries to show Pending Reviews.', 'info');
-              }}
-              className="bg-amber-600 hover:bg-amber-500 text-white font-extrabold px-2.5 py-1 rounded text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer"
-            >
-              Show Pending
-            </button>
-          </motion.div>
-        )}
-
-        {userRole === 'author' && entries.filter(e => e.status === 'Needs Revision').length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="bg-rose-500/10 border-b border-rose-500/30 text-rose-900 dark:text-rose-300 px-4 py-2 text-xs flex justify-between items-center gap-2 no-print shrink-0"
-          >
-            <div className="flex items-center gap-2">
-              <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase font-mono">Revision Alert</span>
-              <span className="text-slate-700 dark:text-slate-300">
-                ⚠️ A reviewer has returned <strong>{entries.filter(e => e.status === 'Needs Revision').length} of your submissions</strong> for revision. Filter by 'Needs Revision' to modify.
-              </span>
-            </div>
-            <button 
-              onClick={() => {
-                setFilters({ ...filters, status: 'Needs Revision' });
-                setCurrentView('journal');
-                showToast("Filtered entries to show 'Needs Revision'.", 'info');
-              }}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-extrabold px-2.5 py-1 rounded text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer"
-            >
-              See Fixes
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* SYSTEM TOAST ALERTS */}
-      {statusMessage && (
-        <div className="no-print fixed top-18 right-4 max-w-sm z-50 shadow-lg border animate-slide-in" id="toast-notif">
-          <div className={`p-3 rounded-md text-xs font-bold flex items-center gap-2.5 ${
-            statusMessage.type === 'success' 
-              ? 'bg-emerald-100 border-emerald-400 text-emerald-950' 
-              : statusMessage.type === 'danger'
-              ? 'bg-rose-100 border-rose-400 text-rose-950'
-              : 'bg-indigo-100 border-indigo-400 text-indigo-950'
-          }`}>
-            <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
-            <span>{statusMessage.text}</span>
-          </div>
-        </div>
-      )}
+      {/* MODERN SYSTEM TOAST ALERTS */}
+      <NotificationToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
       {/* WORKSPACE SIDEBAR + VIEW CONTENT WRAPPER */}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative overflow-hidden" id="workspace-layout-wrapper">
@@ -4776,9 +4874,16 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     <LinkIcon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : link.color}`} />
                     
                     {!isSidebarCollapsed && (
-                      <div className="min-w-0 flex-1 flex flex-col">
+                      <div className="min-w-0 flex-1 flex items-center justify-between">
                         <span className="text-xs font-semibold leading-tight truncate">{link.label}</span>
+                        {pinnedWorkspaces.includes(link.id) && (
+                          <Pin className="w-2.5 h-2.5 text-amber-500 fill-amber-500 shrink-0 ml-1" />
+                        )}
                       </div>
+                    )}
+
+                    {isSidebarCollapsed && pinnedWorkspaces.includes(link.id) && (
+                      <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400" />
                     )}
 
                     {link.badge !== null && (
@@ -4797,56 +4902,102 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
         {/* WORKSPACE SCREEN CONTENT PANEL */}
         <div className="flex-1 overflow-y-auto relative flex flex-col min-h-0" id="workspace-content-pane">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={currentView}
+              initial={PAGE_TRANSITION_VARIANTS[pageTransition].initial}
+              animate={PAGE_TRANSITION_VARIANTS[pageTransition].animate}
+              exit={PAGE_TRANSITION_VARIANTS[pageTransition].exit}
+              transition={PAGE_TRANSITION_VARIANTS[pageTransition].transition}
+              className="flex-1 flex flex-col min-h-0 w-full"
+              id={`portal-view-container-${currentView}`}
+            >
 
       {/* LANDING PAGE HUB */}
       {currentView === 'landing' && (
-        <div className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 no-print" id="dashboard-landing-hub animate-fade-in">
+        <div className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 no-print" id="dashboard-landing-hub">
           
-          {/* SYSTEM ALERTS BROADCAST SECTOR */}
-          {systemNotifications.filter(noti => noti.active).map((noti) => {
-            let containerBgColor = 'bg-slate-50 dark:bg-slate-905 border-slate-205 dark:border-slate-800 text-slate-800 dark:text-slate-200';
-            let iconColor = 'text-slate-500';
+          {/* SYSTEM ALERTS BROADCAST SECTOR (MODERN UI) */}
+          {systemNotifications
+            .filter(noti => noti.active && !dismissedAnnouncementIds.includes(noti.id))
+            .map((noti) => {
+              let borderClass = 'border-slate-200 dark:border-slate-800 bg-white/85 dark:bg-slate-900/85';
+              let badgeColor = 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/40';
+              let iconColor = 'text-indigo-500';
+              let pingColor = 'bg-indigo-400';
 
-            if (noti.type === 'success') {
-              containerBgColor = 'bg-emerald-50 dark:bg-emerald-950/15 border-emerald-200 dark:border-emerald-900/30 text-emerald-800 dark:text-emerald-350';
-              iconColor = 'text-emerald-500';
-            } else if (noti.type === 'warning') {
-              containerBgColor = 'bg-amber-50 dark:bg-amber-950/15 border-amber-200 dark:border-amber-900/30 text-amber-800 dark:text-amber-350';
-              iconColor = 'text-amber-500';
-            } else if (noti.type === 'danger') {
-              containerBgColor = 'bg-rose-50 dark:bg-rose-950/15 border-rose-200 dark:border-rose-900/30 text-rose-800 dark:text-rose-400';
-              iconColor = 'text-rose-500';
-            } else if (noti.type === 'info') {
-              containerBgColor = 'bg-indigo-50 dark:bg-indigo-950/15 border-indigo-200 dark:border-indigo-900/35 text-indigo-805 dark:text-indigo-350';
-              iconColor = 'text-indigo-500';
-            }
+              if (noti.type === 'success') {
+                borderClass = 'border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-950/20';
+                badgeColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40';
+                iconColor = 'text-emerald-500';
+                pingColor = 'bg-emerald-400';
+              } else if (noti.type === 'warning') {
+                borderClass = 'border-amber-200 dark:border-amber-900/40 bg-amber-50/70 dark:bg-amber-950/20';
+                badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800/40';
+                iconColor = 'text-amber-500';
+                pingColor = 'bg-amber-400';
+              } else if (noti.type === 'danger') {
+                borderClass = 'border-rose-200 dark:border-rose-900/40 bg-rose-50/70 dark:bg-rose-950/20';
+                badgeColor = 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800/40';
+                iconColor = 'text-rose-500';
+                pingColor = 'bg-rose-400';
+              } else if (noti.type === 'info') {
+                borderClass = 'border-cyan-200 dark:border-cyan-900/40 bg-cyan-50/70 dark:bg-cyan-950/20';
+                badgeColor = 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800/40';
+                iconColor = 'text-cyan-500';
+                pingColor = 'bg-cyan-400';
+              }
 
-            return (
-              <div 
-                key={noti.id} 
-                className={`p-4 rounded-xl border flex gap-3.5 shadow-sm relative overflow-hidden transition-colors ${containerBgColor} animate-fade-in`}
-              >
-                <div className="absolute top-0 right-0 transform translate-x-12 -translate-y-12 w-32 h-32 bg-white/5 dark:bg-black/5 rounded-full blur-2xl pointer-events-none"></div>
-                <div className="mt-0.5 shrink-0">
-                  <Megaphone className={`w-5 h-5 ${iconColor}`} />
+              return (
+                <div 
+                  key={noti.id} 
+                  className={`p-4 md:p-5 rounded-2xl border ${borderClass} shadow-sm backdrop-blur-md flex flex-col sm:flex-row items-start justify-between gap-4 relative overflow-hidden transition-all`}
+                >
+                  <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                    <div className="mt-0.5 p-2.5 rounded-xl bg-white dark:bg-slate-800 shadow-2xs shrink-0">
+                      <Megaphone className={`w-5 h-5 ${iconColor}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span className="relative flex h-2 w-2">
+                          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${pingColor} opacity-75`}></span>
+                          <span className={`relative inline-flex rounded-full h-2 w-2 ${pingColor}`}></span>
+                        </span>
+                        <span className={`text-[9px] uppercase font-black tracking-widest font-mono px-1.5 py-0.5 rounded border leading-none ${badgeColor}`}>
+                          {noti.type ? `${noti.type.toUpperCase()} BROADCAST` : 'TEAM BROADCAST'}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                          {new Date(noti.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-tight font-display">
+                        {noti.title}
+                      </h4>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 mt-1 leading-relaxed font-medium">
+                        {noti.message}
+                      </p>
+                      {noti.createdBy && (
+                        <div className="mt-2 text-[10px] font-mono text-slate-400 flex items-center gap-1.5">
+                          <span>Dispatched by</span>
+                          <span className="text-slate-700 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                            {noti.createdBy}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDismissAnnouncement(noti.id)}
+                    className="self-start text-xs font-mono font-bold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                    title="Dismiss announcement"
+                  >
+                    <span>Dismiss</span>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <div className="flex-1">
-                  <span className="text-[9px] uppercase font-bold tracking-widest font-mono opacity-80 block mb-0.5">
-                    Broadcast Announcement
-                  </span>
-                  <h4 className="text-xs font-black uppercase tracking-tight font-sans">
-                    {noti.title}
-                  </h4>
-                  <p className="text-xs mt-1 leading-relaxed opacity-90 font-medium">
-                    {noti.message}
-                  </p>
-                  <span className="text-[9px] font-mono opacity-60 block mt-2">
-                    Published {new Date(noti.createdAt).toLocaleDateString()} by {noti.createdBy}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
           {/* Welcome Card & Team Announcement */}
           <div className="bg-slate-900 text-white rounded-xl p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden border border-slate-800 shadow-xl dark:bg-slate-950">
@@ -6098,7 +6249,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
               }
             ];
 
-            const visibleCards = allHubCards.filter(c => !hiddenWorkspaces.includes(c.id));
+            const visibleCards = allHubCards
+              .filter(c => !hiddenWorkspaces.includes(c.id))
+              .sort((a, b) => {
+                const isPinnedA = pinnedWorkspaces.includes(a.id);
+                const isPinnedB = pinnedWorkspaces.includes(b.id);
+                if (isPinnedA && !isPinnedB) return -1;
+                if (!isPinnedA && isPinnedB) return 1;
+                if (isPinnedA && isPinnedB) {
+                  const pinIdxA = pinnedWorkspaces.indexOf(a.id);
+                  const pinIdxB = pinnedWorkspaces.indexOf(b.id);
+                  if (pinIdxA !== -1 && pinIdxB !== -1) return pinIdxA - pinIdxB;
+                }
+                const idxA = navOrder.indexOf(a.id);
+                const idxB = navOrder.indexOf(b.id);
+                if (idxA === -1 && idxB === -1) return 0;
+                if (idxA === -1) return 1;
+                if (idxB === -1) return -1;
+                return idxA - idxB;
+              });
             const pinnedCards = visibleCards.filter(c => pinnedWorkspaces.includes(c.id));
 
             return (
@@ -6511,6 +6680,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
           onSetAccentColor={handleSetAccentColor}
           pinnedWorkspaces={pinnedWorkspaces}
           onTogglePinWorkspace={togglePinWorkspace}
+          onUpdatePinnedWorkspaces={handleUpdatePinnedWorkspaces}
+          pageTransition={pageTransition}
+          onSetPageTransition={handleSetPageTransition}
           navOrder={navOrder}
           onUpdateNavOrder={handleUpdateNavOrder}
           digestSettings={digestSettings}
@@ -6724,6 +6896,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
           formatSubteamLabel={formatSubteamLabel}
           onCreateAccount={handleAdminCreateAccount}
           onSendPasswordReset={handleSendPasswordReset}
+          onSyncMembersWithFirebase={syncMembersWithFirebase}
         />
       )}
 
@@ -7161,6 +7334,35 @@ ${entry.planNextTime || '_No carry-over specified._'}
 
           </div>
 
+          {/* FLOATING QUICK ACTION MENU FOR PORTAL HUB */}
+          <QuickActionMenu
+            currentUser={currentUser}
+            activeSession={activeSession}
+            sessionElapsed={sessionElapsed}
+            onClockIn={(subteam, desc) => {
+              if (!currentUser) {
+                showToast('You must be signed in to clock in.', 'danger');
+                return;
+              }
+              const targetSubteam = subteam || currentUser.primarySubteam || 'Design/Build/Fabrication';
+              const session: ClockInSession = {
+                startTime: Date.now(),
+                subteam: targetSubteam as Subteam,
+                taskDescription: desc || `Laboratory workshop contribution for ${targetSubteam}.`
+              };
+              setActiveSession(session);
+              showToast(`Successfully CLOCKED IN for ${targetSubteam}!`, 'success');
+            }}
+            onClockOut={handleClockOut}
+            onSelectView={(view) => setCurrentView(view as any)}
+            onStartNewJournalEntry={() => {
+              resetForm();
+              setActiveTab('form');
+              setCurrentView('journal');
+              showToast('Started new journal entry draft.', 'info');
+            }}
+          />
+
         </div>
         )
       )}
@@ -7552,74 +7754,21 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       />
                     </div>
 
-                    {/* Notebook Attachments & Converted Google Files (spanning lg:col-span-4) */}
+                    {/* Image upload (spanning lg:col-span-4) */}
                     <div className="lg:col-span-4 border border-slate-200 rounded p-2.5 bg-slate-50 dark:bg-slate-800 dark:border-slate-800">
-                      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                        <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest dark:text-slate-400">
-                          Notebook Attachments &amp; Converted Files
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingGoogleLink(prev => !prev)}
-                          className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
-                          title="Attach an existing Google Docs, Sheets, or Slides link"
-                        >
-                          <Link2 className="w-3 h-3" />
-                          <span>+ Google Drive / Doc Link</span>
-                        </button>
-                      </div>
-
-                      {/* Optional Google Doc / Sheet link input card */}
-                      {isAddingGoogleLink && (
-                        <div className="mb-2 p-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-xs space-y-2 animate-in fade-in">
-                          <div className="flex items-center justify-between font-bold text-blue-900 dark:text-blue-200 text-[11px]">
-                            <span className="flex items-center gap-1.5">
-                              <Globe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                              Attach Accessible Google File (Free to view for anyone)
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setIsAddingGoogleLink(false)}
-                              className="text-slate-400 hover:text-slate-600 p-0.5"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          <input 
-                            type="url" 
-                            placeholder="Paste Google Docs, Sheets, Slides or Drive shareable link..." 
-                            value={googleLinkUrl}
-                            onChange={(e) => setGoogleLinkUrl(e.target.value)}
-                            className="w-full text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                          />
-                          <div className="flex gap-2">
-                            <input 
-                              type="text" 
-                              placeholder="Document title (optional)..." 
-                              value={googleLinkTitle}
-                              onChange={(e) => setGoogleLinkTitle(e.target.value)}
-                              className="flex-1 text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
-                            />
-                            <button 
-                              type="button" 
-                              onClick={handleAddGoogleLink} 
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs transition cursor-pointer"
-                            >
-                              Attach Link
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
+                        Image Attachments
+                      </label>
 
                       <div
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         onClick={() => fileInputRef.current?.click()}
-                        className={`border border-dashed rounded p-3 text-center cursor-pointer transition-colors ${
+                        className={`border border-dashed rounded p-4 text-center cursor-pointer transition-colors ${
                           isDraggingOver 
                             ? 'border-brand bg-brand-light text-brand dark:bg-brand/60-dark/15 dark:text-red-200' 
-                            : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                            : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-600'
                         }`}
                         id="image-dropzone"
                       >
@@ -7627,39 +7776,56 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           type="file"
                           ref={fileInputRef}
                           multiple
+                          accept="image/*"
                           onChange={handleImageUpload}
                           className="hidden"
                         />
                         
                         {isImageProcessing ? (
-                          <div className="flex flex-col items-center gap-1 py-1">
-                            <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded-full"></div>
-                            <span className="text-[10px] text-brand font-bold uppercase tracking-wider">Processing &amp; Converting File...</span>
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded"></div>
+                            <span className="text-[10px] text-brand font-bold">OPTIMIZING PICTURE DATA...</span>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center gap-1">
-                            <FileUp className="w-5 h-5 text-slate-400 group-hover:text-brand dark:text-slate-400" />
-                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                              Drag any file here, or click to browse
-                            </span>
-                            <span className="text-[9px] text-slate-400 font-mono tracking-tight dark:text-slate-400">
-                              MS Word, Excel &amp; PowerPoint auto-convert into open Google Docs • CAD, Code &amp; Images
-                            </span>
+                            <FileUp className="w-6 h-6 text-slate-400 group-hover:text-brand dark:text-slate-500" />
+                            <span className="text-xs font-bold text-slate-500 uppercase dark:text-slate-400">Drag image or browse</span>
+                            <span className="text-[9px] text-slate-400 uppercase tracking-tighter dark:text-slate-500">JPEG, PNG optimized automatically</span>
                           </div>
                         )}
                       </div>
 
-                      {/* Preview list of uploaded files */}
+                      {/* Micro Preview of Uploaded images */}
                       {formImages.length > 0 && (
-                        <div className="flex flex-col gap-1.5 mt-2" id="grid-draft-images">
+                        <div className="grid grid-cols-4 gap-1.5 mt-2" id="grid-draft-images">
                           {formImages.map((img) => (
-                            <NotebookAttachmentItem
-                              key={img.id}
-                              file={img}
-                              isEditable={true}
-                              onOpenViewer={(f) => setSelectedGoogleFile(f)}
-                              onRemove={(id) => handleRemoveImage(id)}
-                            />
+                            <div 
+                              key={img.id} 
+                              onClick={() => setExpandedImage({ 
+                                images: formImages.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                                currentIndex: formImages.findIndex(i => i.id === img.id)
+                              })}
+                              className="group relative border border-slate-300 rounded aspect-square overflow-hidden bg-slate-200 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-brand dark:bg-slate-800 dark:border-slate-800"
+                              title="Click to zoom preview"
+                            >
+                              <img 
+                                src={img.dataUrl} 
+                                alt={img.name} 
+                                className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 pointer-events-none"
+                                referrerPolicy="no-referrer"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveImage(img.id);
+                                }}
+                                className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-0.5 rounded shadow transition-all hover:scale-110 z-10 cursor-pointer"
+                                title="Delete image"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -7703,64 +7869,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 </>
               )}
 
-              {/* Files, Documents & Converted Google Files for General Meeting */}
+              {/* Photo attachments for General Meeting if in meeting mode */}
               {formEntryType === 'general_meeting' && (
                 <div className="border border-slate-200 rounded-xl p-3 bg-white dark:bg-slate-900 dark:border-slate-800">
-                  <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest dark:text-slate-400">
-                      Meeting Attachments &amp; Converted Google Files
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingGoogleLink(prev => !prev)}
-                      className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Link2 className="w-3 h-3" />
-                      <span>+ Google Drive / Doc Link</span>
-                    </button>
-                  </div>
-
-                  {/* Optional Google link input */}
-                  {isAddingGoogleLink && (
-                    <div className="mb-2 p-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-xs space-y-2 animate-in fade-in">
-                      <div className="flex items-center justify-between font-bold text-blue-900 dark:text-blue-200 text-[11px]">
-                        <span className="flex items-center gap-1.5">
-                          <Globe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                          Attach Accessible Google File (Free to view for anyone)
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingGoogleLink(false)}
-                          className="text-slate-400 hover:text-slate-600 p-0.5"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <input 
-                        type="url" 
-                        placeholder="Paste Google Docs, Sheets, Slides or Drive shareable link..." 
-                        value={googleLinkUrl}
-                        onChange={(e) => setGoogleLinkUrl(e.target.value)}
-                        className="w-full text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                      />
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="Document title (optional)..." 
-                          value={googleLinkTitle}
-                          onChange={(e) => setGoogleLinkTitle(e.target.value)}
-                          className="flex-1 text-xs p-1.5 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                        <button 
-                          type="button" 
-                          onClick={handleAddGoogleLink} 
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs transition cursor-pointer"
-                        >
-                          Attach Link
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1.5 dark:text-slate-400">
+                    Meeting Photos &amp; Whiteboard Captures (Optional)
+                  </label>
 
                   <div
                     onDragOver={handleDragOver}
@@ -7777,38 +7891,52 @@ ${entry.planNextTime || '_No carry-over specified._'}
                       type="file"
                       ref={fileInputRef}
                       multiple
+                      accept="image/*"
                       onChange={handleImageUpload}
                       className="hidden"
                     />
                     
                     {isImageProcessing ? (
-                      <div className="flex flex-col items-center gap-1 py-1">
-                        <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded-full"></div>
-                        <span className="text-[10px] text-brand font-bold uppercase tracking-wider">Processing &amp; Converting File...</span>
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-4 h-4 border-2 border-brand border-t-transparent animate-spin rounded"></div>
+                        <span className="text-[10px] text-brand font-bold">OPTIMIZING PICTURE DATA...</span>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center gap-1">
-                        <FileUp className="w-5 h-5 text-slate-400" />
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          Attach any file, presentation, spreadsheet, or whiteboard photos
-                        </span>
-                        <span className="text-[9px] text-slate-400 font-mono">
-                          MS Office files auto-convert to open Google Docs &amp; Sheets (free to be seen for anyone)
-                        </span>
+                      <div className="flex items-center justify-center gap-2">
+                        <FileUp className="w-4 h-4 text-slate-400" />
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Attach whiteboard photos or meeting slides</span>
                       </div>
                     )}
                   </div>
 
                   {formImages.length > 0 && (
-                    <div className="flex flex-col gap-1.5 mt-2">
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
                       {formImages.map((img) => (
-                        <NotebookAttachmentItem
-                          key={img.id}
-                          file={img}
-                          isEditable={true}
-                          onOpenViewer={(f) => setSelectedGoogleFile(f)}
-                          onRemove={(id) => handleRemoveImage(id)}
-                        />
+                        <div 
+                          key={img.id} 
+                          onClick={() => setExpandedImage({ 
+                            images: formImages.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                            currentIndex: formImages.findIndex(i => i.id === img.id)
+                          })}
+                          className="group relative border border-slate-300 rounded-lg aspect-square overflow-hidden bg-slate-200 cursor-zoom-in hover:opacity-90 transition-all hover:ring-2 hover:ring-purple-600 dark:bg-slate-800 dark:border-slate-700"
+                        >
+                          <img 
+                            src={img.dataUrl} 
+                            alt={img.name} 
+                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 pointer-events-none"
+                            referrerPolicy="no-referrer"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveImage(img.id);
+                            }}
+                            className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-0.5 rounded shadow transition-all hover:scale-110 z-10 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -7860,13 +7988,17 @@ ${entry.planNextTime || '_No carry-over specified._'}
           }`}
           id="block-archive-and-preview-panel"
         >
-          {/* HIGH DENSITY SEARCH & FILTER BOX */}
+          {/* HIGH DENSITY SEARCH & FILTER BOX WITH FULL-TEXT INDEX */}
           <div className="bg-white border border-slate-205 rounded-xl p-4 lg:p-5 shadow-sm no-print text-slate-900 dark:bg-slate-900 dark:text-slate-400">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1 mb-2 border-b border-slate-100 pb-1.5 shrink-0 dark:border-slate-800">
-              <div className="flex items-center gap-1">
-                <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest dark:text-slate-400">
-                  Search &amp; Filter Team Journal
+              <div className="flex items-center gap-2">
+                <Search className="w-3.5 h-3.5 text-brand dark:text-brand" />
+                <span className="text-[10px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-widest">
+                  Full-Text Journal Search Index
+                </span>
+                <span className="bg-brand/10 text-brand text-[9px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border border-brand/20">
+                  <Sparkles className="w-2.5 h-2.5" />
+                  {entries.length} indexed
                 </span>
               </div>
               <button
@@ -7915,12 +8047,116 @@ ${entry.planNextTime || '_No carry-over specified._'}
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                 <input
                   type="text"
-                  placeholder="Keyword search..."
+                  placeholder="Search title, planned, accomplished..."
                   value={filters.searchQuery}
                   onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded pl-10 pr-2 py-1 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
+                  className="w-full bg-slate-50 border border-slate-300 rounded pl-10 pr-7 py-1 text-xs focus:ring-1 focus:ring-brand focus:bg-white dark:focus:bg-slate-800 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 transition-all dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
                   id="filter-query"
                 />
+                {filters.searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, searchQuery: '' })}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* FULL-TEXT INDEX SCOPE & MATCH CONTROLS */}
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-bold text-slate-400 uppercase font-mono tracking-wider shrink-0 dark:text-slate-500 flex items-center gap-0.5">
+                  <Target className="w-2.5 h-2.5 text-brand" />
+                  Search Scope:
+                </span>
+                <div className="inline-flex rounded bg-slate-100 p-0.5 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, searchFieldScope: 'all' })}
+                    className={`px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer ${
+                      (!filters.searchFieldScope || filters.searchFieldScope === 'all')
+                        ? 'bg-brand text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                    id="search-scope-all"
+                  >
+                    Simultaneous (All 3)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, searchFieldScope: 'title' })}
+                    className={`px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer ${
+                      filters.searchFieldScope === 'title'
+                        ? 'bg-brand text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                    id="search-scope-title"
+                  >
+                    Title
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, searchFieldScope: 'planned' })}
+                    className={`px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer ${
+                      filters.searchFieldScope === 'planned'
+                        ? 'bg-brand text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                    id="search-scope-planned"
+                  >
+                    Planned
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, searchFieldScope: 'accomplished' })}
+                    className={`px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer ${
+                      filters.searchFieldScope === 'accomplished'
+                        ? 'bg-brand text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                    id="search-scope-accomplished"
+                  >
+                    Accomplished
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-400 uppercase font-mono tracking-wider shrink-0 dark:text-slate-500">
+                  Mode:
+                </span>
+                <div className="inline-flex rounded bg-slate-100 p-0.5 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, searchMatchMode: 'all' })}
+                    className={`px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer ${
+                      (!filters.searchMatchMode || filters.searchMatchMode === 'all')
+                        ? 'bg-slate-700 dark:bg-slate-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                    id="search-mode-and"
+                    title="All search words must match"
+                  >
+                    AND (All Words)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, searchMatchMode: 'any' })}
+                    className={`px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer ${
+                      filters.searchMatchMode === 'any'
+                        ? 'bg-slate-700 dark:bg-slate-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                    id="search-mode-or"
+                    title="Any search word can match"
+                  >
+                    OR (Any Word)
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -7948,19 +8184,29 @@ ${entry.planNextTime || '_No carry-over specified._'}
               </div>
             </div>
 
-            {/* Clear filters trigger */}
-            {(filters.subteam !== 'All' || filters.status !== 'All' || filters.searchQuery || filters.startDate || filters.endDate) && (
-              <div className="flex justify-end mt-1.5">
+            {/* Active search results feedback / Clear filters trigger */}
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-1 border-t border-slate-100 dark:border-slate-800/60">
+              {filters.searchQuery.trim() ? (
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                  <span className="font-bold text-brand">{filteredEntries.length} entries matched</span>
+                  <span className="text-slate-400">•</span>
+                  <span>Searching simultaneously in <strong className="text-slate-800 dark:text-slate-300">{filters.searchFieldScope === 'all' || !filters.searchFieldScope ? 'title, planned & accomplished' : filters.searchFieldScope}</strong></span>
+                </div>
+              ) : (
+                <span className="text-[10px] text-slate-400 dark:text-slate-500">Full-text search queries match title, planned, and accomplished fields simultaneously</span>
+              )}
+
+              {(filters.subteam !== 'All' || filters.status !== 'All' || filters.searchQuery || filters.startDate || filters.endDate || filters.searchFieldScope !== 'all' || filters.searchMatchMode !== 'all') && (
                 <button
-                  onClick={() => setFilters({ subteam: 'All', author: '', searchQuery: '', startDate: '', endDate: '', status: 'All' })}
-                  className="text-[9px] text-brand hover:underline flex items-center gap-1 font-bold"
+                  onClick={() => setFilters({ subteam: 'All', author: '', searchQuery: '', searchFieldScope: 'all', searchMatchMode: 'all', startDate: '', endDate: '', status: 'All' })}
+                  className="text-[9px] text-brand hover:underline flex items-center gap-1 font-bold cursor-pointer ml-auto"
                   id="btn-clear-filters"
                 >
                   <RotateCcw className="w-2.5 h-2.5" />
-                  Clear Search Filters
+                  Reset Search &amp; Filters
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* LOWER GRID LAYOUT */}
@@ -8094,12 +8340,61 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         </div>
 
                         <div className={`text-xs font-bold truncate mt-1 ${isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-300'}`}>
-                          {entry.entryType === 'general_meeting' ? (
-                            <span>📋 {entry.agenda || entry.planned || 'General Meeting'}</span>
+                          {entry.title ? (
+                            <div className="flex items-center gap-1">
+                              <span className="font-extrabold truncate">
+                                <SearchHighlightedText text={entry.title} query={filters.searchQuery} />
+                              </span>
+                            </div>
+                          ) : entry.entryType === 'general_meeting' ? (
+                            <span>📋 <SearchHighlightedText text={entry.agenda || entry.planned || 'General Meeting'} query={filters.searchQuery} /></span>
                           ) : (
-                            entry.planned
+                            <SearchHighlightedText text={entry.planned} query={filters.searchQuery} />
                           )}
                         </div>
+
+                        {/* Search Term Match Badges & Snippets */}
+                        {filters.searchQuery.trim() && (() => {
+                          const searchMeta = searchResultsMap.get(entry.id);
+                          if (!searchMeta) return null;
+                          return (
+                            <div className="mt-1 flex flex-col gap-1">
+                              {searchMeta.matchedFieldNames.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {searchMeta.matches.title && (
+                                    <span className={`text-[7.5px] px-1 py-0.2 rounded font-mono font-bold flex items-center gap-0.5 ${
+                                      isSelected ? 'bg-amber-400 text-slate-950 font-black' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/40'
+                                    }`}>
+                                      <Target className="w-2 h-2" /> Title
+                                    </span>
+                                  )}
+                                  {searchMeta.matches.planned && (
+                                    <span className={`text-[7.5px] px-1 py-0.2 rounded font-mono font-bold flex items-center gap-0.5 ${
+                                      isSelected ? 'bg-blue-400 text-slate-950 font-black' : 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-300/40'
+                                    }`}>
+                                      📋 Planned
+                                    </span>
+                                  )}
+                                  {searchMeta.matches.accomplished && (
+                                    <span className={`text-[7.5px] px-1 py-0.2 rounded font-mono font-bold flex items-center gap-0.5 ${
+                                      isSelected ? 'bg-emerald-400 text-slate-950 font-black' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40'
+                                    }`}>
+                                      ✅ Accomplished
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {searchMeta.matches.accomplished && searchMeta.snippets.accomplished && (
+                                <div className={`text-[10px] p-1 rounded font-normal leading-snug line-clamp-2 ${
+                                  isSelected ? 'bg-black/20 text-slate-100' : 'bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-800'
+                                }`}>
+                                  <strong className="font-bold opacity-80 text-[8.5px] uppercase font-mono mr-1">Accomplished:</strong>
+                                  <SearchHighlightedText text={searchMeta.snippets.accomplished} query={filters.searchQuery} />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         <div className={`flex justify-between items-center text-[9px] border-t mt-1.5 pt-1 ${
                           isSelected 
@@ -8204,10 +8499,12 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         onImageClick={(idx) => {
                           const imgs = selectedEntry.images || [];
                           if (imgs.length > 0) {
-                            setSelectedGoogleFile(imgs[idx]);
+                            setExpandedImage({
+                              images: imgs.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                              currentIndex: idx
+                            });
                           }
                         }}
-                        onFileClick={(file) => setSelectedGoogleFile(file)}
                       />
                     ) : (
                       <>
@@ -8304,13 +8601,25 @@ ${entry.planNextTime || '_No carry-over specified._'}
                     {/* Content Fields Map */}
                     <div className="space-y-6 text-sm text-slate-800 dark:text-slate-400">
                       
+                      {/* Optional Title Banner */}
+                      {selectedEntry.title && (
+                        <div className="bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-2xs">
+                          <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-1 font-bold dark:text-slate-400">
+                            Entry Title
+                          </strong>
+                          <h3 className="text-slate-900 dark:text-white font-black text-base lg:text-lg">
+                            <SearchHighlightedText text={selectedEntry.title} query={filters.searchQuery} />
+                          </h3>
+                        </div>
+                      )}
+
                       {/* What We Planned */}
                       <div className="bg-white border border-slate-205 p-5 lg:p-6 rounded-xl shadow-xs dark:bg-slate-900">
                         <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] mb-2 font-bold border-b border-slate-105 pb-1.5 dark:text-slate-400">
                           What we planned
                         </strong>
                         <p className="text-slate-900 leading-relaxed font-medium text-xs lg:text-sm whitespace-pre-wrap dark:text-slate-400">
-                          {selectedEntry.planned}
+                          <SearchHighlightedText text={selectedEntry.planned} query={filters.searchQuery} />
                         </p>
                       </div>
 
@@ -8320,7 +8629,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
                           What we accomplished
                         </strong>
                         <p className="text-slate-900 leading-relaxed text-xs lg:text-sm whitespace-pre-wrap dark:text-slate-400">
-                          {selectedEntry.accomplished}
+                          <SearchHighlightedText text={selectedEntry.accomplished} query={filters.searchQuery} />
                         </p>
                       </div>
 
@@ -8359,24 +8668,48 @@ ${entry.planNextTime || '_No carry-over specified._'}
                         </div>
                       )}
 
-                      {/* Attached Files & Converted Google Docs/Sheets */}
+                      {/* Notebook imagery */}
                       {selectedEntry.images.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] font-bold dark:text-slate-400">
-                              Attached Evidence, Files &amp; Google Docs ({selectedEntry.images.length})
-                            </strong>
-                            <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                              ✓ Open &amp; Accessible to Anyone
-                            </span>
-                          </div>
+                        <div className="space-y-1.5">
+                          <strong className="block text-slate-500 uppercase font-mono tracking-wider text-[10px] font-bold dark:text-slate-400">
+                            Session Imagery Proofs (Chassis maps, tests, wiring diagrams)
+                          </strong>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {selectedEntry.images.map((img) => (
-                              <NotebookAttachmentItem
-                                key={img.id}
-                                file={img}
-                                onOpenViewer={(f) => setSelectedGoogleFile(f)}
-                              />
+                              <div key={img.id} className="border border-slate-300 bg-white rounded p-1 flex flex-col gap-1 ring-1 ring-slate-205 dark:ring-slate-800 dark:bg-slate-900 dark:border-slate-800">
+                                <div 
+                                  onClick={() => setExpandedImage({ 
+                                    images: selectedEntry.images.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                                    currentIndex: selectedEntry.images.findIndex(i => i.id === img.id)
+                                  })}
+                                  className="aspect-[4/3] rounded overflow-hidden bg-slate-100 flex items-center justify-center border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity relative group/thumb dark:bg-slate-800 dark:border-slate-800"
+                                  title="Click to view expanded image"
+                                >
+                                  <img 
+                                    src={img.dataUrl} 
+                                    alt={img.name} 
+                                    className="max-h-full max-w-full object-contain pointer-events-none transition-transform duration-200 group-hover/thumb:scale-[1.02]"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/10 transition-colors flex items-center justify-center">
+                                    <span className="opacity-0 group-hover/thumb:opacity-100 transition-opacity bg-slate-950/90 text-white text-[9px] font-mono uppercase tracking-wider px-2 py-1 rounded flex items-center gap-1 shadow">
+                                      🔍 Click to Expand
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-[9px] font-mono text-slate-500 px-1 truncate shrink-0 flex justify-between items-center dark:text-slate-400">
+                                  <span className="truncate">📁 {img.name} ({(img.size / 1024).toFixed(1)} KB)</span>
+                                  <button
+                                    onClick={() => setExpandedImage({ 
+                                      images: selectedEntry.images.map(i => ({ url: i.dataUrl, name: i.name, size: i.size })),
+                                      currentIndex: selectedEntry.images.findIndex(i => i.id === img.id)
+                                    })}
+                                    className="text-[9px] font-bold text-slate-400 hover:text-brand transition-colors cursor-pointer dark:text-slate-500"
+                                  >
+                                    [ZOOM]
+                                  </button>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -8603,6 +8936,9 @@ ${entry.planNextTime || '_No carry-over specified._'}
         )
       )}
 
+          </motion.div>
+        </AnimatePresence>
+
       </div>
       </div>
 
@@ -8727,12 +9063,7 @@ ${entry.planNextTime || '_No carry-over specified._'}
         )}
       </AnimatePresence>
 
-      {/* Accessible Google File Viewer Modal (Office files converted to Google Docs / Sheets & any notebook file) */}
-      <GoogleFileViewerModal
-        file={selectedGoogleFile}
-        onClose={() => setSelectedGoogleFile(null)}
-        showToast={showToast}
-      />
+      {/* Create / Edit Profile Modal */}
       <AnimatePresence>
         {isCreateProfileOpen && (
           <motion.div
@@ -9250,6 +9581,48 @@ FTC #6567 Captains & Mentors`
 
                 {/* Section C: Simulated System Mail Logs */}
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                  {/* Daily Mentor Summary Automation Service Banner */}
+                  <div className="mb-3.5 p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/60 dark:bg-indigo-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300">
+                          Mentor Daily Digest Service • Active
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                        Automatically compiles and dispatches daily 'Pending Review' summaries to team mentors and captains whenever journal entries are added.
+                      </p>
+                      {getLastDailyDigestRecord() && (
+                        <span className="text-[9.5px] font-mono text-slate-500 dark:text-slate-400 block mt-1">
+                          Last dispatch: {getLastDailyDigestRecord()?.dateStr} ({getLastDailyDigestRecord()?.entriesCount} pending items sent to {getLastDailyDigestRecord()?.recipients.length} mentor(s))
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const res = dispatchDailyMentorSummary({
+                          allEntries: entries,
+                          accounts,
+                          sendEmail: sendEmailNotification
+                        });
+                        if (res.dispatched) {
+                          showToast(`Dispatched Daily Mentor Summary (${res.count} pending entr${res.count > 1 ? 'ies' : 'y'}) to ${res.recipients.length} mentor(s).`, 'success');
+                        } else {
+                          showToast(res.reason || 'No pending review entries found.', 'info');
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase tracking-wider font-mono shrink-0 transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>Dispatch Digest Now</span>
+                    </button>
+                  </div>
+
                   <div className="flex items-center justify-between mb-2.5">
                     <h3 className="text-[11px] font-black text-slate-550 uppercase tracking-wider flex items-center gap-1.5 leading-none dark:text-slate-300">
                       <Mail className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
@@ -10594,6 +10967,8 @@ FTC #6567 Captains & Mentors`
       isOpen={isMobileMenuOpen}
       hiddenWorkspaces={hiddenWorkspaces}
       disabledModules={disabledModules}
+      navOrder={navOrder}
+      pinnedWorkspaces={pinnedWorkspaces}
       onClose={() => setIsMobileMenuOpen(false)}
       currentUser={currentUser}
       userGamification={userGamification}

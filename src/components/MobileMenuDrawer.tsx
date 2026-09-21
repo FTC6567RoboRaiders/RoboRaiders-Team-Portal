@@ -21,7 +21,8 @@ import {
   Clock,
   Layers,
   Grid,
-  Award
+  Award,
+  Pin
 } from 'lucide-react';
 import { UserAccount } from '../types';
 import { DeviceInfo } from '../utils/useDevice';
@@ -43,6 +44,7 @@ interface MobileMenuDrawerProps {
   hiddenWorkspaces?: string[];
   disabledModules?: string[];
   navOrder?: string[];
+  pinnedWorkspaces?: string[];
 }
 
 export function MobileMenuDrawer({
@@ -61,7 +63,8 @@ export function MobileMenuDrawer({
   pendingApprovalsCount = 0,
   hiddenWorkspaces = [],
   disabledModules = [],
-  navOrder = []
+  navOrder = [],
+  pinnedWorkspaces = []
 }: MobileMenuDrawerProps) {
   if (!isOpen) return null;
 
@@ -142,13 +145,6 @@ export function MobileMenuDrawer({
       sublabel: '12 chapters & instructions',
       icon: HelpCircle,
       color: 'text-cyan-400'
-    },
-    {
-      id: 'settings',
-      label: 'Settings & Profile',
-      sublabel: 'Preferences & layout',
-      icon: Settings,
-      color: 'text-slate-400'
     }
   ];
 
@@ -171,24 +167,32 @@ export function MobileMenuDrawer({
 
   const visibleLinks = allNavigationLinks.filter(link => {
     if (disabledModules.includes(link.id)) return currentUser?.primarySubteam === "Programming" || isUserAdminOrMentor;
-    if (hiddenWorkspaces.includes(link.id) && link.id !== "landing" && link.id !== "settings") return false;
+    if (hiddenWorkspaces.includes(link.id) && link.id !== "landing") return false;
     return true;
   });
 
-  if (navOrder && navOrder.length > 0) {
-    visibleLinks.sort((a, b) => {
-      if (a.id === 'landing') return -1;
-      if (b.id === 'landing') return 1;
-      if (a.id === 'settings') return 1;
-      if (b.id === 'settings') return -1;
+  visibleLinks.sort((a, b) => {
+    if (a.id === 'landing') return -1;
+    if (b.id === 'landing') return 1;
+    const isPinnedA = pinnedWorkspaces.includes(a.id);
+    const isPinnedB = pinnedWorkspaces.includes(b.id);
+    if (isPinnedA && !isPinnedB) return -1;
+    if (!isPinnedA && isPinnedB) return 1;
+    if (isPinnedA && isPinnedB) {
+      const pinIdxA = pinnedWorkspaces.indexOf(a.id);
+      const pinIdxB = pinnedWorkspaces.indexOf(b.id);
+      if (pinIdxA !== -1 && pinIdxB !== -1) return pinIdxA - pinIdxB;
+    }
+    if (navOrder && navOrder.length > 0) {
       const idxA = navOrder.indexOf(a.id);
       const idxB = navOrder.indexOf(b.id);
       if (idxA === -1 && idxB === -1) return 0;
       if (idxA === -1) return 1;
       if (idxB === -1) return -1;
       return idxA - idxB;
-    });
-  }
+    }
+    return 0;
+  });
 
   const handleNavigate = (viewId: string) => {
     onSelectView(viewId);
@@ -319,7 +323,12 @@ export function MobileMenuDrawer({
                     </div>
                   </div>
 
-                  <ChevronRight className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {pinnedWorkspaces.includes(link.id) && (
+                      <Pin className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
+                    )}
+                    <ChevronRight className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                  </div>
                 </button>
               );
             })}

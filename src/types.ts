@@ -9,6 +9,8 @@ export type Subteam =
 
 export type NavLayout = 'sidebar' | 'topbar';
 
+export type PageTransitionStyle = 'smooth' | 'fade' | 'slide' | 'none';
+
 export type JournalEntryType = 'subteam' | 'general_meeting';
 
 export interface PersonABC {
@@ -28,41 +30,11 @@ export interface MeetingTodoItem {
   completed: boolean;
 }
 
-export type AttachmentCategory = 
-  | 'image'
-  | 'ms_word'
-  | 'ms_excel'
-  | 'ms_powerpoint'
-  | 'google_doc'
-  | 'google_sheet'
-  | 'google_slide'
-  | 'pdf'
-  | 'cad'
-  | 'code'
-  | 'text'
-  | 'archive'
-  | 'other';
-
 export interface JournalImage {
   id: string;
-  dataUrl: string; // Base64 representation or URL
+  dataUrl: string; // Base64 representation for LocalStorage saving
   name: string;
   size: number;
-  fileCategory?: AttachmentCategory;
-  mimeType?: string;
-  // Accessible Google File conversion metadata:
-  isGoogleConverted?: boolean;
-  googleDocType?: 'doc' | 'sheet' | 'slide';
-  googleDocTitle?: string;
-  googleViewUrl?: string; // Direct link or open URL
-  extractedHtml?: string; // Formatted document HTML (Word -> Google Doc)
-  extractedText?: string; // Plain text
-  extractedSheets?: { [sheetName: string]: any[][] }; // Parsed spreadsheet data (Excel -> Google Sheet)
-  sheetNames?: string[];
-  slideCount?: number;
-  cadInfo?: { extension: string; modelName: string };
-  codeLanguage?: string;
-  createdAt?: number;
 }
 
 export interface JournalEntry {
@@ -99,6 +71,8 @@ export interface FilterOptions {
   entryType?: 'All' | 'subteam' | 'general_meeting';
   author: string;
   searchQuery: string;
+  searchFieldScope?: 'all' | 'title' | 'planned' | 'accomplished';
+  searchMatchMode?: 'all' | 'any';
   startDate: string;
   endDate: string;
   status: 'All' | 'Draft' | 'Pending Review' | 'Approved' | 'Needs Revision';
@@ -421,7 +395,21 @@ export interface QotdLeaderboardEntry {
   rank?: number;
 }
 
+export interface ToastNotification {
+  id: string;
+  text: string;
+  type: 'success' | 'danger' | 'info' | 'warning';
+  title?: string;
+  timestamp?: number;
+  duration?: number;
+}
 
-
-
-
+export interface SystemNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'danger' | 'success';
+  active: boolean;
+  createdAt: number;
+  createdBy: string;
+}

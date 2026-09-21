@@ -78,6 +78,7 @@ interface MemberDirectoryProps {
     resetLinkScheduledAt?: number;
   }) => Promise<boolean>;
   onSendPasswordReset?: (user: UserAccount) => Promise<void>;
+  onSyncMembersWithFirebase?: () => Promise<void>;
 }
 
 export default function MemberDirectory({
@@ -102,11 +103,13 @@ export default function MemberDirectory({
   onDeleteUser,
   formatSubteamLabel,
   onCreateAccount,
-  onSendPasswordReset
+  onSendPasswordReset,
+  onSyncMembersWithFirebase
 }: MemberDirectoryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSubteam, setFilterSubteam] = useState<string>('All');
   const [filterRole, setFilterRole] = useState<string>('All');
+  const [isSyncingMembers, setIsSyncingMembers] = useState(false);
   const [isRosterExportModalOpen, setIsRosterExportModalOpen] = useState(false);
   const [rosterExportPaperSize, setRosterExportPaperSize] = useState<'letter' | 'a4' | 'legal'>('letter');
   const [rosterExportShowCover, setRosterExportShowCover] = useState<boolean>(true);
@@ -434,6 +437,24 @@ export default function MemberDirectory({
         </div>
         
         <div className="flex flex-wrap gap-2">
+          {onSyncMembersWithFirebase && (
+            <button
+              onClick={async () => {
+                setIsSyncingMembers(true);
+                try {
+                  await onSyncMembersWithFirebase();
+                } finally {
+                  setIsSyncingMembers(false);
+                }
+              }}
+              disabled={isSyncingMembers}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-3 py-2.5 text-xs rounded-lg transition-all uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-50"
+              title="Sync Members with Firebase (Firebase data takes priority)"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncingMembers ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isSyncingMembers ? 'Syncing...' : 'Sync with Firebase'}</span>
+            </button>
+          )}
           {isMentorOrCaptain && (
             <button
               onClick={() => {

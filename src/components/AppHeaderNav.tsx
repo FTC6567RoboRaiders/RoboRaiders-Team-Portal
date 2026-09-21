@@ -28,16 +28,18 @@ import {
   AlertCircle,
   ExternalLink,
   Check,
-  Sparkles
+  Sparkles,
+  Pin
 } from 'lucide-react';
 import { UserAccount, NavLayout } from '../types';
 import RoboraidersLogo from './RoboraidersLogo';
+import { NotificationCenter } from './NotificationCenter';
 
 interface AppHeaderNavProps {
   currentUser: UserAccount | null;
   userGamification: any;
   currentView: string;
-  onSelectView: (view: string) => void;
+  onSelectView: (view: string, filterStatus?: string) => void;
   isDark: boolean;
   onToggleTheme: () => void;
   onOpenSettings: () => void;
@@ -49,6 +51,10 @@ interface AppHeaderNavProps {
   needsRevisionCount: number;
   lowStockCount: number;
   pendingApprovalsCount: number;
+  systemNotifications?: any[];
+  dismissedAnnouncementIds?: string[];
+  onDismissAnnouncement?: (id: string) => void;
+  onClearAllAnnouncements?: () => void;
   onOpenMobileMenu: () => void;
   onExportJSON: () => void;
   onImportJSON: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -56,6 +62,7 @@ interface AppHeaderNavProps {
   disabledModules: string[];
   hiddenWorkspaces?: string[];
   navOrder?: string[];
+  pinnedWorkspaces?: string[];
   isSidebarCollapsed: boolean;
   onToggleSidebar: () => void;
   navLayout: NavLayout;
@@ -89,6 +96,10 @@ export function AppHeaderNav({
   needsRevisionCount,
   lowStockCount,
   pendingApprovalsCount,
+  systemNotifications = [],
+  dismissedAnnouncementIds = [],
+  onDismissAnnouncement = () => {},
+  onClearAllAnnouncements = () => {},
   onOpenMobileMenu,
   onExportJSON,
   onImportJSON,
@@ -96,6 +107,7 @@ export function AppHeaderNav({
   disabledModules,
   hiddenWorkspaces = [],
   navOrder = [],
+  pinnedWorkspaces = [],
   isSidebarCollapsed,
   onToggleSidebar,
   navLayout,
@@ -163,16 +175,27 @@ export function AppHeaderNav({
     { id: 'qotd', label: 'QOTD', sub: 'Daily challenge & trivia', icon: Sparkles }
   ].filter(item => isModuleAccessible(item.id));
 
-  if (navOrder && navOrder.length > 0) {
-    allWorkspaceModules.sort((a, b) => {
+  allWorkspaceModules.sort((a, b) => {
+    const isPinnedA = pinnedWorkspaces.includes(a.id);
+    const isPinnedB = pinnedWorkspaces.includes(b.id);
+    if (isPinnedA && !isPinnedB) return -1;
+    if (!isPinnedA && isPinnedB) return 1;
+    if (isPinnedA && isPinnedB) {
+      const pinIdxA = pinnedWorkspaces.indexOf(a.id);
+      const pinIdxB = pinnedWorkspaces.indexOf(b.id);
+      if (pinIdxA !== -1 && pinIdxB !== -1) return pinIdxA - pinIdxB;
+    }
+
+    if (navOrder && navOrder.length > 0) {
       const idxA = navOrder.indexOf(a.id);
       const idxB = navOrder.indexOf(b.id);
       if (idxA === -1 && idxB === -1) return 0;
       if (idxA === -1) return 1;
       if (idxB === -1) return -1;
       return idxA - idxB;
-    });
-  }
+    }
+    return 0;
+  });
 
   const topCount = navLayout === 'topbar' ? 6 : 4;
 
@@ -280,6 +303,10 @@ export function AppHeaderNav({
                   <ItemIcon className="w-3.5 h-3.5 shrink-0" />
                   <span>{item.label}</span>
 
+                  {pinnedWorkspaces.includes(item.id) && (
+                    <Pin className="w-2.5 h-2.5 text-amber-500 fill-amber-500 shrink-0" />
+                  )}
+
                   {item.pulse && (
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -341,7 +368,12 @@ export function AppHeaderNav({
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="text-xs font-semibold leading-tight flex items-center justify-between">
-                                <span className="truncate">{module.label}</span>
+                                <span className="truncate flex items-center gap-1">
+                                  {module.label}
+                                  {pinnedWorkspaces.includes(module.id) && (
+                                    <Pin className="w-2.5 h-2.5 text-amber-500 fill-amber-500 shrink-0" />
+                                  )}
+                                </span>
                                 {module.badge && (
                                   <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-red-500 text-white font-black leading-none ml-1 shrink-0">
                                     {module.badge}
@@ -393,6 +425,19 @@ export function AppHeaderNav({
               <span>In Lab: {sessionElapsed}</span>
             </button>
           )}
+
+          {/* NOTIFICATION & BROADCAST CENTER */}
+          <NotificationCenter
+            systemNotifications={systemNotifications}
+            pendingReviewsCount={pendingReviewsCount}
+            needsRevisionCount={needsRevisionCount}
+            lowStockCount={lowStockCount}
+            pendingApprovalsCount={pendingApprovalsCount}
+            onSelectView={onSelectView}
+            dismissedAnnouncementIds={dismissedAnnouncementIds}
+            onDismissAnnouncement={onDismissAnnouncement}
+            onClearAllAnnouncements={onClearAllAnnouncements}
+          />
 
           <button
             onClick={onToggleTheme}
@@ -471,8 +516,12 @@ export function AppHeaderNav({
                     )}
                   </div>
 
-                  {/* Primary Actions */}
+                  {/* Quick Actions */}
                   <div className="py-2 space-y-0.5 border-b border-slate-100 dark:border-slate-800 text-xs">
+                    <div className="text-[9.5px] font-mono font-bold text-slate-400 dark:text-slate-500 px-2.5 py-1 uppercase tracking-wider">
+                      Quick Actions
+                    </div>
+
                     <button
                       onClick={() => {
                         onSelectView('landing');
@@ -492,8 +541,8 @@ export function AppHeaderNav({
                       className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                       id="menu-settings-btn"
                     >
-                      <Settings className="w-4 h-4 text-slate-400" />
-                      <span>Workspace &amp; Account Settings</span>
+                      <Settings className="w-4 h-4 text-brand" />
+                      <span className="font-medium text-slate-900 dark:text-slate-100">Settings &amp; Preferences</span>
                     </button>
 
                     <button

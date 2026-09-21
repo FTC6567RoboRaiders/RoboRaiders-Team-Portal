@@ -10,15 +10,15 @@ import {
   ZoomIn, 
   ZoomOut, 
   RotateCcw, 
-  Calendar, 
-  User, 
   FileText,
   Bookmark,
   Users,
   CheckSquare,
   Coins,
   ListOrdered,
-  UserCheck
+  Image as ImageIcon,
+  ShieldCheck,
+  Award
 } from 'lucide-react';
 
 export interface JournalPrintLayoutProps {
@@ -73,7 +73,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
   }
 
   return (
-    <div className={`journal-print-root ${isPreview ? 'w-full flex flex-col items-center gap-6' : 'w-full'}`}>
+    <div className={`journal-print-root ${isPreview ? 'w-full flex flex-col items-center gap-6' : 'w-full block bg-white text-slate-950'}`}>
       
       {/* PREVIEW TOOLBAR (Only shown in interactive preview modal) */}
       {isPreview && (
@@ -82,7 +82,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
             <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             <div className="flex flex-col">
               <span className="text-[11px] font-bold uppercase tracking-wider font-mono text-slate-800 dark:text-slate-100">
-                Engineering Notebook Preview
+                Engineering Notebook PDF Preview
               </span>
               <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400">
                 {totalPages} Total Pages • {paperSize.toUpperCase()} ({paperSize === 'letter' ? '8.5" × 11"' : paperSize === 'a4' ? '210 × 297 mm' : '8.5" × 14"'})
@@ -125,83 +125,109 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
       {/* DOCUMENT PAGES WRAPPER */}
       <div 
-        className={`flex flex-col items-center gap-10 w-full transition-transform origin-top ${
-          isPreview ? 'pb-16' : ''
-        }`}
+        className={`w-full ${isPreview ? 'flex flex-col items-center gap-10 transition-transform origin-top pb-16' : 'block'}`}
         style={isPreview ? { transform: `scale(${zoomLevel})`, transformOrigin: 'top center' } : undefined}
       >
 
         {/* 1. TITLE COVER PAGE */}
         {showCover && (
-          <div className="flex flex-col items-center gap-1.5 w-full max-w-xl">
+          <div className={`w-full ${isPreview ? 'max-w-xl' : 'pdf-document-page'}`}>
             {isPreview && (
-              <div className="flex items-center justify-between w-full px-1 text-[10px] font-mono text-slate-500 uppercase font-bold">
+              <div className="flex items-center justify-between w-full px-1 mb-1 text-[10px] font-mono text-slate-500 uppercase font-bold">
                 <span>Page 1 of {totalPages}</span>
                 <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded text-[9px]">TITLE COVER SHEET</span>
               </div>
             )}
             
             <div 
-              className={`bg-white text-slate-950 p-10 sm:p-14 flex flex-col justify-between relative border-4 border-double border-slate-950 mx-auto shadow-2xl rounded-xs w-full select-text ${
-                !isPreview ? 'min-h-screen break-after-page' : ''
+              className={`bg-white text-slate-950 p-10 sm:p-14 flex flex-col justify-between relative border-4 border-double border-slate-950 mx-auto select-text ${
+                isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border-4 border-double border-slate-950'
               }`}
               style={{
-                aspectRatio: paperAspect,
+                aspectRatio: isPreview ? paperAspect : undefined,
                 pageBreakAfter: 'always',
                 breakAfter: 'page'
               }}
             >
               {/* Header Team Crest */}
-              <div className="border-b-8 border-slate-950 pb-6">
-                <div className="flex items-center gap-4 mb-3">
-                  <RoboraidersLogo className="w-16 h-16 text-slate-950 shrink-0" />
+              <div className="border-b-4 border-slate-950 pb-6">
+                <div className="flex items-center gap-5 mb-3">
+                  <RoboraidersLogo className="w-20 h-20 text-slate-950 shrink-0" />
                   <div>
+                    <span className="text-xs font-mono font-black tracking-widest text-slate-600 uppercase block mb-0.5">
+                      FIRST® Tech Challenge • Team #6567
+                    </span>
                     <h1 className="text-3xl sm:text-4xl font-black font-display tracking-tight text-slate-950 uppercase leading-none">
-                      FTC Team #6567 RoboRaiders
+                      RoboRaiders Engineering Notebook
                     </h1>
-                    <p className="text-xs sm:text-sm font-mono font-bold text-slate-700 uppercase tracking-widest mt-1">
-                      FIRST Tech Challenge • Engineering Portfolio & Evidence Dossier
+                    <p className="text-xs font-mono font-bold text-slate-700 uppercase tracking-wider mt-1.5 flex items-center gap-2">
+                      <span>Red Hook Central High School</span>
+                      <span>•</span>
+                      <span>Official Judged Dossier</span>
                     </p>
                   </div>
                 </div>
               </div>
 
               {/* Middle Overview Panel */}
-              <div className="my-auto py-6 border-y-2 border-slate-300 flex flex-col gap-6">
-                <div className="inline-block bg-slate-950 text-white px-4 py-1.5 text-xs font-mono uppercase tracking-widest font-black self-start">
-                  Official Judged Engineering Binder
-                </div>
-
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-xs sm:text-sm font-mono text-slate-850">
-                  <div className="border-l-2 border-indigo-600 pl-3">
-                    <span className="text-[10px] uppercase text-slate-500 block font-bold">Documentation Scope:</span>
-                    <span className="font-black text-slate-950 text-base uppercase">{scope}</span>
+              <div className="my-auto py-8 border-y-2 border-slate-300 flex flex-col gap-6">
+                <div className="flex items-center justify-between">
+                  <div className="inline-block bg-slate-950 text-white px-4 py-1.5 text-xs font-mono uppercase tracking-widest font-black">
+                    Official Competition Technical Record
                   </div>
-                  <div className="border-l-2 border-indigo-600 pl-3">
-                    <span className="text-[10px] uppercase text-slate-500 block font-bold">Total Session Entries:</span>
-                    <span className="font-black text-slate-950 text-base">{entries.length} Logged Entries</span>
-                  </div>
-                  <div className="border-l-2 border-indigo-600 pl-3">
-                    <span className="text-[10px] uppercase text-slate-500 block font-bold">Date Range Covered:</span>
-                    <span className="font-bold text-slate-950">{dateRangeStr}</span>
-                  </div>
-                  <div className="border-l-2 border-indigo-600 pl-3">
-                    <span className="text-[10px] uppercase text-slate-500 block font-bold">Subteams Represented:</span>
-                    <span className="font-bold text-slate-950">{subteamsPresent.join(', ') || 'All Subteams'}</span>
+                  <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-slate-700">
+                    <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                    <span>VERIFIED FIRST® FTC COMPLIANT</span>
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded text-xs font-mono text-slate-700 space-y-1">
-                  <p><strong>AFFILIATION:</strong> Red Hook High School Robotics</p>
-                  <p><strong>STATUS:</strong> {approvedCount} Approved, {pendingCount} Pending Mentor Review</p>
-                  <p><strong>COMPILED ON:</strong> {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-xs font-mono text-slate-800">
+                  <div className="border-l-3 border-indigo-600 pl-3.5">
+                    <span className="text-[10px] uppercase text-slate-500 block font-bold">Documentation Scope</span>
+                    <span className="font-black text-slate-950 text-sm uppercase">{scope}</span>
+                  </div>
+                  <div className="border-l-3 border-indigo-600 pl-3.5">
+                    <span className="text-[10px] uppercase text-slate-500 block font-bold">Total Session Entries</span>
+                    <span className="font-black text-slate-950 text-sm">{entries.length} Logged Sessions</span>
+                  </div>
+                  <div className="border-l-3 border-indigo-600 pl-3.5">
+                    <span className="text-[10px] uppercase text-slate-500 block font-bold">Date Range Covered</span>
+                    <span className="font-bold text-slate-950 text-xs">{dateRangeStr}</span>
+                  </div>
+                  <div className="border-l-3 border-indigo-600 pl-3.5">
+                    <span className="text-[10px] uppercase text-slate-500 block font-bold">Subteams Represented</span>
+                    <span className="font-bold text-slate-950 text-xs">{subteamsPresent.join(', ') || 'All Engineering Disciplines'}</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-300 rounded text-xs font-mono text-slate-800 space-y-1.5">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-1">
+                    <span><strong>ORGANIZATION:</strong> Red Hook High School Robotics Club</span>
+                    <span><strong>SEASON:</strong> Current FTC Championship</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-0.5">
+                    <span><strong>REVIEW SUMMARY:</strong> {approvedCount} Approved Logs • {pendingCount} Under Review</span>
+                    <span><strong>COMPILED:</strong> {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="pt-4 border-t-2 border-slate-950 flex justify-between items-center text-[10px] font-mono text-slate-600">
-                <span>CONFIDENTIAL ENGINEERING MATERIAL • FIRST TECH CHALLENGE</span>
-                <span>GRACIOUS PROFESSIONALISM® • TEAM #6567</span>
+              {/* Cover Sign-Off Certification Block */}
+              <div className="pt-4 border-t-2 border-slate-950 space-y-3">
+                <div className="grid grid-cols-2 gap-6 text-[10px] font-mono text-slate-700">
+                  <div className="border-b border-slate-400 pb-1">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block">Lead Student Engineer Signature</span>
+                    <div className="h-5"></div>
+                  </div>
+                  <div className="border-b border-slate-400 pb-1">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block">Head Mentor / Coach Certification</span>
+                    <div className="h-5"></div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-[9px] font-mono text-slate-600 pt-1">
+                  <span>CONFIDENTIAL ENGINEERING MATERIAL • FIRST® TECH CHALLENGE</span>
+                  <span>GRACIOUS PROFESSIONALISM® • TEAM #6567</span>
+                </div>
               </div>
             </div>
           </div>
@@ -213,9 +239,9 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
           const isFirstTOCPage = tocIdx === 0;
 
           return (
-            <div key={`toc-page-${tocIdx}`} className="flex flex-col items-center gap-1.5 w-full max-w-xl">
+            <div key={`toc-page-${tocIdx}`} className={`w-full ${isPreview ? 'max-w-xl' : 'pdf-document-page'}`}>
               {isPreview && (
-                <div className="flex items-center justify-between w-full px-1 text-[10px] font-mono text-slate-500 uppercase font-bold">
+                <div className="flex items-center justify-between w-full px-1 mb-1 text-[10px] font-mono text-slate-500 uppercase font-bold">
                   <span>Page {thisTOCPageNum} of {totalPages}</span>
                   <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded text-[9px]">
                     TABLE OF CONTENTS {tocPagesCount > 1 ? `(PART ${tocIdx + 1} OF ${tocPagesCount})` : ''}
@@ -224,11 +250,11 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
               )}
 
               <div 
-                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto shadow-2xl rounded-xs w-full select-text ${
-                  !isPreview ? 'min-h-screen break-after-page' : ''
+                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+                  isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
                 }`}
                 style={{
-                  aspectRatio: paperAspect,
+                  aspectRatio: isPreview ? paperAspect : undefined,
                   pageBreakAfter: 'always',
                   breakAfter: 'page'
                 }}
@@ -244,7 +270,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                         </span>
                       </div>
                       <h2 className="text-xl sm:text-2xl font-black uppercase font-display tracking-tight text-slate-950">
-                        Table of Contents & Dossier Index
+                        Table of Contents &amp; Session Index
                       </h2>
                     </div>
                     <div className="text-right font-mono text-[10px] text-slate-600">
@@ -273,15 +299,15 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                   {/* TOC Table */}
                   <div className="overflow-hidden border border-slate-300 rounded">
-                    <table className="w-full text-left text-[8px] border-collapse font-mono">
+                    <table className="w-full text-left text-[8.5px] border-collapse font-mono">
                       <thead>
-                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase text-[7.5px] tracking-wider">
-                          <th className="py-1 px-1.5 w-[90px] whitespace-nowrap">REF CODE</th>
-                          <th className="py-1 px-1.5 w-16 whitespace-nowrap">DATE</th>
-                          <th className="py-1 px-1.5 w-16 whitespace-nowrap">SUBTEAM</th>
-                          <th className="py-1 px-2">SESSION TITLE & OBJECTIVES</th>
-                          <th className="py-1 px-1 text-center w-16 whitespace-nowrap">STATUS</th>
-                          <th className="py-1 px-1.5 text-right w-10 whitespace-nowrap">PAGE</th>
+                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase text-[8px] tracking-wider">
+                          <th className="py-1.5 px-2 w-[100px] whitespace-nowrap">REF CODE</th>
+                          <th className="py-1.5 px-2 w-20 whitespace-nowrap">DATE</th>
+                          <th className="py-1.5 px-2 w-24 whitespace-nowrap">SUBTEAM</th>
+                          <th className="py-1.5 px-2.5">SESSION TITLE &amp; OBJECTIVES</th>
+                          <th className="py-1.5 px-2 text-center w-20 whitespace-nowrap">STATUS</th>
+                          <th className="py-1.5 px-2 text-right w-12 whitespace-nowrap">PAGE</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
@@ -292,27 +318,27 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                           return (
                             <tr key={entry.id || globalIdx} className="align-middle hover:bg-slate-50">
-                              <td className="py-1 px-1.5 font-mono font-bold text-slate-950 text-[7.5px] whitespace-nowrap tracking-tight">
+                              <td className="py-1.5 px-2 font-mono font-bold text-slate-950 text-[8px] whitespace-nowrap tracking-tight">
                                 {refCode}
                               </td>
-                              <td className="py-1 px-1.5 text-slate-700 text-[7.5px] whitespace-nowrap font-mono">
+                              <td className="py-1.5 px-2 text-slate-700 text-[8px] whitespace-nowrap font-mono">
                                 {entry.date}
                               </td>
-                              <td className="py-1 px-1.5 whitespace-nowrap">
-                                <span className="px-1 py-0.2 bg-slate-100 border border-slate-300 rounded text-slate-800 font-semibold uppercase text-[6.5px] tracking-tight">
+                              <td className="py-1.5 px-2 whitespace-nowrap">
+                                <span className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-slate-800 font-semibold uppercase text-[7px] tracking-tight">
                                   {entry.subteam}
                                 </span>
                               </td>
-                              <td className="py-1 px-2 font-sans">
-                                <div className="font-bold text-slate-900 text-[8px] leading-tight line-clamp-1">
-                                  {entry.title || 'Engineering Session Log'}
+                              <td className="py-1.5 px-2.5 font-sans">
+                                <div className="font-bold text-slate-900 text-[8.5px] leading-tight line-clamp-1">
+                                  {entry.title || (entry.entryType === 'general_meeting' ? 'General Team Meeting' : 'Engineering Session Log')}
                                 </div>
-                                <div className="text-[7px] text-slate-500 line-clamp-1 font-mono">
+                                <div className="text-[7.5px] text-slate-500 line-clamp-1 font-mono">
                                   {entry.planned || entry.accomplished || 'Session documentation'}
                                 </div>
                               </td>
-                              <td className="py-1 px-1 text-center whitespace-nowrap">
-                                <span className={`px-1 py-0.2 rounded font-bold uppercase text-[6.5px] tracking-tight ${
+                              <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                                <span className={`px-1.5 py-0.5 rounded font-bold uppercase text-[7px] tracking-tight ${
                                   entry.status === 'Approved' 
                                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
                                     : entry.status === 'Pending Review'
@@ -322,7 +348,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                                   {entry.status}
                                 </span>
                               </td>
-                              <td className="py-1 px-1.5 text-right font-bold text-indigo-700 font-mono text-[8px] whitespace-nowrap">
+                              <td className="py-1.5 px-2 text-right font-bold text-indigo-700 font-mono text-[8.5px] whitespace-nowrap">
                                 {targetPage}
                               </td>
                             </tr>
@@ -356,9 +382,9 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
           const refCode = getEntryReferenceCode(entry, allEntries.length > 0 ? allEntries : entries);
 
           return (
-            <div key={entry.id || idx} className="flex flex-col items-center gap-1.5 w-full max-w-xl">
+            <div key={entry.id || idx} className={`w-full ${isPreview ? 'max-w-xl' : 'pdf-document-page'}`}>
               {isPreview && (
-                <div className="flex items-center justify-between w-full px-1 text-[10px] font-mono text-slate-500 uppercase font-bold">
+                <div className="flex items-center justify-between w-full px-1 mb-1 text-[10px] font-mono text-slate-500 uppercase font-bold">
                   <span>Page {entryPageNum} of {totalPages}</span>
                   <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded text-[9px]">
                     ENTRY {idx + 1} • {refCode}
@@ -367,18 +393,18 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
               )}
 
               <div 
-                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto shadow-2xl rounded-xs w-full select-text ${
-                  !isPreview ? 'min-h-screen break-after-page' : ''
+                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text ${
+                  isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
                 }`}
                 style={{
-                  aspectRatio: paperAspect,
+                  aspectRatio: isPreview ? paperAspect : undefined,
                   pageBreakAfter: 'always',
                   breakAfter: 'page'
                 }}
               >
                 <div>
                   {/* Top Running Header */}
-                  <div className="border-b-4 border-slate-950 pb-3 flex justify-between items-center mb-6">
+                  <div className="border-b-3 border-slate-950 pb-2.5 flex justify-between items-center mb-5">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-100 uppercase tracking-wide text-slate-950">
                         {entry.subteam}
@@ -387,14 +413,14 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                         REF: {refCode}
                       </span>
                     </div>
-                    <div className="text-right text-[10px] font-mono text-slate-700 space-y-0.5">
+                    <div className="text-right text-[9.5px] font-mono text-slate-700 space-y-0.5">
                       <div><strong>DATE:</strong> <span className="text-slate-950 font-bold">{entry.date}</span></div>
                       <div><strong>AUTHOR:</strong> <span className="text-slate-950 font-semibold">{entry.author}</span></div>
                     </div>
                   </div>
 
                   {/* Main Entry Title */}
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-950 mb-4 font-display uppercase tracking-tight leading-snug">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-950 mb-4 font-display uppercase tracking-tight leading-snug border-b border-slate-200 pb-2">
                     {entry.title || (entry.entryType === 'general_meeting' ? 'General Team Meeting' : 'Engineering Session Log')}
                   </h2>
 
@@ -404,12 +430,12 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       {/* 1. Agenda */}
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
-                          <ListOrdered className="w-3.5 h-3.5 text-indigo-600" />
+                          <ListOrdered className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
                             1. Meeting Agenda &amp; Discussion Topics
                           </h3>
                         </div>
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900 text-xs">
                           {entry.agenda || entry.planned || 'No agenda recorded.'}
                         </div>
                       </div>
@@ -417,12 +443,12 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       {/* 2. Attendance Area */}
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
-                          <Users className="w-3.5 h-3.5 text-emerald-600" />
+                          <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
                             2. Attendance Roster ({(entry.attendees || []).length} Present)
                           </h3>
                         </div>
-                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded flex flex-wrap gap-1">
+                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded flex flex-wrap gap-1.5">
                           {(entry.attendees || []).length > 0 ? (
                             entry.attendees?.map((name, i) => (
                               <span key={i} className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded text-[9px] font-bold">
@@ -445,7 +471,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       {/* 3. ABCs (Accomplishments, Blockers, Commitments) */}
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                           <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
                             3. Member ABCs (Accomplishments • Blockers • Commitments)
                           </h3>
@@ -462,7 +488,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                                     </span>
                                   )}
                                 </div>
-                                <div className="grid grid-cols-3 gap-1.5 text-[9px]">
+                                <div className="grid grid-cols-3 gap-2 text-[9px]">
                                   <div>
                                     <strong className="text-emerald-700 block uppercase font-mono text-[8px]">A: Accomplishments</strong>
                                     <span className="text-slate-800">{item.accomplishments || '—'}</span>
@@ -480,7 +506,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                             ))}
                           </div>
                         ) : (
-                          <div className="p-2 bg-slate-50 border border-slate-200 rounded text-slate-400 italic text-[10px]">
+                          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded text-slate-400 italic text-[10px]">
                             {entry.accomplished || 'No individual ABCs recorded.'}
                           </div>
                         )}
@@ -490,7 +516,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       {entry.financeAnnounced && (
                         <div>
                           <div className="flex items-center gap-1.5 mb-1">
-                            <Coins className="w-3.5 h-3.5 text-amber-600" />
+                            <Coins className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
                               4. Finance Announced
                             </h3>
@@ -505,12 +531,12 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       {entry.finalTodoList && entry.finalTodoList.length > 0 && (
                         <div>
                           <div className="flex items-center gap-1.5 mb-1">
-                            <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                            <CheckSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
                               5. Final To-Do List &amp; Action Items
                             </h3>
                           </div>
-                          <div className="p-2 bg-slate-50 border border-slate-200 rounded space-y-1">
+                          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
                             {entry.finalTodoList.map((todo, idx) => (
                               <div key={idx} className="flex items-center justify-between text-[9px] py-0.5 border-b border-slate-200/60 last:border-0">
                                 <span className={`flex items-center gap-1.5 ${todo.completed ? 'line-through text-slate-400' : 'text-slate-900 font-medium'}`}>
@@ -533,12 +559,12 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       {/* 1. Objectives & Goals Planned */}
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
-                          <FileText className="w-3.5 h-3.5 text-slate-600" />
-                          <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
-                            1. Objectives & Goals Planned
+                          <FileText className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                          <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                            1. Objectives &amp; Goals Planned
                           </h3>
                         </div>
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900 text-xs">
                           {entry.planned || 'No planned goals specified.'}
                         </div>
                       </div>
@@ -546,64 +572,81 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                       {/* 2. Work Accomplished & Implementation */}
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
-                            2. Work Accomplished & Implementation
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                            2. Work Accomplished &amp; Technical Implementation
                           </h3>
                         </div>
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900 text-xs">
                           {entry.accomplished || 'No work accomplished recorded.'}
                         </div>
                       </div>
 
-                      {/* 3. Engineering Challenges & Troubleshooting */}
-                      {entry.challenges && (
+                      {/* 3. Problems Encountered & Solutions */}
+                      {entry.problemsAndSolutions && (
                         <div>
                           <div className="flex items-center gap-1.5 mb-1">
-                            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                            <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
-                              3. Engineering Challenges & Troubleshooting
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                              3. Problems Encountered, Root Cause &amp; Solutions
                             </h3>
                           </div>
-                          <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
+                          <div className="p-3 bg-amber-50/50 border border-amber-200 rounded whitespace-pre-wrap font-sans text-slate-900 text-xs">
+                            {entry.problemsAndSolutions}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 4. Engineering Challenges & Troubleshooting */}
+                      {entry.challenges && !entry.problemsAndSolutions && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                              3. Engineering Challenges &amp; Troubleshooting
+                            </h3>
+                          </div>
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900 text-xs">
                             {entry.challenges}
                           </div>
                         </div>
                       )}
 
-                      {/* 4. Next Steps & Future Action Items */}
-                      {entry.nextSteps && (
+                      {/* 5. Next Steps & Future Action Items */}
+                      {(entry.nextSteps || entry.planNextTime) && (
                         <div>
                           <div className="flex items-center gap-1.5 mb-1">
-                            <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                            <h3 className="font-mono font-extrabold uppercase text-slate-600 text-[10px] tracking-wider">
-                              4. Next Steps & Future Action Items
+                            <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
+                              {entry.problemsAndSolutions || entry.challenges ? '4.' : '3.'} Next Steps &amp; Future Action Items
                             </h3>
                           </div>
-                          <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900">
-                            {entry.nextSteps}
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded whitespace-pre-wrap font-sans text-slate-900 text-xs">
+                            {entry.planNextTime || entry.nextSteps}
                           </div>
                         </div>
                       )}
 
-                      {/* 5. Attached Documentation, CAD & Converted Google Files */}
+                      {/* 6. Embedded Photographic Documentation & CAD Renders */}
                       {entry.images && entry.images.length > 0 && (
-                        <div className="pt-2 border-t border-dashed border-slate-300">
+                        <div>
                           <div className="flex items-center gap-1.5 mb-1.5">
-                            <FileText className="w-3.5 h-3.5 text-slate-700" />
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
-                              5. Attached Evidence, CAD Models &amp; Converted Google Files ({entry.images.length})
+                              Visual Evidence, Schematics &amp; Photo Documentation ({entry.images.length})
                             </h3>
                           </div>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {entry.images.map((img) => (
-                              <div key={img.id} className="p-2 bg-slate-50 border border-slate-200 rounded text-[9px] font-mono flex items-center justify-between">
-                                <span className="font-bold truncate text-slate-800">
-                                  {img.isGoogleConverted ? (img.googleDocType === 'doc' ? '📄 Google Doc: ' : img.googleDocType === 'sheet' ? '📊 Google Sheet: ' : '📽️ Google Slide: ') : '📁 '}
-                                  {img.googleDocTitle || img.name}
-                                </span>
-                                <span className="text-slate-500 shrink-0 ml-1">
-                                  {(img.size / 1024).toFixed(1)} KB {img.isGoogleConverted ? '• Accessible' : ''}
+                          <div className="grid grid-cols-2 gap-3">
+                            {entry.images.map((img, imgIdx) => (
+                              <div key={imgIdx} className="border border-slate-300 rounded p-1.5 bg-slate-50 flex flex-col items-center">
+                                <img 
+                                  src={img.dataUrl} 
+                                  alt={img.name || `Figure ${imgIdx + 1}`} 
+                                  className="max-h-40 object-contain rounded border border-slate-200 bg-white"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <span className="text-[8.5px] font-mono text-slate-600 mt-1 truncate max-w-full text-center">
+                                  Fig {imgIdx + 1}: {img.name || 'Engineering capture'}
                                 </span>
                               </div>
                             ))}
@@ -614,11 +657,21 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                   )}
                 </div>
 
-                {/* Running Page Footer */}
-                <div className="mt-8 pt-4 border-t-2 border-slate-950 flex justify-between items-center text-[9px] font-mono text-slate-600">
-                  <span>FIRST TECH CHALLENGE TEAM #6567 ROBORAIDERS</span>
-                  <span className="font-bold uppercase">STATUS: {entry.status}</span>
-                  <span className="font-bold text-slate-950">Page {entryPageNum} of {totalPages}</span>
+                {/* Running Page Footer with Official Sign-Off Block */}
+                <div className="mt-6 pt-3 border-t-2 border-slate-950 space-y-2">
+                  <div className="grid grid-cols-2 gap-6 text-[9.5px] font-mono text-slate-700">
+                    <div className="border-b border-slate-300 pb-0.5">
+                      <span className="text-[8px] uppercase font-bold text-slate-500 block">Lead Student Sign-off:</span>
+                    </div>
+                    <div className="border-b border-slate-300 pb-0.5">
+                      <span className="text-[8px] uppercase font-bold text-slate-500 block">Mentor / Coach Verification:</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-[8.5px] font-mono text-slate-600 pt-0.5">
+                    <span>FIRST TECH CHALLENGE TEAM #6567 ROBORAIDERS</span>
+                    <span className="font-bold uppercase">STATUS: {entry.status}</span>
+                    <span className="font-bold text-slate-950">Page {entryPageNum} of {totalPages}</span>
+                  </div>
                 </div>
               </div>
             </div>

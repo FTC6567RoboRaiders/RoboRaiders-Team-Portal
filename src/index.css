@@ -127,47 +127,120 @@ input, select, textarea {
   padding-block: 0.4rem;
 }
 
-/* Print optimizations for FTC Engineering Notebook alignment */
+/* Print optimizations for authentic publication-grade PDF document export */
 .print-only {
   display: none !important;
+}
+
+@page {
+  size: letter portrait;
+  margin: 0.35in 0.45in;
 }
 
 @media print {
   .print-only {
     display: block !important;
   }
-  html, body {
-    background: white !important;
-    background-color: white !important;
-    color: black !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  #main-root {
-    background: white !important;
-    background-color: white !important;
-    color: black !important;
-    border: none !important;
+  
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
     box-shadow: none !important;
-    min-h: auto !important;
+    text-shadow: none !important;
   }
-  .no-print {
-    display: none !important;
-  }
-  .print-page {
+
+  html, body {
     width: 100% !important;
-    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 10.5pt !important;
+    line-height: 1.45 !important;
     margin: 0 !important;
     padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #root, #main-root, #workspace-layout-wrapper, #journal-desk-view-container, #member-approvals-directory-viewport, #time-hours-ledger-desk {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+
+  .no-print, header, nav, aside, [role="dialog"], [role="alert"], #quick-action-menu, #notification-toast-container, #mobile-bottom-nav, #mobile-menu-drawer, #workspace-sidebar {
+    display: none !important;
+  }
+
+  /* Document page sheets */
+  .pdf-document-page, .print-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 9.8in !important;
+    margin: 0 0 0.4in 0 !important;
+    padding: 0.15in !important;
     box-shadow: none !important;
     border: none !important;
-    background: white !important;
-    color: black !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-sizing: border-box !important;
+    border-radius: 0 !important;
   }
-  table, tr, td, th {
-    color: black !important;
-    background-color: transparent !important;
+
+  .pdf-document-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+    margin-bottom: 0 !important;
+  }
+
+  .avoid-break, .keep-together {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  th, td {
+    color: #0f172a !important;
     border-color: #cbd5e1 !important;
+  }
+
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }
 
