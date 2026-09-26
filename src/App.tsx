@@ -159,7 +159,6 @@ import KanbanBoard from './components/KanbanBoard';
 import { DEFAULT_KANBAN_TASKS } from './data/kanbanDemo';
 import OutreachHub from './components/OutreachHub';
 import ArenaPortal from './components/ArenaPortal';
-import { DEFAULT_OUTREACH_EVENTS } from './data/outreachDemo';
 import { jsPDF } from 'jspdf';
 
 import { DEMO_ENTRIES, DEFAULT_TIME_ENTRIES } from './data/journalDemo';
@@ -479,26 +478,27 @@ export default function App() {
   const [disabledModules, setDisabledModules] = useState<string[]>([]);
   const [systemNotifications, setSystemNotifications] = useState<any[]>([]);
 
-  // Outreach events state
+  // Outreach events state - strictly user-inputted events only, NO defaults
   const [outreachEvents, setOutreachEvents] = useState<OutreachEvent[]>(() => {
     const stored = safeStorage.getItem('ftc_outreach_events');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((p: any) => p && p.id && !String(p.id).startsWith('outreach-demo-'));
         }
       } catch (e) {}
     }
-    return DEFAULT_OUTREACH_EVENTS;
+    return [];
   });
 
   const saveOutreachEventsToLocalStorage = (newEvents: OutreachEvent[]) => {
+    const cleanEvents = newEvents.filter(e => e && e.id && !String(e.id).startsWith('outreach-demo-'));
     try {
-      safeStorage.setItem('ftc_outreach_events', JSON.stringify(newEvents));
+      safeStorage.setItem('ftc_outreach_events', JSON.stringify(cleanEvents));
     } catch {}
-    setOutreachEvents(newEvents);
-    syncOutreachEventsToFirestore(newEvents).catch(console.error);
+    setOutreachEvents(cleanEvents);
+    syncOutreachEventsToFirestore(cleanEvents).catch(console.error);
   };
 
   // Kanban tasks state
@@ -931,8 +931,27 @@ export default function App() {
 
   const syncOutreachEventsToFirestore = async (newEvents: OutreachEvent[]) => {
     for (const event of newEvents) {
+      if (!event || !event.id || String(event.id).startsWith('outreach-demo-')) continue;
       try {
-        const cleanEvent = cleanForFirestore(event);
+        const eventToSave: OutreachEvent = {
+          id: String(event.id),
+          title: event.title || 'Untitled Event',
+          date: event.date || new Date().toISOString().split('T')[0],
+          location: event.location || 'General Location',
+          description: event.description || '',
+          impactMetrics: event.impactMetrics || '',
+          hoursLogged: Number(event.hoursLogged) || 0,
+          participants: Array.isArray(event.participants) ? event.participants : [],
+          images: Array.isArray(event.images) ? event.images : [],
+          creatorName: event.creatorName || currentUser?.name || 'RoboRaider Member',
+          creatorEmail: event.creatorEmail || currentUser?.schoolEmail || 'member@school.edu',
+          createdAt: Number(event.createdAt) || Date.now(),
+          updatedAt: Date.now(),
+          updatedBy: event.updatedBy || currentUser?.name || 'RoboRaider Member',
+          reachedChildren: Number(event.reachedChildren) || 0,
+          reachedAdults: Number(event.reachedAdults) || 0
+        };
+        const cleanEvent = cleanForFirestore(eventToSave);
         await setDoc(doc(db, 'outreachEvents', event.id), cleanEvent);
       } catch (e) {
         console.warn(`Firestore sync error for outreachEvents/${event.id}:`, e);
@@ -1184,6 +1203,35 @@ export default function App() {
     }
   };
 
+  // Dedicated live sync for Community Outreach Events (always active on mount, no defaults)
+  useEffect(() => {
+    // Purge legacy demo events from Firestore once
+    deleteDoc(doc(db, 'outreachEvents', 'outreach-demo-1')).catch(() => {});
+    deleteDoc(doc(db, 'outreachEvents', 'outreach-demo-2')).catch(() => {});
+
+    const unsub = onSnapshot(collection(db, 'outreachEvents'), (snapshot) => {
+      const list: OutreachEvent[] = [];
+      snapshot.forEach(docSnap => {
+        const item = docSnap.data() as OutreachEvent;
+        if (item && item.id) {
+          if (!String(item.id).startsWith('outreach-demo-')) {
+            list.push(item);
+          } else {
+            deleteDoc(doc(db, 'outreachEvents', item.id)).catch(() => {});
+          }
+        }
+      });
+      setOutreachEvents(list);
+      try {
+        safeStorage.setItem('ftc_outreach_events', JSON.stringify(list));
+      } catch {}
+    }, (error) => {
+      console.warn("Outreach live sync notice:", error);
+    });
+
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     let unsubscribeAll: (() => void)[] = [];
     let dataListenersUnsub: (() => void)[] = [];
@@ -1264,25 +1312,18 @@ export default function App() {
       });
       dataListenersUnsub.push(unsubKanban);
 
-      // Outreach events listener - Persistent Reader & Auto-Seed
+      // Outreach events listener - Pure Reader (zero defaults)
       const unsubOutreach = onSnapshot(collection(db, 'outreachEvents'), (snapshot) => {
-        if (snapshot.empty) {
-          if (!seededCollectionsRef.current['outreach']) {
-            seededCollectionsRef.current['outreach'] = true;
-            const toSeed = outreachEventsRef.current.length > 0 ? outreachEventsRef.current : DEFAULT_OUTREACH_EVENTS;
-            toSeed.forEach(ev => {
-              setDoc(doc(db, 'outreachEvents', ev.id), cleanForFirestore(ev)).catch(() => {});
-            });
-            setOutreachEvents(toSeed);
-            try {
-              safeStorage.setItem('ftc_outreach_events', JSON.stringify(toSeed));
-            } catch {}
-          }
-          return;
-        }
         const list: OutreachEvent[] = [];
         snapshot.forEach(d => {
-          list.push(d.data() as OutreachEvent);
+          const item = d.data() as OutreachEvent;
+          if (item && item.id) {
+            if (!String(item.id).startsWith('outreach-demo-')) {
+              list.push(item);
+            } else {
+              deleteDoc(doc(db, 'outreachEvents', item.id)).catch(() => {});
+            }
+          }
         });
         setOutreachEvents(list);
         try {
@@ -2928,17 +2969,22 @@ FTC #6567 Captains & Mentors`
       });
     }
 
-    // 4. Check Outreach Events
+    // 4. Check Outreach Events - Strictly user data only, purge any demo items
     const storedOutreach = safeStorage.getItem('ftc_outreach_events');
-    if (!storedOutreach || storedOutreach === '[]') {
-      setOutreachEvents(DEFAULT_OUTREACH_EVENTS);
+    if (storedOutreach) {
       try {
-        safeStorage.setItem('ftc_outreach_events', JSON.stringify(DEFAULT_OUTREACH_EVENTS));
+        const parsed = JSON.parse(storedOutreach);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((o: any) => o && o.id && !String(o.id).startsWith('outreach-demo-'));
+          if (cleaned.length !== parsed.length) {
+            safeStorage.setItem('ftc_outreach_events', JSON.stringify(cleaned));
+            setOutreachEvents(cleaned);
+          }
+        }
       } catch {}
-      DEFAULT_OUTREACH_EVENTS.forEach(o => {
-        setDoc(doc(db, 'outreachEvents', o.id), cleanForFirestore(o)).catch(() => {});
-      });
     }
+    deleteDoc(doc(db, 'outreachEvents', 'outreach-demo-1')).catch(() => {});
+    deleteDoc(doc(db, 'outreachEvents', 'outreach-demo-2')).catch(() => {});
 
     // 5. Check Kanban Tasks
     const storedKanban = safeStorage.getItem('ftc_kanban_tasks');
@@ -4042,11 +4088,9 @@ FTC #6567 Captains & Mentors`
       setDoc(doc(db, 'inventoryTransactions', tx.id), cleanForFirestore(tx)).catch(() => {});
     });
 
-    setOutreachEvents(DEFAULT_OUTREACH_EVENTS);
-    try { safeStorage.setItem('ftc_outreach_events', JSON.stringify(DEFAULT_OUTREACH_EVENTS)); } catch {}
-    DEFAULT_OUTREACH_EVENTS.forEach(o => {
-      setDoc(doc(db, 'outreachEvents', o.id), cleanForFirestore(o)).catch(() => {});
-    });
+    // Outreach logs: keep strictly user-inputted records only, NO defaults
+    deleteDoc(doc(db, 'outreachEvents', 'outreach-demo-1')).catch(() => {});
+    deleteDoc(doc(db, 'outreachEvents', 'outreach-demo-2')).catch(() => {});
 
     setKanbanTasks(DEFAULT_KANBAN_TASKS);
     try { safeStorage.setItem('ftc_kanban_tasks', JSON.stringify(DEFAULT_KANBAN_TASKS)); } catch {}
@@ -4335,7 +4379,7 @@ FTC #6567 Captains & Mentors`
       showToast('No matching outreach events found for the selected export criteria.', 'danger');
       return;
     }
-    const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
+    const sorted = [...events];
     setOutreachEventsToPrint(sorted);
     setOutreachPrintSubtitle(subtitle);
     setIsOutreachExportModalOpen(true);

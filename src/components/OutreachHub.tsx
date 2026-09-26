@@ -16,7 +16,14 @@ import {
   Printer,
   FileText,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  LayoutGrid,
+  Table as TableIcon,
+  MapPin,
+  Users
 } from 'lucide-react';
 import { OutreachEvent, OutreachImage, UserAccount } from '../types';
 import { compressAndResizeImage } from '../utils/image';
@@ -63,6 +70,11 @@ export default function OutreachHub({
   const [filterMinHours, setFilterMinHours] = useState<string>('0');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
+
+  // Sorting and view mode states
+  const [sortField, setSortField] = useState<'date' | 'letter' | 'hours' | 'reach' | 'location'>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // Export states
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -195,8 +207,8 @@ export default function OutreachHub({
       }
 
       try {
-        // Compress to keep local storage small
-        const compressedBase64 = await compressAndResizeImage(file, 800, 0.75);
+        // Compress to keep storage small and fit safely inside Firestore 1MB doc limits
+        const compressedBase64 = await compressAndResizeImage(file, 600, 0.65);
         loadedImages.push({
           id: `outreach-img-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
           dataUrl: compressedBase64,
@@ -248,16 +260,19 @@ export default function OutreachHub({
             ...ev,
             title: eventTitle.trim(),
             date: eventDate,
-            location: eventLocation.trim(),
-            description: eventDescription.trim(),
-            impactMetrics: eventImpactMetrics.trim(),
+            location: eventLocation.trim() || 'General Location',
+            description: eventDescription.trim() || '',
+            impactMetrics: eventImpactMetrics.trim() || '',
             hoursLogged: Number(eventHours) || 0,
-            participants: selectedParticipants,
-            images: eventImages,
+            participants: selectedParticipants || [],
+            images: eventImages || [],
+            creatorName: ev.creatorName || editorName,
+            creatorEmail: ev.creatorEmail || editorEmail,
+            createdAt: Number(ev.createdAt) || Date.now(),
             updatedAt: Date.now(),
             updatedBy: editorName,
-            reachedChildren: reachedChildren,
-            reachedAdults: reachedAdults
+            reachedChildren: Number(reachedChildren) || 0,
+            reachedAdults: Number(reachedAdults) || 0
           };
         }
         return ev;
@@ -270,19 +285,19 @@ export default function OutreachHub({
         id: `outreach-ev-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         title: eventTitle.trim(),
         date: eventDate,
-        location: eventLocation.trim(),
-        description: eventDescription.trim(),
-        impactMetrics: eventImpactMetrics.trim(),
+        location: eventLocation.trim() || 'General Location',
+        description: eventDescription.trim() || '',
+        impactMetrics: eventImpactMetrics.trim() || '',
         hoursLogged: Number(eventHours) || 0,
-        participants: selectedParticipants,
-        images: eventImages,
+        participants: selectedParticipants || [],
+        images: eventImages || [],
         creatorName: editorName,
         creatorEmail: editorEmail,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         updatedBy: editorName,
-        reachedChildren: reachedChildren,
-        reachedAdults: reachedAdults
+        reachedChildren: Number(reachedChildren) || 0,
+        reachedAdults: Number(reachedAdults) || 0
       };
       onUpdateEvents([newEvent, ...events]);
       showToast(`Created Outreach Event: "${eventTitle.trim()}"`, 'success');
@@ -336,6 +351,54 @@ export default function OutreachHub({
       .slice(0, 5);
   };
 
+  // Computed reach for an individual event
+  const getEventTotalReach = (ev: OutreachEvent): number => {
+    let reach = 0;
+    if (ev.reachedChildren !== undefined) reach += (Number(ev.reachedChildren) || 0);
+    if (ev.reachedAdults !== undefined) reach += (Number(ev.reachedAdults) || 0);
+    if (reach === 0 && ev.impactMetrics) {
+      const match = ev.impactMetrics.match(/\d+/);
+      if (match) reach += parseInt(match[0], 10) || 0;
+    }
+    return reach;
+  };
+
+  const getSortDisplayLabel = () => {
+    switch (sortField) {
+      case 'date':
+        return sortDirection === 'desc' ? 'Date (Newest First)' : 'Date (Oldest First)';
+      case 'letter':
+        return sortDirection === 'asc' ? 'Title (A → Z)' : 'Title (Z → A)';
+      case 'hours':
+        return sortDirection === 'desc' ? 'Hours Logged (High → Low)' : 'Hours Logged (Low → High)';
+      case 'reach':
+        return sortDirection === 'desc' ? 'Community Reach (High → Low)' : 'Community Reach (Low → High)';
+      case 'location':
+        return sortDirection === 'asc' ? 'Location (A → Z)' : 'Location (Z → A)';
+      default:
+        return 'Date';
+    }
+  };
+
+  const handleColumnSort = (field: 'date' | 'letter' | 'hours' | 'reach' | 'location') => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'letter' || field === 'location' ? 'asc' : 'desc');
+    }
+  };
+
+  const handleResetFiltersAndSort = () => {
+    setSearchQuery('');
+    setFilterMinHours('0');
+    setFilterStartDate('');
+    setFilterEndDate('');
+    setSortField('date');
+    setSortDirection('desc');
+    showToast('Reset search and sort parameters', 'info');
+  };
+
   // Filter events
   const filteredEvents = events.filter(ev => {
     const matchesSearch = ev.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -350,6 +413,38 @@ export default function OutreachHub({
     const matchesEnd = filterEndDate === '' || ev.date <= filterEndDate;
 
     return matchesSearch && matchesHours && matchesStart && matchesEnd;
+  });
+
+  // Sort events
+  const sortedEvents = [...filteredEvents].sort((a, b) => {
+    let cmp = 0;
+    if (sortField === 'date') {
+      cmp = (a.date || '').localeCompare(b.date || '');
+      if (cmp === 0) {
+        cmp = (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+      }
+    } else if (sortField === 'letter') {
+      cmp = (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+      if (cmp === 0) {
+        cmp = (b.date || '').localeCompare(a.date || '');
+      }
+    } else if (sortField === 'hours') {
+      cmp = (Number(a.hoursLogged) || 0) - (Number(b.hoursLogged) || 0);
+      if (cmp === 0) {
+        cmp = (b.date || '').localeCompare(a.date || '');
+      }
+    } else if (sortField === 'reach') {
+      cmp = getEventTotalReach(a) - getEventTotalReach(b);
+      if (cmp === 0) {
+        cmp = (b.date || '').localeCompare(a.date || '');
+      }
+    } else if (sortField === 'location') {
+      cmp = (a.location || '').localeCompare(b.location || '', undefined, { sensitivity: 'base' });
+      if (cmp === 0) {
+        cmp = (b.date || '').localeCompare(a.date || '');
+      }
+    }
+    return sortDirection === 'asc' ? cmp : -cmp;
   });
 
   return (
@@ -396,9 +491,9 @@ export default function OutreachHub({
           <button
             onClick={() => {
               if (onPrintPDF) {
-                const isFiltered = searchQuery !== '' || filterMinHours !== '0' || filterStartDate !== '' || filterEndDate !== '';
-                const targetSet = isFiltered && filteredEvents.length > 0 ? filteredEvents : events;
-                const subtitle = isFiltered ? 'Filtered Field Campaigns Report' : 'All Documented Community Campaigns';
+                const isFiltered = searchQuery !== '' || filterMinHours !== '0' || filterStartDate !== '' || filterEndDate !== '' || sortField !== 'date' || sortDirection !== 'desc';
+                const targetSet = sortedEvents.length > 0 ? sortedEvents : events;
+                const subtitle = isFiltered ? `Filtered & Sorted: ${getSortDisplayLabel()}` : 'All Documented Community Campaigns';
                 onPrintPDF(targetSet, subtitle);
               } else {
                 setExportScope('all');
@@ -483,9 +578,10 @@ export default function OutreachHub({
 
       </div>
 
-      {/* FILTER CONTROL PANEL */}
+      {/* FILTER & SORT CONTROL PANEL */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-sm flex flex-col gap-3.5 dark:bg-slate-900 dark:border-slate-800">
         
+        {/* ROW 1: Search & Filter Parameters */}
         <div className="flex flex-col lg:flex-row gap-3.5 items-center justify-between">
           
           {/* Keyword Search */}
@@ -538,28 +634,186 @@ export default function OutreachHub({
                 className="bg-slate-50 border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-850 outline-none focus:ring-1 focus:ring-brand font-mono font-bold dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800"
               />
             </div>
+          </div>
+        </div>
 
-            {(searchQuery !== '' || filterMinHours !== '0' || filterStartDate !== '' || filterEndDate !== '') && (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setFilterMinHours('0');
-                  setFilterStartDate('');
-                  setFilterEndDate('');
-                  showToast('Reset search parameters', 'info');
+        {/* ROW 2: Sorting, Quick Chips & View Switcher */}
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          
+          {/* Sorting Dropdown & Order Toggle */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-lg px-2.5 py-1">
+              <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                Sort:
+              </span>
+              <select
+                value={`${sortField}-${sortDirection}`}
+                onChange={(e) => {
+                  const [f, d] = e.target.value.split('-') as [any, any];
+                  setSortField(f);
+                  setSortDirection(d);
                 }}
-                className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline font-mono uppercase tracking-wide cursor-pointer ml-auto lg:ml-0"
+                className="bg-transparent border-0 text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none cursor-pointer pr-1"
+                aria-label="Sort outreach logs by"
               >
-                Clear Filters
+                <optgroup label="Date">
+                  <option value="date-desc">📅 Date: Newest First</option>
+                  <option value="date-asc">📅 Date: Oldest First</option>
+                </optgroup>
+                <optgroup label="Alphabetical / Letter">
+                  <option value="letter-asc">🔤 Title / Letter: A → Z</option>
+                  <option value="letter-desc">🔤 Title / Letter: Z → A</option>
+                </optgroup>
+                <optgroup label="Hours Logged">
+                  <option value="hours-desc">⏱️ Hours: High → Low</option>
+                  <option value="hours-asc">⏱️ Hours: Low → High</option>
+                </optgroup>
+                <optgroup label="Community Reach">
+                  <option value="reach-desc">🌟 Reach: High → Low</option>
+                  <option value="reach-asc">🌟 Reach: Low → High</option>
+                </optgroup>
+                <optgroup label="Location">
+                  <option value="location-asc">📍 Location: A → Z</option>
+                  <option value="location-desc">📍 Location: Z → A</option>
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Quick Direction Inverter Button */}
+            <button
+              type="button"
+              onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+              title={`Switch to ${sortDirection === 'asc' ? 'Descending' : 'Ascending'} order`}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-mono font-bold bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 rounded-lg transition-colors cursor-pointer"
+            >
+              {sortDirection === 'asc' ? (
+                <>
+                  <ArrowUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-[10px] uppercase tracking-wider">Asc</span>
+                </>
+              ) : (
+                <>
+                  <ArrowDown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-[10px] uppercase tracking-wider">Desc</span>
+                </>
+              )}
+            </button>
+
+            {/* Quick Sort Pills */}
+            <div className="hidden sm:flex items-center gap-1 ml-1 border-l border-slate-200 dark:border-slate-800 pl-2">
+              <button
+                type="button"
+                onClick={() => handleColumnSort('date')}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer ${
+                  sortField === 'date'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-750'
+                }`}
+              >
+                <span>Date</span>
+                {sortField === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleColumnSort('letter')}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer ${
+                  sortField === 'letter'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-750'
+                }`}
+              >
+                <span>Letter (A-Z)</span>
+                {sortField === 'letter' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleColumnSort('hours')}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer ${
+                  sortField === 'hours'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-750'
+                }`}
+              >
+                <span>Hours</span>
+                {sortField === 'hours' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleColumnSort('reach')}
+                className={`text-[10px] font-mono font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer ${
+                  sortField === 'reach'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-750'
+                }`}
+              >
+                <span>Reach</span>
+                {sortField === 'reach' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </button>
+            </div>
+          </div>
+
+          {/* Right side: View Toggle (Grid / Table) & Reset */}
+          <div className="flex items-center gap-2 self-end md:self-center">
+            {/* View Mode Switcher */}
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700/60">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`px-2.5 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+                title="Cards Grid View"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-2.5 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+                title="Spreadsheet Table View"
+              >
+                <TableIcon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
+
+            {(searchQuery !== '' || filterMinHours !== '0' || filterStartDate !== '' || filterEndDate !== '' || sortField !== 'date' || sortDirection !== 'desc') && (
+              <button
+                type="button"
+                onClick={handleResetFiltersAndSort}
+                className="text-xs text-rose-600 dark:text-rose-400 font-bold hover:underline font-mono uppercase tracking-wide cursor-pointer ml-1"
+                title="Reset filters and restore default date sorting"
+              >
+                Reset All
               </button>
             )}
+          </div>
+        </div>
 
+        {/* Informational Sub-bar: Active Count & Current Sort */}
+        <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 px-1 pt-0.5 border-t border-slate-100/60 dark:border-slate-800/40">
+          <div>
+            Showing <strong className="text-slate-800 dark:text-slate-200">{sortedEvents.length}</strong> of {events.length} outreach records
+          </div>
+          <div className="flex items-center gap-1 text-[10px]">
+            <span>Sorted by:</span>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200/50 dark:border-emerald-800/40">
+              {getSortDisplayLabel()}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* OUTREACH EVENTS GRID */}
-      {filteredEvents.length === 0 ? (
+      {/* OUTREACH EVENTS PRESENTATION */}
+      {sortedEvents.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white border border-slate-200 rounded-2xl text-center select-none shadow-sm min-h-[300px] dark:bg-slate-900 dark:border-slate-800">
           <Heart className="w-12 h-12 text-slate-300 animate-pulse mb-3" />
           <h3 className="font-bold text-slate-800 text-sm font-display uppercase tracking-wide dark:text-slate-400">
@@ -575,9 +829,205 @@ export default function OutreachHub({
             + Create Log Entry
           </button>
         </div>
+      ) : viewMode === 'table' ? (
+        /* TABLE VIEW WITH SORTABLE COLUMN HEADERS */
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm dark:bg-slate-900 dark:border-slate-800">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/90 text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800 select-none">
+                  <th className="py-3 px-4 w-14 text-center">Media</th>
+                  <th 
+                    className="py-3 px-4 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                    onClick={() => handleColumnSort('date')}
+                    title="Sort by Date"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Date</span>
+                      {sortField === 'date' && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                          {sortDirection === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    className="py-3 px-4 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                    onClick={() => handleColumnSort('letter')}
+                    title="Sort by Title / Letter (Alphabetical)"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Event Title (Letter)</span>
+                      {sortField === 'letter' && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                          {sortDirection === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    className="py-3 px-4 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                    onClick={() => handleColumnSort('location')}
+                    title="Sort by Location"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Location</span>
+                      {sortField === 'location' && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                          {sortDirection === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    className="py-3 px-4 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-right"
+                    onClick={() => handleColumnSort('hours')}
+                    title="Sort by Hours Logged"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Hours</span>
+                      {sortField === 'hours' && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                          {sortDirection === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    className="py-3 px-4 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-right"
+                    onClick={() => handleColumnSort('reach')}
+                    title="Sort by Total Reach"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Reach</span>
+                      {sortField === 'reach' && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                          {sortDirection === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th className="py-3 px-4">Participants</th>
+                  <th className="py-3 px-4 text-center w-24">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {sortedEvents.map((ev) => {
+                  const reach = getEventTotalReach(ev);
+                  return (
+                    <tr 
+                      key={ev.id} 
+                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors group"
+                    >
+                      <td className="py-3 px-4 text-center">
+                        {ev.images && ev.images.length > 0 ? (
+                          <div 
+                            className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 mx-auto cursor-zoom-in group/img"
+                            onClick={() => setLightboxImageUrl({ images: ev.images, currentIndex: 0 })}
+                            title="Click to view image"
+                          >
+                            <img 
+                              src={ev.images[0].dataUrl} 
+                              alt={ev.title} 
+                              className="w-full h-full object-cover group-hover/img:scale-110 transition-transform" 
+                            />
+                            {ev.images.length > 1 && (
+                              <span className="absolute bottom-0 right-0 bg-black/75 text-[8px] font-mono text-white px-1 leading-tight font-bold rounded-tl">
+                                +{ev.images.length - 1}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mx-auto border border-dashed border-slate-200 dark:border-slate-700">
+                            <Heart className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-mono font-medium whitespace-nowrap text-slate-700 dark:text-slate-300">
+                        {formatEventDate(ev.date)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-900 dark:text-slate-100 text-sm leading-snug">
+                          {ev.title}
+                        </div>
+                        {ev.description && (
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5 max-w-md">
+                            {ev.description}
+                          </div>
+                        )}
+                        {ev.impactMetrics && (
+                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 line-clamp-1">
+                            ✨ {ev.impactMetrics}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        <div className="flex items-center gap-1 font-mono text-[11px]">
+                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{ev.location || '—'}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono whitespace-nowrap">
+                        <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded font-black border border-emerald-200 dark:border-emerald-800/50">
+                          {ev.hoursLogged}h
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono whitespace-nowrap">
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          {reach}
+                        </span>
+                        {(ev.reachedChildren !== undefined || ev.reachedAdults !== undefined) && (
+                          <div className="text-[9px] text-slate-400">
+                            {ev.reachedChildren || 0} youth • {ev.reachedAdults || 0} adult
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 max-w-xs">
+                        <div className="flex flex-wrap gap-1">
+                          {ev.participants.slice(0, 3).map((p, idx) => (
+                            <span 
+                              key={idx} 
+                              className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[9px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 truncate max-w-[90px]"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                          {ev.participants.length > 3 && (
+                            <span className="text-[9px] font-mono text-slate-400 self-center">
+                              +{ev.participants.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => openEditModal(ev)}
+                            title="Edit outreach log"
+                            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-500 hover:text-emerald-600 transition-colors cursor-pointer"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEvent(ev.id, ev.title)}
+                            title="Delete outreach log"
+                            className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded text-slate-500 hover:text-rose-600 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
+        /* GRID VIEW */
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredEvents.map((ev) => (
+          {sortedEvents.map((ev) => (
             <div
               key={ev.id}
               className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-lg transition-all hover:border-emerald-500/20 flex flex-col justify-between dark:bg-slate-900 dark:border-slate-800"

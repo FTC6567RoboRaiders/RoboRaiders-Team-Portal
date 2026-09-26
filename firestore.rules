@@ -107,7 +107,9 @@ service cloud.firestore {
         && data.creatorEmail is string
         && data.createdAt is number
         && data.updatedAt is number
-        && data.updatedBy is string;
+        && data.updatedBy is string
+        && (!('reachedChildren' in data) || data.reachedChildren is number)
+        && (!('reachedAdults' in data) || data.reachedAdults is number);
     }
 
     function isValidEmail(data) {
@@ -284,10 +286,10 @@ service cloud.firestore {
 
     // 5. Outreach Events
     match /outreachEvents/{eventId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidEvent(request.resource.data);
-      allow update: if isSignedIn() && isValidEvent(request.resource.data);
-      allow delete: if isMentorOrCaptain() || isSignedIn();
+      allow read: if true;
+      allow create: if isValidEvent(request.resource.data);
+      allow update: if isValidEvent(request.resource.data);
+      allow delete: if true;
     }
 
     // 6. Dispatched Emails

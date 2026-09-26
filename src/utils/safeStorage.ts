@@ -144,13 +144,23 @@ export async function hydrateFromIndexedDB(): Promise<void> {
             let restoredCount = 0;
             req.result.forEach((item: { key: string; value: string }) => {
               if (item && item.key && item.value) {
-                memoryStore.set(item.key, item.value);
+                let valueToStore = item.value;
+                if (item.key === 'ftc_outreach_events') {
+                  try {
+                    const parsed = JSON.parse(item.value);
+                    if (Array.isArray(parsed)) {
+                      const clean = parsed.filter((p: any) => p && p.id && !String(p.id).startsWith('outreach-demo-'));
+                      valueToStore = JSON.stringify(clean);
+                    }
+                  } catch {}
+                }
+                memoryStore.set(item.key, valueToStore);
                 // If localStorage is missing this key, try putting it back
                 try {
                   if (typeof window !== 'undefined' && window.localStorage) {
                     const current = window.localStorage.getItem(item.key);
                     if (!current || current === '[]' || current === '{}') {
-                      window.localStorage.setItem(item.key, item.value);
+                      window.localStorage.setItem(item.key, valueToStore);
                       restoredCount++;
                     }
                   }

@@ -111,7 +111,9 @@
         "creatorEmail": { "type": "string" },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" },
-        "updatedBy": { "type": "string" }
+        "updatedBy": { "type": "string" },
+        "reachedChildren": { "type": "number" },
+        "reachedAdults": { "type": "number" }
       },
       "required": ["id", "title", "date", "location", "description", "impactMetrics", "hoursLogged", "participants", "images", "creatorName", "creatorEmail", "createdAt", "updatedAt", "updatedBy"]
     },
