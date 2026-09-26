@@ -132,15 +132,30 @@ input, select, textarea {
   display: none !important;
 }
 
+/* ==========================================================================
+   CSS PRINT-ONLY LAYOUT: PHYSICAL BINDER EVIDENCE OPTIMIZER
+   Target: Standard US Letter Paper (8.5" x 11" / 215.9mm x 279.4mm)
+   Optimized for physical binder hole-punch clearance (3-ring), zero waste,
+   single-page auto-fit, ink-saving contrast, and judges inspection standards.
+   ========================================================================== */
+
 @page {
   size: letter portrait;
-  margin: 0.35in 0.4in;
+  margin: 0.38in 0.35in 0.38in 0.55in; /* 0.55in left margin ensures clean 3-ring binder punch clearance */
+}
+
+@page :left {
+  margin: 0.38in 0.35in 0.38in 0.55in;
+}
+
+@page :right {
+  margin: 0.38in 0.35in 0.38in 0.55in;
 }
 
 @media print {
   @page {
     size: letter portrait;
-    margin: 0.35in 0.4in;
+    margin: 0.38in 0.35in 0.38in 0.55in;
   }
 
   .print-only {
@@ -164,8 +179,8 @@ input, select, textarea {
     background: #ffffff !important;
     background-color: #ffffff !important;
     color: #0f172a !important;
-    font-size: 10.5pt !important;
-    line-height: 1.45 !important;
+    font-size: 9.5pt !important;
+    line-height: 1.35 !important;
     margin: 0 !important;
     padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
@@ -190,7 +205,7 @@ input, select, textarea {
     display: block !important;
   }
 
-  .no-print, header, nav, aside, [role="dialog"], [role="alert"], #quick-action-menu, #notification-toast-container, #mobile-bottom-nav, #mobile-menu-drawer, #workspace-sidebar {
+  .no-print, header, nav, aside, [role="dialog"], [role="alert"], #quick-action-menu, #notification-toast-container, #mobile-bottom-nav, #mobile-menu-drawer, #workspace-sidebar, .print-hide {
     display: none !important;
   }
 
@@ -199,7 +214,8 @@ input, select, textarea {
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
-    margin: 0 0 0.3in 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
@@ -220,10 +236,31 @@ input, select, textarea {
     margin-bottom: 0 !important;
   }
 
-  /* Single-page units that must not split */
-  .pdf-avoid-break, .avoid-break, .keep-together {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
+  /* Binder Evidence Container - Perfectly sized for Letter paper with gutter */
+  .binder-evidence-sheet {
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+
+  /* PHYSICAL BINDER ENTRY SHEET: Auto-optimized for 8.5" x 11" Letter paper */
+  .pdf-entry-sheet,
+  .binder-entry-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0.28in 0.35in !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    border: 1.5pt solid #0f172a !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    box-decoration-break: clone !important;
+    -webkit-box-decoration-break: clone !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    box-sizing: border-box !important;
   }
 
   /* Structural page headers and titles */
@@ -232,28 +269,101 @@ input, select, textarea {
     break-inside: avoid !important;
     page-break-after: avoid !important;
     break-after: avoid !important;
+    margin-bottom: 0.35rem !important;
+    padding-bottom: 0.25rem !important;
+    border-bottom: 1.5pt solid #0f172a !important;
+  }
+
+  .binder-entry-card h2.pdf-header-plate {
+    font-size: 13pt !important;
+    line-height: 1.25 !important;
+    margin-bottom: 0.35rem !important;
+    padding-bottom: 0.2rem !important;
+    border-bottom: 1pt solid #cbd5e1 !important;
   }
 
   /* Section cards inside multi-page entries that should flow cleanly without mid-card cuts */
-  .pdf-section-card, .pdf-photo-block {
+  .pdf-section-card {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin-bottom: 0.85rem !important;
+    margin-bottom: 0.35rem !important;
+    padding: 0.35rem 0.5rem !important;
+    background: #f8fafc !important;
+    border: 1pt solid #cbd5e1 !important;
+    border-radius: 2pt !important;
+  }
+
+  .pdf-section-card h3 {
+    font-size: 8pt !important;
+    margin-bottom: 0.15rem !important;
+    letter-spacing: 0.04em !important;
+    font-weight: 800 !important;
+    color: #1e293b !important;
+  }
+
+  .pdf-section-card > div:not(.flex) {
+    font-size: 8.5pt !important;
+    line-height: 1.35 !important;
+    color: #0f172a !important;
+    padding: 0.15rem 0 !important;
+    background: transparent !important;
+    border: none !important;
+  }
+
+  /* Embedded photos and CAD renders */
+  .pdf-photo-block {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 0.35rem !important;
+  }
+
+  .pdf-photo-block img {
+    max-height: 1.5in !important;
+    width: auto !important;
+    object-fit: contain !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    border: 1pt solid #cbd5e1 !important;
   }
 
   /* Signature and verification footers */
   .pdf-signoff-block {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin-top: 1.25rem !important;
+    margin-top: 0.4rem !important;
+    padding-top: 0.25rem !important;
+    border-top: 1.5pt solid #0f172a !important;
   }
 
-  /* Entry sheet styling allowing clean multi-page continuation */
-  .pdf-entry-sheet {
-    box-decoration-break: clone !important;
-    -webkit-box-decoration-break: clone !important;
-    page-break-inside: auto !important;
-    break-inside: auto !important;
+  /* 3-Ring Binder Punch Hole Guide Marks */
+  .binder-hole-guide {
+    display: block !important;
+    position: absolute !important;
+    left: -0.42in !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: 0.25in !important;
+    pointer-events: none !important;
+  }
+
+  .binder-hole-dot {
+    width: 6pt !important;
+    height: 6pt !important;
+    border: 1pt dashed #94a3b8 !important;
+    border-radius: 50% !important;
+    position: absolute !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+  }
+
+  .binder-hole-dot.top { top: 0.95in !important; }
+  .binder-hole-dot.middle { top: 5.0in !important; }
+  .binder-hole-dot.bottom { bottom: 0.95in !important; }
+
+  /* Single-page units that must not split */
+  .pdf-avoid-break, .avoid-break, .keep-together {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   table {

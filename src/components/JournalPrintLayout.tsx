@@ -29,25 +29,31 @@ export interface JournalPrintLayoutProps {
   showTOC?: boolean;
   scope?: string;
   isPreview?: boolean;
+  isBinderEvidence?: boolean;
 }
 
 export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
   entries,
   allEntries = [],
   paperSize = 'letter',
-  showCover = true,
-  showTOC = true,
+  showCover,
+  showTOC,
   scope = 'ALL',
-  isPreview = false
+  isPreview = false,
+  isBinderEvidence = true
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(0.85);
+
+  // By default, only show cover and TOC if printing a multi-entry batch (not an individual binder log)
+  const effectiveShowCover = showCover !== undefined ? showCover : entries.length > 1;
+  const effectiveShowTOC = showTOC !== undefined ? showTOC : entries.length > 1;
 
   const paperAspect = paperSize === 'letter' ? '8.5 / 11' : paperSize === 'a4' ? '210 / 297' : '8.5 / 14';
 
   // Calculate TOC pagination (up to 16 entries per TOC sheet)
   const ENTRIES_PER_TOC_PAGE = 16;
-  const tocPagesCount = showTOC ? Math.max(1, Math.ceil(entries.length / ENTRIES_PER_TOC_PAGE)) : 0;
-  const coverPagesCount = showCover ? 1 : 0;
+  const tocPagesCount = effectiveShowTOC ? Math.max(1, Math.ceil(entries.length / ENTRIES_PER_TOC_PAGE)) : 0;
+  const coverPagesCount = effectiveShowCover ? 1 : 0;
   const totalPages = coverPagesCount + tocPagesCount + entries.length;
 
   const getEntryPageNumber = (entryIndex: number) => {
@@ -63,7 +69,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
   // Chunk entries for TOC pages
   const tocPages: JournalEntry[][] = [];
-  if (showTOC) {
+  if (effectiveShowTOC) {
     for (let i = 0; i < entries.length; i += ENTRIES_PER_TOC_PAGE) {
       tocPages.push(entries.slice(i, i + ENTRIES_PER_TOC_PAGE));
     }
@@ -130,7 +136,7 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
       >
 
         {/* 1. TITLE COVER PAGE */}
-        {showCover && (
+        {effectiveShowCover && (
           <div className={`w-full ${isPreview ? 'max-w-xl' : 'pdf-document-page'}`}>
             {isPreview && (
               <div className="flex items-center justify-between w-full px-1 mb-1 text-[10px] font-mono text-slate-500 uppercase font-bold">
@@ -384,9 +390,10 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
         {entries.map((entry, idx) => {
           const entryPageNum = getEntryPageNumber(idx);
           const refCode = getEntryReferenceCode(entry, allEntries.length > 0 ? allEntries : entries);
+          const isLastEntry = idx === entries.length - 1;
 
           return (
-            <div key={entry.id || idx} className={`w-full ${isPreview ? 'max-w-xl' : 'pdf-document-page'}`}>
+            <div key={entry.id || idx} className={`w-full ${isPreview ? 'max-w-xl' : 'pdf-document-page binder-evidence-sheet'}`}>
               {isPreview && (
                 <div className="flex items-center justify-between w-full px-1 mb-1 text-[10px] font-mono text-slate-500 uppercase font-bold">
                   <span>Page {entryPageNum} of {totalPages}</span>
@@ -396,38 +403,50 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                 </div>
               )}
 
+              {/* Binder 3-Ring Punch Hole Guides (Printed cleanly in 0.55in left margin) */}
+              <div className="binder-hole-guide print-only" aria-hidden="true">
+                <div className="binder-hole-dot top" title="3-Ring Punch Hole (Top)" />
+                <div className="binder-hole-dot middle" title="3-Ring Punch Hole (Center)" />
+                <div className="binder-hole-dot bottom" title="3-Ring Punch Hole (Bottom)" />
+              </div>
+
               <div 
-                className={`bg-white text-slate-950 p-8 sm:p-12 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-entry-sheet ${
-                  isPreview ? 'shadow-2xl rounded-xs' : 'min-h-[9.8in] w-full border border-slate-400'
+                className={`bg-white text-slate-950 p-6 sm:p-8 flex flex-col justify-between relative border border-slate-300 mx-auto select-text pdf-entry-sheet binder-entry-card ${
+                  isPreview ? 'shadow-2xl rounded-xs' : 'w-full'
                 }`}
                 style={{
                   aspectRatio: isPreview ? paperAspect : undefined,
-                  pageBreakAfter: 'always',
-                  breakAfter: 'page',
+                  pageBreakAfter: isLastEntry ? 'auto' : 'always',
+                  breakAfter: isLastEntry ? 'auto' : 'page',
                   pageBreakInside: 'auto',
                   breakInside: 'auto'
                 }}
               >
                 <div>
                   {/* Top Running Header */}
-                  <div className="pdf-header-plate border-b-3 border-slate-950 pb-2.5 flex justify-between items-center mb-5">
+                  <div className="pdf-header-plate border-b-2 border-slate-950 pb-2 flex justify-between items-center mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-100 uppercase tracking-wide text-slate-950">
-                        {entry.subteam}
-                      </span>
-                      <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 px-2 py-0.5 rounded uppercase whitespace-nowrap">
-                        REF: {refCode}
-                      </span>
+                      <RoboraidersLogo className="w-6 h-6 text-slate-950 shrink-0" />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9.5px] font-mono font-black border border-slate-950 px-2 py-0.5 rounded bg-slate-100 uppercase tracking-wide text-slate-950">
+                            {entry.subteam}
+                          </span>
+                          <span className="text-[9.5px] font-mono font-bold bg-indigo-50 text-indigo-950 border border-indigo-200 px-2 py-0.5 rounded uppercase whitespace-nowrap">
+                            REF: {refCode}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right text-[9.5px] font-mono text-slate-700 space-y-0.5">
-                      <div><strong>DATE:</strong> <span className="text-slate-950 font-bold">{entry.date}</span></div>
-                      <div><strong>AUTHOR:</strong> <span className="text-slate-950 font-semibold">{entry.author}</span></div>
+                    <div className="text-right text-[8.5px] font-mono text-slate-700 space-y-0.5">
+                      <div className="text-[8px] font-bold uppercase text-slate-500 tracking-wider">FTC Team #6567 • Engineering Notebook Binder Evidence</div>
+                      <div><strong>DATE:</strong> <span className="text-slate-950 font-bold">{entry.date}</span> • <strong>AUTHOR:</strong> <span className="text-slate-950 font-semibold">{entry.author}</span></div>
                     </div>
                   </div>
 
                   {/* Main Entry Title */}
-                  <h2 className="pdf-header-plate text-lg sm:text-xl font-black text-slate-950 mb-4 font-display uppercase tracking-tight leading-snug border-b border-slate-200 pb-2">
-                    {entry.title || (entry.entryType === 'general_meeting' ? 'General Team Meeting' : 'Engineering Session Log')}
+                  <h2 className="pdf-header-plate text-base sm:text-lg font-black text-slate-950 mb-3 font-display uppercase tracking-tight leading-snug border-b border-slate-200 pb-1.5">
+                    {entry.title || (entry.entryType === 'general_meeting' ? 'General Team Meeting Record' : 'Engineering Session Log')}
                   </h2>
 
                   {/* General Meeting Specific vs Subteam Body */}
@@ -635,23 +654,23 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
 
                       {/* 6. Embedded Photographic Documentation & CAD Renders */}
                       {entry.images && entry.images.length > 0 && (
-                        <div className="pdf-section-card">
+                        <div className="pdf-section-card pdf-photo-block">
                           <div className="flex items-center gap-1.5 mb-1.5">
                             <ImageIcon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <h3 className="font-mono font-extrabold uppercase text-slate-700 text-[10px] tracking-wider">
                               Visual Evidence, Schematics &amp; Photo Documentation ({entry.images.length})
                             </h3>
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 gap-2.5">
                             {entry.images.map((img, imgIdx) => (
                               <div key={imgIdx} className="pdf-avoid-break border border-slate-300 rounded p-1.5 bg-slate-50 flex flex-col items-center">
                                 <img 
                                   src={img.dataUrl} 
                                   alt={img.name || `Figure ${imgIdx + 1}`} 
-                                  className="max-h-40 object-contain rounded border border-slate-200 bg-white"
+                                  className="max-h-32 object-contain rounded border border-slate-200 bg-white"
                                   referrerPolicy="no-referrer"
                                 />
-                                <span className="text-[8.5px] font-mono text-slate-600 mt-1 truncate max-w-full text-center">
+                                <span className="text-[8.5px] font-mono text-slate-700 mt-1 truncate max-w-full text-center font-medium">
                                   Fig {imgIdx + 1}: {img.name || 'Engineering capture'}
                                 </span>
                               </div>
@@ -664,19 +683,23 @@ export const JournalPrintLayout: React.FC<JournalPrintLayoutProps> = ({
                 </div>
 
                 {/* Running Page Footer with Official Sign-Off Block */}
-                <div className="pdf-signoff-block mt-6 pt-3 border-t-2 border-slate-950 space-y-2">
-                  <div className="grid grid-cols-2 gap-6 text-[9.5px] font-mono text-slate-700">
-                    <div className="border-b border-slate-300 pb-0.5">
-                      <span className="text-[8px] uppercase font-bold text-slate-500 block">Lead Student Sign-off:</span>
+                <div className="pdf-signoff-block mt-4 pt-2.5 border-t-2 border-slate-950 space-y-1.5">
+                  <div className="grid grid-cols-2 gap-4 text-[9px] font-mono text-slate-800">
+                    <div className="border-b border-slate-900 pb-1">
+                      <span className="text-[7.5px] uppercase font-bold text-slate-600 block">Lead Student Engineer Sign-off:</span>
+                      <span className="text-[8px] text-slate-400 italic">Signature: __________________________  Date: ________</span>
                     </div>
-                    <div className="border-b border-slate-300 pb-0.5">
-                      <span className="text-[8px] uppercase font-bold text-slate-500 block">Mentor / Coach Verification:</span>
+                    <div className="border-b border-slate-900 pb-1">
+                      <span className="text-[7.5px] uppercase font-bold text-slate-600 block">Mentor / Coach Verification:</span>
+                      <span className="text-[8px] text-slate-400 italic">Signature: __________________________  Date: ________</span>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center text-[8.5px] font-mono text-slate-600 pt-0.5">
-                    <span>FIRST TECH CHALLENGE TEAM #6567 ROBORAIDERS</span>
-                    <span className="font-bold uppercase">STATUS: {entry.status}</span>
-                    <span className="font-bold text-slate-950">Page {entryPageNum} of {totalPages}</span>
+                  <div className="flex justify-between items-center text-[8px] font-mono text-slate-600 pt-0.5">
+                    <span className="font-bold tracking-wider">FIRST® TECH CHALLENGE TEAM #6567 ROBORAIDERS</span>
+                    <span className="font-extrabold uppercase px-1.5 py-0.2 bg-slate-100 border border-slate-300 rounded text-[7.5px]">
+                      STATUS: {entry.status}
+                    </span>
+                    <span className="font-bold text-slate-950">Binder Evidence Sheet • Page {entryPageNum} of {totalPages}</span>
                   </div>
                 </div>
               </div>

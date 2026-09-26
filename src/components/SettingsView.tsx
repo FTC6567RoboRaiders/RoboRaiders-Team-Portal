@@ -77,6 +77,7 @@ interface SettingsViewProps {
   onClearAllData: () => void;
   onDownloadBackup: () => void;
   onOpenSeasonTransition?: () => void;
+  onRestoreDemoData?: () => void;
   activeSession: ClockInSession | null;
   hiddenWorkspaces: string[];
   onToggleWorkspaceVisibility: (id: string) => void;
@@ -113,6 +114,7 @@ export function SettingsView({
   onClearAllData,
   onDownloadBackup,
   onOpenSeasonTransition,
+  onRestoreDemoData,
   activeSession,
   hiddenWorkspaces,
   onToggleWorkspaceVisibility,
@@ -1108,6 +1110,28 @@ export function SettingsView({
                           className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0"
                         >
                           Season Tools
+                        </button>
+                      </div>
+                    )}
+
+                    {onRestoreDemoData && (
+                      <div className="p-4 rounded-xl border border-cyan-200 dark:border-cyan-900/40 bg-cyan-50/20 dark:bg-cyan-950/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-semibold text-cyan-800 dark:text-cyan-300 flex items-center gap-1.5">
+                            <RotateCcw className="w-3.5 h-3.5 text-cyan-600" />
+                            <span>Restore Default Team Datasets</span>
+                          </div>
+                          <p className="text-[11px] text-cyan-700/80 dark:text-cyan-400/80 mt-0.5">
+                            Populates standard lab inventory items, outreach records, kanban tasks, and demo journal logs to local storage and syncs to cloud.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onRestoreDemoData}
+                          className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                          id="btn-restore-demo-data"
+                        >
+                          Restore Data
                         </button>
                       </div>
                     )}

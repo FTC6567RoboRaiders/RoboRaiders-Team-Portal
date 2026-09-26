@@ -128,7 +128,8 @@ import {
   getDocs,
   query,
   where,
-  orderBy
+  orderBy,
+  limit
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import RoboraidersLogo from './components/RoboraidersLogo';
@@ -315,11 +316,58 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // --- STATE ---
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [entries, setEntries] = useState<JournalEntry[]>(() => {
+    const stored = localStorage.getItem('ftc_journal_entries');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return DEMO_ENTRIES;
+  });
+  const [journalLimit, setJournalLimit] = useState<number>(25);
+  const [hasMoreJournals, setHasMoreJournals] = useState<boolean>(true);
+  const [isLoadingMoreJournals, setIsLoadingMoreJournals] = useState<boolean>(false);
+  const journalLimitRef = useRef<number>(25);
+  const journalUnsubRef = useRef<(() => void) | null>(null);
+
+  const [timeEntriesLimit, setTimeEntriesLimit] = useState<number>(30);
+  const [hasMoreTimeEntries, setHasMoreTimeEntries] = useState<boolean>(true);
+  const [isLoadingMoreTimeEntries, setIsLoadingMoreTimeEntries] = useState<boolean>(false);
+  const timeEntriesLimitRef = useRef<number>(30);
+  const timesheetUnsubRef = useRef<(() => void) | null>(null);
+
+  const seededCollectionsRef = useRef<{ [key: string]: boolean }>({});
+
   const [formSubteam, setFormSubteam] = useState<Subteam>('Design/Build/Fabrication');
   const [ledgerTransactions, setLedgerTransactions] = useState<LedgerTransaction[]>([]);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() => {
+    const stored = localStorage.getItem('ftc_inventory_items');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return DEFAULT_INVENTORY_ITEMS;
+  });
+  const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>(() => {
+    const stored = localStorage.getItem('ftc_inventory_transactions');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return DEFAULT_INVENTORY_TRANSACTIONS;
+  });
   const [grants, setGrants] = useState<GrantApplication[]>(() => {
     const stored = localStorage.getItem('ftc_grant_applications');
     if (stored) {
@@ -546,6 +594,26 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('ftc_time_entries', JSON.stringify(timeEntries));
   }, [timeEntries]);
+
+  useEffect(() => {
+    localStorage.setItem('ftc_journal_entries', JSON.stringify(entries));
+  }, [entries]);
+
+  useEffect(() => {
+    localStorage.setItem('ftc_inventory_items', JSON.stringify(inventoryItems));
+  }, [inventoryItems]);
+
+  useEffect(() => {
+    localStorage.setItem('ftc_inventory_transactions', JSON.stringify(inventoryTransactions));
+  }, [inventoryTransactions]);
+
+  useEffect(() => {
+    localStorage.setItem('ftc_outreach_events', JSON.stringify(outreachEvents));
+  }, [outreachEvents]);
+
+  useEffect(() => {
+    localStorage.setItem('ftc_kanban_tasks', JSON.stringify(kanbanTasks));
+  }, [kanbanTasks]);
 
   useEffect(() => {
     localStorage.setItem('ftc_xp_adjustments', JSON.stringify(xpAdjustments));
@@ -863,6 +931,11 @@ export default function App() {
     }
   };
 
+  const saveTimeEntriesToLocalStorage = (newTimes: TimeEntry[]) => {
+    localStorage.setItem('ftc_time_entries', JSON.stringify(newTimes));
+    setTimeEntries(newTimes);
+  };
+
   const syncEntriesToFirestore = async (newEntries: JournalEntry[]) => {
     for (const entry of newEntries) {
       try {
@@ -870,16 +943,6 @@ export default function App() {
         await setDoc(doc(db, 'journalEntries', entry.id), cleanEntry);
       } catch (e) {
         console.warn(`Firestore sync error for journalEntries/${entry.id}:`, e);
-      }
-    }
-    const previous = entriesRef.current;
-    for (const entry of previous) {
-      if (!newEntries.some(e => e.id === entry.id)) {
-        try {
-          await deleteDoc(doc(db, 'journalEntries', entry.id));
-        } catch (e) {
-          console.warn(`Firestore delete error for journalEntries/${entry.id}:`, e);
-        }
       }
     }
   };
@@ -893,16 +956,126 @@ export default function App() {
         console.warn(`Firestore sync error for timeEntries/${time.id}:`, e);
       }
     }
-    const previous = timeEntriesRef.current;
-    for (const time of previous) {
-      if (!newTimes.some(t => t.id === time.id)) {
-        try {
-          await deleteDoc(doc(db, 'timeEntries', time.id));
-        } catch (e) {
-          console.warn(`Firestore delete error for timeEntries/${time.id}:`, e);
-        }
-      }
+  };
+
+  const restartJournalListener = (targetLimit: number) => {
+    if (journalUnsubRef.current) {
+      try { journalUnsubRef.current(); } catch {}
+      journalUnsubRef.current = null;
     }
+    try {
+      const q = query(
+        collection(db, 'journalEntries'),
+        orderBy('createdAt', 'desc'),
+        limit(targetLimit)
+      );
+      journalUnsubRef.current = onSnapshot(q, (snapshot) => {
+        if (snapshot.empty) {
+          if (!seededCollectionsRef.current['journals']) {
+            seededCollectionsRef.current['journals'] = true;
+            const toSeed = entriesRef.current.length > 0 ? entriesRef.current : DEMO_ENTRIES;
+            toSeed.forEach(e => {
+              setDoc(doc(db, 'journalEntries', e.id), cleanForFirestore(e)).catch(() => {});
+            });
+            setEntries(toSeed);
+            localStorage.setItem('ftc_journal_entries', JSON.stringify(toSeed));
+          }
+          setIsLoadingMoreJournals(false);
+          return;
+        }
+        const list: JournalEntry[] = [];
+        snapshot.forEach(d => {
+          list.push(d.data() as JournalEntry);
+        });
+        const sorted = list.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setEntries(sorted);
+        setHasMoreJournals(snapshot.docs.length >= targetLimit);
+        setIsLoadingMoreJournals(false);
+        localStorage.setItem('ftc_journal_entries', JSON.stringify(sorted));
+      }, (error) => {
+        console.warn("journalEntries snapshot listener notice:", error);
+        setIsLoadingMoreJournals(false);
+      });
+    } catch (err) {
+      console.warn("Error restarting journal listener with new limit:", err);
+      setIsLoadingMoreJournals(false);
+    }
+  };
+
+  const restartTimesheetListener = (targetLimit: number) => {
+    if (timesheetUnsubRef.current) {
+      try { timesheetUnsubRef.current(); } catch {}
+      timesheetUnsubRef.current = null;
+    }
+    try {
+      const q = query(
+        collection(db, 'timeEntries'),
+        orderBy('createdAt', 'desc'),
+        limit(targetLimit)
+      );
+      timesheetUnsubRef.current = onSnapshot(q, (snapshot) => {
+        if (snapshot.empty) {
+          if (!seededCollectionsRef.current['time']) {
+            seededCollectionsRef.current['time'] = true;
+            const toSeed = timeEntriesRef.current.length > 0 ? timeEntriesRef.current : DEFAULT_TIME_ENTRIES;
+            toSeed.forEach(t => {
+              setDoc(doc(db, 'timeEntries', t.id), cleanForFirestore(t)).catch(() => {});
+            });
+            setTimeEntries(toSeed);
+            localStorage.setItem('ftc_time_entries', JSON.stringify(toSeed));
+          }
+          setIsLoadingMoreTimeEntries(false);
+          return;
+        }
+        const list: TimeEntry[] = [];
+        snapshot.forEach(d => {
+          list.push(d.data() as TimeEntry);
+        });
+        const sorted = list.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setTimeEntries(sorted);
+        setHasMoreTimeEntries(snapshot.docs.length >= targetLimit);
+        setIsLoadingMoreTimeEntries(false);
+        localStorage.setItem('ftc_time_entries', JSON.stringify(sorted));
+      }, (error) => {
+        console.warn("timeEntries snapshot listener notice:", error);
+        setIsLoadingMoreTimeEntries(false);
+      });
+    } catch (err) {
+      console.warn("Error restarting timesheet listener with new limit:", err);
+      setIsLoadingMoreTimeEntries(false);
+    }
+  };
+
+  const handleLoadMoreJournals = (increment: number = 25) => {
+    setIsLoadingMoreJournals(true);
+    const newLimit = journalLimitRef.current + increment;
+    journalLimitRef.current = newLimit;
+    setJournalLimit(newLimit);
+    restartJournalListener(newLimit);
+  };
+
+  const handleLoadAllJournals = () => {
+    setIsLoadingMoreJournals(true);
+    const newLimit = 5000;
+    journalLimitRef.current = newLimit;
+    setJournalLimit(newLimit);
+    restartJournalListener(newLimit);
+  };
+
+  const handleLoadMoreTimeEntries = (increment: number = 30) => {
+    setIsLoadingMoreTimeEntries(true);
+    const newLimit = timeEntriesLimitRef.current + increment;
+    timeEntriesLimitRef.current = newLimit;
+    setTimeEntriesLimit(newLimit);
+    restartTimesheetListener(newLimit);
+  };
+
+  const handleLoadAllTimeEntries = () => {
+    setIsLoadingMoreTimeEntries(true);
+    const newLimit = 5000;
+    timeEntriesLimitRef.current = newLimit;
+    setTimeEntriesLimit(newLimit);
+    restartTimesheetListener(newLimit);
   };
 
   const triggerSandboxLogin = async (email: string, schoolId: string) => {
@@ -993,6 +1166,14 @@ export default function App() {
         try { unsub(); } catch {}
       });
       dataListenersUnsub = [];
+      if (journalUnsubRef.current) {
+        try { journalUnsubRef.current(); } catch {}
+        journalUnsubRef.current = null;
+      }
+      if (timesheetUnsubRef.current) {
+        try { timesheetUnsubRef.current(); } catch {}
+        timesheetUnsubRef.current = null;
+      }
       listenersStartedRef.current = false;
     };
 
@@ -1019,36 +1200,26 @@ export default function App() {
       });
       dataListenersUnsub.push(unsubUsers);
 
-      // Journal entries listener - Pure Reader
-      const unsubJournals = onSnapshot(collection(db, 'journalEntries'), (snapshot) => {
-        const list: JournalEntry[] = [];
-        snapshot.forEach(d => {
-          list.push(d.data() as JournalEntry);
-        });
-        const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
-        setEntries(sorted);
-        localStorage.setItem('ftc_journal_entries', JSON.stringify(sorted));
-      }, (error) => {
-        console.warn("journalEntries snapshot listener notice:", error);
-      });
-      dataListenersUnsub.push(unsubJournals);
+      // Journal entries listener - Paginated Lazy Load
+      restartJournalListener(journalLimitRef.current);
 
-      // Time entries listener - Pure Reader
-      const unsubTime = onSnapshot(collection(db, 'timeEntries'), (snapshot) => {
-        const list: TimeEntry[] = [];
-        snapshot.forEach(d => {
-          list.push(d.data() as TimeEntry);
-        });
-        const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
-        setTimeEntries(sorted);
-        localStorage.setItem('ftc_time_entries', JSON.stringify(sorted));
-      }, (error) => {
-        console.warn("timeEntries snapshot listener notice:", error);
-      });
-      dataListenersUnsub.push(unsubTime);
+      // Time entries listener - Paginated Lazy Load
+      restartTimesheetListener(timeEntriesLimitRef.current);
 
-      // Kanban tasks listener - Pure Reader
+      // Kanban tasks listener - Persistent Reader & Auto-Seed
       const unsubKanban = onSnapshot(collection(db, 'kanbanTasks'), (snapshot) => {
+        if (snapshot.empty) {
+          if (!seededCollectionsRef.current['kanban']) {
+            seededCollectionsRef.current['kanban'] = true;
+            const toSeed = kanbanTasksRef.current.length > 0 ? kanbanTasksRef.current : DEFAULT_KANBAN_TASKS;
+            toSeed.forEach(task => {
+              setDoc(doc(db, 'kanbanTasks', task.id), cleanForFirestore(task)).catch(() => {});
+            });
+            setKanbanTasks(toSeed);
+            localStorage.setItem('ftc_kanban_tasks', JSON.stringify(toSeed));
+          }
+          return;
+        }
         const list: KanbanTask[] = [];
         snapshot.forEach(d => {
           list.push(d.data() as KanbanTask);
@@ -1060,8 +1231,20 @@ export default function App() {
       });
       dataListenersUnsub.push(unsubKanban);
 
-      // Outreach events listener - Pure Reader
+      // Outreach events listener - Persistent Reader & Auto-Seed
       const unsubOutreach = onSnapshot(collection(db, 'outreachEvents'), (snapshot) => {
+        if (snapshot.empty) {
+          if (!seededCollectionsRef.current['outreach']) {
+            seededCollectionsRef.current['outreach'] = true;
+            const toSeed = outreachEventsRef.current.length > 0 ? outreachEventsRef.current : DEFAULT_OUTREACH_EVENTS;
+            toSeed.forEach(ev => {
+              setDoc(doc(db, 'outreachEvents', ev.id), cleanForFirestore(ev)).catch(() => {});
+            });
+            setOutreachEvents(toSeed);
+            localStorage.setItem('ftc_outreach_events', JSON.stringify(toSeed));
+          }
+          return;
+        }
         const list: OutreachEvent[] = [];
         snapshot.forEach(d => {
           list.push(d.data() as OutreachEvent);
@@ -1104,8 +1287,20 @@ export default function App() {
       });
       dataListenersUnsub.push(unsubLedger);
 
-      // Inventory items listener - Pure Reader
+      // Inventory items listener - Persistent Reader & Auto-Seed
       const unsubInventory = onSnapshot(collection(db, 'inventoryItems'), (snapshot) => {
+        if (snapshot.empty) {
+          if (!seededCollectionsRef.current['inventory']) {
+            seededCollectionsRef.current['inventory'] = true;
+            const toSeed = inventoryItemsRef.current.length > 0 ? inventoryItemsRef.current : DEFAULT_INVENTORY_ITEMS;
+            toSeed.forEach(i => {
+              setDoc(doc(db, 'inventoryItems', i.id), cleanForFirestore(i)).catch(() => {});
+            });
+            setInventoryItems(toSeed);
+            localStorage.setItem('ftc_inventory_items', JSON.stringify(toSeed));
+          }
+          return;
+        }
         const list: InventoryItem[] = [];
         snapshot.forEach(d => {
           list.push(d.data() as InventoryItem);
@@ -1118,8 +1313,20 @@ export default function App() {
       });
       dataListenersUnsub.push(unsubInventory);
 
-      // Inventory transactions listener - Pure Reader
+      // Inventory transactions listener - Persistent Reader & Auto-Seed
       const unsubInvTx = onSnapshot(collection(db, 'inventoryTransactions'), (snapshot) => {
+        if (snapshot.empty) {
+          if (!seededCollectionsRef.current['inv_tx']) {
+            seededCollectionsRef.current['inv_tx'] = true;
+            const toSeed = inventoryTransactionsRef.current.length > 0 ? inventoryTransactionsRef.current : DEFAULT_INVENTORY_TRANSACTIONS;
+            toSeed.forEach(t => {
+              setDoc(doc(db, 'inventoryTransactions', t.id), cleanForFirestore(t)).catch(() => {});
+            });
+            setInventoryTransactions(toSeed);
+            localStorage.setItem('ftc_inventory_transactions', JSON.stringify(toSeed));
+          }
+          return;
+        }
         const list: InventoryTransaction[] = [];
         snapshot.forEach(d => {
           list.push(d.data() as InventoryTransaction);
@@ -2617,12 +2824,12 @@ FTC #6567 Captains & Mentors`
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    const stored = localStorage.getItem('ftc_journal_entries');
-    if (stored) {
+    // 1. Check Journal Entries
+    const storedJournals = localStorage.getItem('ftc_journal_entries');
+    if (storedJournals) {
       try {
-        const parsed = JSON.parse(stored) as JournalEntry[];
+        const parsed = JSON.parse(storedJournals) as JournalEntry[];
         if (parsed.length > 0) {
-          // Normalize entries by ensuring a status exists and legacy subteams are migrated
           const normalized = parsed.map(e => ({
             ...e,
             subteam: (e.subteam as string) === 'Build' ? 'Design/Build/Fabrication' : e.subteam,
@@ -2631,13 +2838,67 @@ FTC #6567 Captains & Mentors`
           setEntries(normalized);
           setSelectedEntry(normalized[0]);
         } else {
-          loadDemoData();
+          setEntries(DEMO_ENTRIES);
+          localStorage.setItem('ftc_journal_entries', JSON.stringify(DEMO_ENTRIES));
+          setSelectedEntry(DEMO_ENTRIES[0]);
         }
       } catch (e) {
-        loadDemoData();
+        setEntries(DEMO_ENTRIES);
+        setSelectedEntry(DEMO_ENTRIES[0]);
       }
     } else {
-      loadDemoData();
+      setEntries(DEMO_ENTRIES);
+      setSelectedEntry(DEMO_ENTRIES[0]);
+    }
+
+    // 2. Check Inventory Items
+    const storedInv = localStorage.getItem('ftc_inventory_items');
+    if (!storedInv || storedInv === '[]') {
+      setInventoryItems(DEFAULT_INVENTORY_ITEMS);
+      localStorage.setItem('ftc_inventory_items', JSON.stringify(DEFAULT_INVENTORY_ITEMS));
+      DEFAULT_INVENTORY_ITEMS.forEach(i => {
+        setDoc(doc(db, 'inventoryItems', i.id), cleanForFirestore(i)).catch(() => {});
+      });
+    }
+
+    // 3. Check Inventory Transactions
+    const storedInvTx = localStorage.getItem('ftc_inventory_transactions');
+    if (!storedInvTx || storedInvTx === '[]') {
+      setInventoryTransactions(DEFAULT_INVENTORY_TRANSACTIONS);
+      localStorage.setItem('ftc_inventory_transactions', JSON.stringify(DEFAULT_INVENTORY_TRANSACTIONS));
+      DEFAULT_INVENTORY_TRANSACTIONS.forEach(t => {
+        setDoc(doc(db, 'inventoryTransactions', t.id), cleanForFirestore(t)).catch(() => {});
+      });
+    }
+
+    // 4. Check Outreach Events
+    const storedOutreach = localStorage.getItem('ftc_outreach_events');
+    if (!storedOutreach || storedOutreach === '[]') {
+      setOutreachEvents(DEFAULT_OUTREACH_EVENTS);
+      localStorage.setItem('ftc_outreach_events', JSON.stringify(DEFAULT_OUTREACH_EVENTS));
+      DEFAULT_OUTREACH_EVENTS.forEach(o => {
+        setDoc(doc(db, 'outreachEvents', o.id), cleanForFirestore(o)).catch(() => {});
+      });
+    }
+
+    // 5. Check Kanban Tasks
+    const storedKanban = localStorage.getItem('ftc_kanban_tasks');
+    if (!storedKanban || storedKanban === '[]') {
+      setKanbanTasks(DEFAULT_KANBAN_TASKS);
+      localStorage.setItem('ftc_kanban_tasks', JSON.stringify(DEFAULT_KANBAN_TASKS));
+      DEFAULT_KANBAN_TASKS.forEach(k => {
+        setDoc(doc(db, 'kanbanTasks', k.id), cleanForFirestore(k)).catch(() => {});
+      });
+    }
+
+    // 6. Check Time Entries
+    const storedTime = localStorage.getItem('ftc_time_entries');
+    if (!storedTime || storedTime === '[]') {
+      setTimeEntries(DEFAULT_TIME_ENTRIES);
+      localStorage.setItem('ftc_time_entries', JSON.stringify(DEFAULT_TIME_ENTRIES));
+      DEFAULT_TIME_ENTRIES.forEach(t => {
+        setDoc(doc(db, 'timeEntries', t.id), cleanForFirestore(t)).catch(() => {});
+      });
     }
   }, []);
 
@@ -3649,7 +3910,44 @@ FTC #6567 Captains & Mentors`
     saveEntriesToLocalStorage(updated);
   };
 
-  const loadDemoData = () => {};
+  const loadDemoData = () => {
+    // Populate all default collections to state, localStorage, and Firestore so they stay permanently
+    setEntries(DEMO_ENTRIES);
+    localStorage.setItem('ftc_journal_entries', JSON.stringify(DEMO_ENTRIES));
+    DEMO_ENTRIES.forEach(e => {
+      setDoc(doc(db, 'journalEntries', e.id), cleanForFirestore(e)).catch(() => {});
+    });
+
+    setTimeEntries(DEFAULT_TIME_ENTRIES);
+    localStorage.setItem('ftc_time_entries', JSON.stringify(DEFAULT_TIME_ENTRIES));
+    DEFAULT_TIME_ENTRIES.forEach(t => {
+      setDoc(doc(db, 'timeEntries', t.id), cleanForFirestore(t)).catch(() => {});
+    });
+
+    setInventoryItems(DEFAULT_INVENTORY_ITEMS);
+    localStorage.setItem('ftc_inventory_items', JSON.stringify(DEFAULT_INVENTORY_ITEMS));
+    DEFAULT_INVENTORY_ITEMS.forEach(i => {
+      setDoc(doc(db, 'inventoryItems', i.id), cleanForFirestore(i)).catch(() => {});
+    });
+
+    setInventoryTransactions(DEFAULT_INVENTORY_TRANSACTIONS);
+    localStorage.setItem('ftc_inventory_transactions', JSON.stringify(DEFAULT_INVENTORY_TRANSACTIONS));
+    DEFAULT_INVENTORY_TRANSACTIONS.forEach(tx => {
+      setDoc(doc(db, 'inventoryTransactions', tx.id), cleanForFirestore(tx)).catch(() => {});
+    });
+
+    setOutreachEvents(DEFAULT_OUTREACH_EVENTS);
+    localStorage.setItem('ftc_outreach_events', JSON.stringify(DEFAULT_OUTREACH_EVENTS));
+    DEFAULT_OUTREACH_EVENTS.forEach(o => {
+      setDoc(doc(db, 'outreachEvents', o.id), cleanForFirestore(o)).catch(() => {});
+    });
+
+    setKanbanTasks(DEFAULT_KANBAN_TASKS);
+    localStorage.setItem('ftc_kanban_tasks', JSON.stringify(DEFAULT_KANBAN_TASKS));
+    DEFAULT_KANBAN_TASKS.forEach(k => {
+      setDoc(doc(db, 'kanbanTasks', k.id), cleanForFirestore(k)).catch(() => {});
+    });
+  };
 
   const handleConfirmReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -6605,6 +6903,10 @@ ${entry.planNextTime || '_No carry-over specified._'}
           onClearAllData={clearAllData}
           onDownloadBackup={handleExportJSON}
           onOpenSeasonTransition={isUserAdminOrMentor ? () => setIsBackupTransitionOpen(true) : undefined}
+          onRestoreDemoData={() => {
+            loadDemoData();
+            showToast('Default team data restored and synchronized to cloud database!', 'success');
+          }}
           activeSession={activeSession}
           hiddenWorkspaces={hiddenWorkspaces}
           onToggleWorkspaceVisibility={toggleWorkspaceVisibility}
@@ -7261,6 +7563,48 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   })}
                 </div>
               )}
+
+              {/* Timesheet Pagination & Lazy Load Controls */}
+              <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-2">
+                  <span>Showing <strong className="text-slate-800 dark:text-slate-200">{filteredTimeEntries.length}</strong> of <strong className="text-slate-800 dark:text-slate-200">{timeEntries.length}</strong> loaded {hasMoreTimeEntries ? `(Batch limit: ${timeEntriesLimit})` : '(All loaded)'}</span>
+                  <span className="text-[9px] bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-200/40 dark:border-cyan-800/40 font-bold">
+                    ⚡ Lazy Load Active
+                  </span>
+                </div>
+
+                {hasMoreTimeEntries ? (
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleLoadMoreTimeEntries(30)}
+                      disabled={isLoadingMoreTimeEntries}
+                      className="flex-1 sm:flex-initial py-1.5 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-cyan-600 hover:text-white dark:hover:bg-cyan-600 dark:hover:text-white text-slate-700 dark:text-slate-200 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      id="btn-load-more-time-entries"
+                    >
+                      {isLoadingMoreTimeEntries ? (
+                        <span className="animate-spin text-xs">⏳</span>
+                      ) : (
+                        <Plus className="w-3.5 h-3.5" />
+                      )}
+                      <span>Load More Shifts (+30)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLoadAllTimeEntries}
+                      disabled={isLoadingMoreTimeEntries}
+                      className="py-1.5 px-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded transition-colors cursor-pointer disabled:opacity-50"
+                      title="Fetch all historical shifts"
+                    >
+                      Load All
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                    ✓ All registered shift records loaded
+                  </div>
+                )}
+              </div>
 
             </div>
 
@@ -8388,6 +8732,48 @@ ${entry.planNextTime || '_No carry-over specified._'}
                   })}
                 </div>
               )}
+
+              {/* Journal Pagination & Lazy Load Controls */}
+              <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2 shrink-0">
+                <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                  <span>Showing <strong className="text-slate-800 dark:text-slate-200">{filteredEntries.length}</strong> of <strong className="text-slate-800 dark:text-slate-200">{entries.length}</strong> loaded {hasMoreJournals ? `(Batch: ${journalLimit})` : '(All loaded)'}</span>
+                  <span className="text-[9px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-200/40 dark:border-emerald-800/40 font-bold">
+                    ⚡ Lazy Load Active
+                  </span>
+                </div>
+
+                {hasMoreJournals ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleLoadMoreJournals(25)}
+                      disabled={isLoadingMoreJournals}
+                      className="flex-1 py-1.5 px-2 bg-slate-100 dark:bg-slate-800 hover:bg-brand hover:text-white dark:hover:bg-brand dark:hover:text-white text-slate-700 dark:text-slate-200 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      id="btn-load-more-journals"
+                    >
+                      {isLoadingMoreJournals ? (
+                        <span className="animate-spin text-xs">⏳</span>
+                      ) : (
+                        <Plus className="w-3.5 h-3.5" />
+                      )}
+                      <span>Load More Logs (+25)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLoadAllJournals}
+                      disabled={isLoadingMoreJournals}
+                      className="py-1.5 px-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded transition-colors cursor-pointer disabled:opacity-50"
+                      title="Fetch all historical entries for this season"
+                    >
+                      Load All
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-[10px] font-mono text-center text-slate-400 dark:text-slate-500 py-1">
+                    ✓ All historical journal records loaded
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* EXPANDED LIVE PREVIEW GRID (RIGHT HALF / spanning 8) */}
@@ -10847,10 +11233,11 @@ FTC #6567 Captains & Mentors`
           entries={entriesToPrint}
           allEntries={entries}
           paperSize={exportPaperSize}
-          showCover={exportShowCover}
-          showTOC={exportShowTOC}
+          showCover={entriesToPrint.length > 1 ? exportShowCover : false}
+          showTOC={entriesToPrint.length > 1 ? exportShowTOC : false}
           scope={exportScope === 'all' ? 'ALL NOTEBOOK ENTRIES' : `${exportSubteam} • ${exportStatus}`}
           isPreview={false}
+          isBinderEvidence={true}
         />
       </div>
     )}
