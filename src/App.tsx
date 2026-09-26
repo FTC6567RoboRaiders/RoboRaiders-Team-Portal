@@ -72,6 +72,7 @@ import {
 import { applyAccentColor } from './utils/accentColor';
 import { Subteam, JournalEntry, JournalImage, FilterOptions, AuthorProfile, UserAccount, DispatchedEmail, TimeEntry, ClockInSession, KanbanTask, OutreachEvent, XPAdjustment, LedgerTransaction, InventoryItem, InventoryTransaction, GrantApplication, JournalEntryType, PersonABC, MeetingTodoItem, NavLayout, QuestionOfTheDay, QuestionAnswerSubmission, PageTransitionStyle, ToastNotification } from './types';
 import { compressAndResizeImage } from './utils/image';
+import { safeStorage } from './utils/safeStorage';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { JournalFullTextIndex, SearchResultItem } from './utils/journalSearchIndex';
 import { SearchHighlightedText } from './components/SearchHighlightedText';
@@ -480,11 +481,11 @@ export default function App() {
 
   // Outreach events state
   const [outreachEvents, setOutreachEvents] = useState<OutreachEvent[]>(() => {
-    const stored = localStorage.getItem('ftc_outreach_events');
+    const stored = safeStorage.getItem('ftc_outreach_events');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (parsed && Array.isArray(parsed)) {
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       } catch (e) {}
@@ -493,18 +494,20 @@ export default function App() {
   });
 
   const saveOutreachEventsToLocalStorage = (newEvents: OutreachEvent[]) => {
-    localStorage.setItem('ftc_outreach_events', JSON.stringify(newEvents));
+    try {
+      safeStorage.setItem('ftc_outreach_events', JSON.stringify(newEvents));
+    } catch {}
     setOutreachEvents(newEvents);
     syncOutreachEventsToFirestore(newEvents).catch(console.error);
   };
 
   // Kanban tasks state
   const [kanbanTasks, setKanbanTasks] = useState<KanbanTask[]>(() => {
-    const stored = localStorage.getItem('ftc_kanban_tasks');
+    const stored = safeStorage.getItem('ftc_kanban_tasks');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (parsed && Array.isArray(parsed)) {
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       } catch (e) {}
@@ -513,18 +516,20 @@ export default function App() {
   });
 
   const saveKanbanTasksToLocalStorage = (newTasks: KanbanTask[]) => {
-    localStorage.setItem('ftc_kanban_tasks', JSON.stringify(newTasks));
+    try {
+      safeStorage.setItem('ftc_kanban_tasks', JSON.stringify(newTasks));
+    } catch {}
     setKanbanTasks(newTasks);
     syncKanbanTasksToFirestore(newTasks).catch(console.error);
   };
 
   // Time entries state
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>(() => {
-    const stored = localStorage.getItem('ftc_time_entries');
+    const stored = safeStorage.getItem('ftc_time_entries');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (parsed && Array.isArray(parsed)) {
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       } catch (e) {}
@@ -592,31 +597,45 @@ export default function App() {
 
   // Persistent sync
   useEffect(() => {
-    localStorage.setItem('ftc_time_entries', JSON.stringify(timeEntries));
+    try {
+      safeStorage.setItem('ftc_time_entries', JSON.stringify(timeEntries));
+    } catch {}
   }, [timeEntries]);
 
   useEffect(() => {
-    localStorage.setItem('ftc_journal_entries', JSON.stringify(entries));
+    try {
+      safeStorage.setItem('ftc_journal_entries', JSON.stringify(entries));
+    } catch {}
   }, [entries]);
 
   useEffect(() => {
-    localStorage.setItem('ftc_inventory_items', JSON.stringify(inventoryItems));
+    try {
+      safeStorage.setItem('ftc_inventory_items', JSON.stringify(inventoryItems));
+    } catch {}
   }, [inventoryItems]);
 
   useEffect(() => {
-    localStorage.setItem('ftc_inventory_transactions', JSON.stringify(inventoryTransactions));
+    try {
+      safeStorage.setItem('ftc_inventory_transactions', JSON.stringify(inventoryTransactions));
+    } catch {}
   }, [inventoryTransactions]);
 
   useEffect(() => {
-    localStorage.setItem('ftc_outreach_events', JSON.stringify(outreachEvents));
+    try {
+      safeStorage.setItem('ftc_outreach_events', JSON.stringify(outreachEvents));
+    } catch {}
   }, [outreachEvents]);
 
   useEffect(() => {
-    localStorage.setItem('ftc_kanban_tasks', JSON.stringify(kanbanTasks));
+    try {
+      safeStorage.setItem('ftc_kanban_tasks', JSON.stringify(kanbanTasks));
+    } catch {}
   }, [kanbanTasks]);
 
   useEffect(() => {
-    localStorage.setItem('ftc_xp_adjustments', JSON.stringify(xpAdjustments));
+    try {
+      safeStorage.setItem('ftc_xp_adjustments', JSON.stringify(xpAdjustments));
+    } catch {}
   }, [xpAdjustments]);
 
   // --- FIREBASE SYNC & ON-SNAP LIFECYCLE ---
@@ -978,7 +997,9 @@ export default function App() {
               setDoc(doc(db, 'journalEntries', e.id), cleanForFirestore(e)).catch(() => {});
             });
             setEntries(toSeed);
-            localStorage.setItem('ftc_journal_entries', JSON.stringify(toSeed));
+            try {
+              safeStorage.setItem('ftc_journal_entries', JSON.stringify(toSeed));
+            } catch {}
           }
           setIsLoadingMoreJournals(false);
           return;
@@ -991,7 +1012,9 @@ export default function App() {
         setEntries(sorted);
         setHasMoreJournals(snapshot.docs.length >= targetLimit);
         setIsLoadingMoreJournals(false);
-        localStorage.setItem('ftc_journal_entries', JSON.stringify(sorted));
+        try {
+          safeStorage.setItem('ftc_journal_entries', JSON.stringify(sorted));
+        } catch {}
       }, (error) => {
         console.warn("journalEntries snapshot listener notice:", error);
         setIsLoadingMoreJournals(false);
@@ -1022,7 +1045,9 @@ export default function App() {
               setDoc(doc(db, 'timeEntries', t.id), cleanForFirestore(t)).catch(() => {});
             });
             setTimeEntries(toSeed);
-            localStorage.setItem('ftc_time_entries', JSON.stringify(toSeed));
+            try {
+              safeStorage.setItem('ftc_time_entries', JSON.stringify(toSeed));
+            } catch {}
           }
           setIsLoadingMoreTimeEntries(false);
           return;
@@ -1035,7 +1060,9 @@ export default function App() {
         setTimeEntries(sorted);
         setHasMoreTimeEntries(snapshot.docs.length >= targetLimit);
         setIsLoadingMoreTimeEntries(false);
-        localStorage.setItem('ftc_time_entries', JSON.stringify(sorted));
+        try {
+          safeStorage.setItem('ftc_time_entries', JSON.stringify(sorted));
+        } catch {}
       }, (error) => {
         console.warn("timeEntries snapshot listener notice:", error);
         setIsLoadingMoreTimeEntries(false);
@@ -1193,7 +1220,9 @@ export default function App() {
         });
         if (list.length > 0) {
           setAccounts(list);
-          localStorage.setItem('ftc_user_accounts', JSON.stringify(list));
+          try {
+            safeStorage.setItem('ftc_user_accounts', JSON.stringify(list));
+          } catch {}
         }
       }, (error) => {
         console.warn("users snapshot listener notice:", error);
@@ -1216,7 +1245,9 @@ export default function App() {
               setDoc(doc(db, 'kanbanTasks', task.id), cleanForFirestore(task)).catch(() => {});
             });
             setKanbanTasks(toSeed);
-            localStorage.setItem('ftc_kanban_tasks', JSON.stringify(toSeed));
+            try {
+              safeStorage.setItem('ftc_kanban_tasks', JSON.stringify(toSeed));
+            } catch {}
           }
           return;
         }
@@ -1225,7 +1256,9 @@ export default function App() {
           list.push(d.data() as KanbanTask);
         });
         setKanbanTasks(list);
-        localStorage.setItem('ftc_kanban_tasks', JSON.stringify(list));
+        try {
+          safeStorage.setItem('ftc_kanban_tasks', JSON.stringify(list));
+        } catch {}
       }, (error) => {
         console.warn("kanbanTasks snapshot listener notice:", error);
       });
@@ -1241,7 +1274,9 @@ export default function App() {
               setDoc(doc(db, 'outreachEvents', ev.id), cleanForFirestore(ev)).catch(() => {});
             });
             setOutreachEvents(toSeed);
-            localStorage.setItem('ftc_outreach_events', JSON.stringify(toSeed));
+            try {
+              safeStorage.setItem('ftc_outreach_events', JSON.stringify(toSeed));
+            } catch {}
           }
           return;
         }
@@ -1250,7 +1285,9 @@ export default function App() {
           list.push(d.data() as OutreachEvent);
         });
         setOutreachEvents(list);
-        localStorage.setItem('ftc_outreach_events', JSON.stringify(list));
+        try {
+          safeStorage.setItem('ftc_outreach_events', JSON.stringify(list));
+        } catch {}
       }, (error) => {
         console.warn("outreachEvents snapshot listener notice:", error);
       });
@@ -1267,7 +1304,9 @@ export default function App() {
         });
         const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
         setXpAdjustments(sorted);
-        localStorage.setItem('ftc_xp_adjustments', JSON.stringify(sorted));
+        try {
+          safeStorage.setItem('ftc_xp_adjustments', JSON.stringify(sorted));
+        } catch {}
       }, (error) => {
         console.warn("xpAdjustments snapshot listener notice:", error);
       });
@@ -1281,7 +1320,9 @@ export default function App() {
         });
         const sorted = list.sort((a,b) => b.createdAt - a.createdAt);
         setLedgerTransactions(sorted);
-        localStorage.setItem('ftc_ledger_transactions', JSON.stringify(sorted));
+        try {
+          safeStorage.setItem('ftc_ledger_transactions', JSON.stringify(sorted));
+        } catch {}
       }, (error) => {
         console.warn("ledgerTransactions snapshot listener notice:", error);
       });
@@ -1297,7 +1338,9 @@ export default function App() {
               setDoc(doc(db, 'inventoryItems', i.id), cleanForFirestore(i)).catch(() => {});
             });
             setInventoryItems(toSeed);
-            localStorage.setItem('ftc_inventory_items', JSON.stringify(toSeed));
+            try {
+              safeStorage.setItem('ftc_inventory_items', JSON.stringify(toSeed));
+            } catch {}
           }
           return;
         }
@@ -1307,7 +1350,9 @@ export default function App() {
         });
         const sorted = list.sort((a,b) => a.name.localeCompare(b.name));
         setInventoryItems(sorted);
-        localStorage.setItem('ftc_inventory_items', JSON.stringify(sorted));
+        try {
+          safeStorage.setItem('ftc_inventory_items', JSON.stringify(sorted));
+        } catch {}
       }, (error) => {
         console.warn("inventoryItems snapshot listener notice:", error);
       });
@@ -1323,7 +1368,9 @@ export default function App() {
               setDoc(doc(db, 'inventoryTransactions', t.id), cleanForFirestore(t)).catch(() => {});
             });
             setInventoryTransactions(toSeed);
-            localStorage.setItem('ftc_inventory_transactions', JSON.stringify(toSeed));
+            try {
+              safeStorage.setItem('ftc_inventory_transactions', JSON.stringify(toSeed));
+            } catch {}
           }
           return;
         }
@@ -1333,7 +1380,9 @@ export default function App() {
         });
         const sorted = list.sort((a,b) => b.timestamp - a.timestamp);
         setInventoryTransactions(sorted);
-        localStorage.setItem('ftc_inventory_transactions', JSON.stringify(sorted));
+        try {
+          safeStorage.setItem('ftc_inventory_transactions', JSON.stringify(sorted));
+        } catch {}
       }, (error) => {
         console.warn("inventoryTransactions snapshot listener notice:", error);
       });
@@ -1350,7 +1399,9 @@ export default function App() {
         });
         const sorted = list.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         setGrants(sorted);
-        localStorage.setItem('ftc_grant_applications', JSON.stringify(sorted));
+        try {
+          safeStorage.setItem('ftc_grant_applications', JSON.stringify(sorted));
+        } catch {}
       }, (error) => {
         console.warn("grantApplications snapshot listener notice:", error);
       });
@@ -2825,8 +2876,8 @@ FTC #6567 Captains & Mentors`
   // --- INITIALIZATION ---
   useEffect(() => {
     // 1. Check Journal Entries
-    const storedJournals = localStorage.getItem('ftc_journal_entries');
-    if (storedJournals) {
+    const storedJournals = safeStorage.getItem('ftc_journal_entries');
+    if (storedJournals && storedJournals !== '[]') {
       try {
         const parsed = JSON.parse(storedJournals) as JournalEntry[];
         if (parsed.length > 0) {
@@ -2839,7 +2890,9 @@ FTC #6567 Captains & Mentors`
           setSelectedEntry(normalized[0]);
         } else {
           setEntries(DEMO_ENTRIES);
-          localStorage.setItem('ftc_journal_entries', JSON.stringify(DEMO_ENTRIES));
+          try {
+            safeStorage.setItem('ftc_journal_entries', JSON.stringify(DEMO_ENTRIES));
+          } catch {}
           setSelectedEntry(DEMO_ENTRIES[0]);
         }
       } catch (e) {
@@ -2852,54 +2905,105 @@ FTC #6567 Captains & Mentors`
     }
 
     // 2. Check Inventory Items
-    const storedInv = localStorage.getItem('ftc_inventory_items');
+    const storedInv = safeStorage.getItem('ftc_inventory_items');
     if (!storedInv || storedInv === '[]') {
       setInventoryItems(DEFAULT_INVENTORY_ITEMS);
-      localStorage.setItem('ftc_inventory_items', JSON.stringify(DEFAULT_INVENTORY_ITEMS));
+      try {
+        safeStorage.setItem('ftc_inventory_items', JSON.stringify(DEFAULT_INVENTORY_ITEMS));
+      } catch {}
       DEFAULT_INVENTORY_ITEMS.forEach(i => {
         setDoc(doc(db, 'inventoryItems', i.id), cleanForFirestore(i)).catch(() => {});
       });
     }
 
     // 3. Check Inventory Transactions
-    const storedInvTx = localStorage.getItem('ftc_inventory_transactions');
+    const storedInvTx = safeStorage.getItem('ftc_inventory_transactions');
     if (!storedInvTx || storedInvTx === '[]') {
       setInventoryTransactions(DEFAULT_INVENTORY_TRANSACTIONS);
-      localStorage.setItem('ftc_inventory_transactions', JSON.stringify(DEFAULT_INVENTORY_TRANSACTIONS));
+      try {
+        safeStorage.setItem('ftc_inventory_transactions', JSON.stringify(DEFAULT_INVENTORY_TRANSACTIONS));
+      } catch {}
       DEFAULT_INVENTORY_TRANSACTIONS.forEach(t => {
         setDoc(doc(db, 'inventoryTransactions', t.id), cleanForFirestore(t)).catch(() => {});
       });
     }
 
     // 4. Check Outreach Events
-    const storedOutreach = localStorage.getItem('ftc_outreach_events');
+    const storedOutreach = safeStorage.getItem('ftc_outreach_events');
     if (!storedOutreach || storedOutreach === '[]') {
       setOutreachEvents(DEFAULT_OUTREACH_EVENTS);
-      localStorage.setItem('ftc_outreach_events', JSON.stringify(DEFAULT_OUTREACH_EVENTS));
+      try {
+        safeStorage.setItem('ftc_outreach_events', JSON.stringify(DEFAULT_OUTREACH_EVENTS));
+      } catch {}
       DEFAULT_OUTREACH_EVENTS.forEach(o => {
         setDoc(doc(db, 'outreachEvents', o.id), cleanForFirestore(o)).catch(() => {});
       });
     }
 
     // 5. Check Kanban Tasks
-    const storedKanban = localStorage.getItem('ftc_kanban_tasks');
+    const storedKanban = safeStorage.getItem('ftc_kanban_tasks');
     if (!storedKanban || storedKanban === '[]') {
       setKanbanTasks(DEFAULT_KANBAN_TASKS);
-      localStorage.setItem('ftc_kanban_tasks', JSON.stringify(DEFAULT_KANBAN_TASKS));
+      try {
+        safeStorage.setItem('ftc_kanban_tasks', JSON.stringify(DEFAULT_KANBAN_TASKS));
+      } catch {}
       DEFAULT_KANBAN_TASKS.forEach(k => {
         setDoc(doc(db, 'kanbanTasks', k.id), cleanForFirestore(k)).catch(() => {});
       });
     }
 
     // 6. Check Time Entries
-    const storedTime = localStorage.getItem('ftc_time_entries');
+    const storedTime = safeStorage.getItem('ftc_time_entries');
     if (!storedTime || storedTime === '[]') {
       setTimeEntries(DEFAULT_TIME_ENTRIES);
-      localStorage.setItem('ftc_time_entries', JSON.stringify(DEFAULT_TIME_ENTRIES));
+      try {
+        safeStorage.setItem('ftc_time_entries', JSON.stringify(DEFAULT_TIME_ENTRIES));
+      } catch {}
       DEFAULT_TIME_ENTRIES.forEach(t => {
         setDoc(doc(db, 'timeEntries', t.id), cleanForFirestore(t)).catch(() => {});
       });
     }
+
+    // 7. Hydration recovery listener
+    const handleHydrated = () => {
+      try {
+        const out = safeStorage.getItem('ftc_outreach_events');
+        if (out && out !== '[]') {
+          const parsed = JSON.parse(out);
+          if (Array.isArray(parsed) && parsed.length > 0) setOutreachEvents(parsed);
+        }
+        const inv = safeStorage.getItem('ftc_inventory_items');
+        if (inv && inv !== '[]') {
+          const parsed = JSON.parse(inv);
+          if (Array.isArray(parsed) && parsed.length > 0) setInventoryItems(parsed);
+        }
+        const invTx = safeStorage.getItem('ftc_inventory_transactions');
+        if (invTx && invTx !== '[]') {
+          const parsed = JSON.parse(invTx);
+          if (Array.isArray(parsed) && parsed.length > 0) setInventoryTransactions(parsed);
+        }
+        const kb = safeStorage.getItem('ftc_kanban_tasks');
+        if (kb && kb !== '[]') {
+          const parsed = JSON.parse(kb);
+          if (Array.isArray(parsed) && parsed.length > 0) setKanbanTasks(parsed);
+        }
+        const jn = safeStorage.getItem('ftc_journal_entries');
+        if (jn && jn !== '[]') {
+          const parsed = JSON.parse(jn);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setEntries(parsed);
+            setSelectedEntry(prev => prev || parsed[0]);
+          }
+        }
+      } catch (err) {
+        console.warn('Hydration listener error:', err);
+      }
+    };
+
+    window.addEventListener('ftc_storage_hydrated', handleHydrated);
+    return () => {
+      window.removeEventListener('ftc_storage_hydrated', handleHydrated);
+    };
   }, []);
 
   // Theme synchronization hook
@@ -3849,7 +3953,9 @@ FTC #6567 Captains & Mentors`
 
   const saveEntriesToLocalStorage = (updated: JournalEntry[]) => {
     setEntries(updated);
-    localStorage.setItem('ftc_journal_entries', JSON.stringify(updated));
+    try {
+      safeStorage.setItem('ftc_journal_entries', JSON.stringify(updated));
+    } catch {}
     syncEntriesToFirestore(updated).catch(err => {
       console.warn('Failed to sync journal entries to Firestore:', err);
     });
@@ -3911,39 +4017,39 @@ FTC #6567 Captains & Mentors`
   };
 
   const loadDemoData = () => {
-    // Populate all default collections to state, localStorage, and Firestore so they stay permanently
+    // Populate all default collections to state, safeStorage, and Firestore so they stay permanently
     setEntries(DEMO_ENTRIES);
-    localStorage.setItem('ftc_journal_entries', JSON.stringify(DEMO_ENTRIES));
+    try { safeStorage.setItem('ftc_journal_entries', JSON.stringify(DEMO_ENTRIES)); } catch {}
     DEMO_ENTRIES.forEach(e => {
       setDoc(doc(db, 'journalEntries', e.id), cleanForFirestore(e)).catch(() => {});
     });
 
     setTimeEntries(DEFAULT_TIME_ENTRIES);
-    localStorage.setItem('ftc_time_entries', JSON.stringify(DEFAULT_TIME_ENTRIES));
+    try { safeStorage.setItem('ftc_time_entries', JSON.stringify(DEFAULT_TIME_ENTRIES)); } catch {}
     DEFAULT_TIME_ENTRIES.forEach(t => {
       setDoc(doc(db, 'timeEntries', t.id), cleanForFirestore(t)).catch(() => {});
     });
 
     setInventoryItems(DEFAULT_INVENTORY_ITEMS);
-    localStorage.setItem('ftc_inventory_items', JSON.stringify(DEFAULT_INVENTORY_ITEMS));
+    try { safeStorage.setItem('ftc_inventory_items', JSON.stringify(DEFAULT_INVENTORY_ITEMS)); } catch {}
     DEFAULT_INVENTORY_ITEMS.forEach(i => {
       setDoc(doc(db, 'inventoryItems', i.id), cleanForFirestore(i)).catch(() => {});
     });
 
     setInventoryTransactions(DEFAULT_INVENTORY_TRANSACTIONS);
-    localStorage.setItem('ftc_inventory_transactions', JSON.stringify(DEFAULT_INVENTORY_TRANSACTIONS));
+    try { safeStorage.setItem('ftc_inventory_transactions', JSON.stringify(DEFAULT_INVENTORY_TRANSACTIONS)); } catch {}
     DEFAULT_INVENTORY_TRANSACTIONS.forEach(tx => {
       setDoc(doc(db, 'inventoryTransactions', tx.id), cleanForFirestore(tx)).catch(() => {});
     });
 
     setOutreachEvents(DEFAULT_OUTREACH_EVENTS);
-    localStorage.setItem('ftc_outreach_events', JSON.stringify(DEFAULT_OUTREACH_EVENTS));
+    try { safeStorage.setItem('ftc_outreach_events', JSON.stringify(DEFAULT_OUTREACH_EVENTS)); } catch {}
     DEFAULT_OUTREACH_EVENTS.forEach(o => {
       setDoc(doc(db, 'outreachEvents', o.id), cleanForFirestore(o)).catch(() => {});
     });
 
     setKanbanTasks(DEFAULT_KANBAN_TASKS);
-    localStorage.setItem('ftc_kanban_tasks', JSON.stringify(DEFAULT_KANBAN_TASKS));
+    try { safeStorage.setItem('ftc_kanban_tasks', JSON.stringify(DEFAULT_KANBAN_TASKS)); } catch {}
     DEFAULT_KANBAN_TASKS.forEach(k => {
       setDoc(doc(db, 'kanbanTasks', k.id), cleanForFirestore(k)).catch(() => {});
     });
