@@ -20,28 +20,23 @@ try {
 export const db = firestoreInstance; /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
 
-// Test connection on boot according to skill guidelines
-async function testConnection() {
+// Connection test helper (called explicitly on demand if required, avoiding automatic server reads on boot)
+export async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error: any) {
     if (error?.code === 'permission-denied') {
-      // Reaching Firestore backend confirmed by security rules response
+      return;
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('Quota limit exceeded') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+      console.warn("Firestore daily usage quota limit reached on backend. Client falling back to cache/offline resilience.");
       return;
     }
     if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('unavailable'))) {
       console.warn("Firestore running in offline/cached mode. Please check your network or Firebase connection.");
     }
   }
-}
-
-// Allow browser environment and network stack to settle before issuing server test probe
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    testConnection().catch(() => {});
-  }, 1000);
-} else {
-  testConnection().catch(() => {});
 }
 
 export enum OperationType {
